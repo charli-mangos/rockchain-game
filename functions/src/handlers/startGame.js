@@ -65,9 +65,15 @@ exports.startGame = onCall({
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Seleccionar la industria ganadora inicial
-    await selectWinningIndustry({ gameId });
-    console.log('✅ Industria ganadora inicial seleccionada');
+    // Seleccionar industria ganadora para la primera ronda
+    console.log('🔄 Seleccionando industria ganadora para la primera ronda...');
+    try {
+      const winningIndustryResult = await selectWinningIndustry({ gameId });
+      console.log('✅ Industria ganadora seleccionada:', winningIndustryResult);
+    } catch (error) {
+      console.error('❌ Error al seleccionar industria ganadora:', error);
+      throw new Error('Failed to select winning industry');
+    }
 
     // Programar el inicio del juego en 3 segundos
     const roundStartTime = new Date(Date.now() + 3000);
