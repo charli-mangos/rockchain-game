@@ -1,0 +1,106 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, TextInput, FlatList, Modal, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Button } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';  // Importamos ImagePicker
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { Ionicons } from '@expo/vector-icons';
+import NavigationBar from '../components/NavigationBar';
+import styles from '../styles/ProfileScreenStyles';
+import GameHeader from '../components/GameHeader';
+import ExpandableProduct from '../components/ExpandableProduct';
+import { useGameContext } from '../context/GameContext';
+
+
+const ProfileScreen = ({ navigation, route }) => {
+  const { userData, userProducts } = useGameContext(); 
+  const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
+  const { gameId, userId } = route.params || {};
+
+  // Función para seleccionar una imagen desde la galería
+  const pickImage = async () => {
+    const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (result.granted) {
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (!pickerResult.cancelled) {
+        setUserData({ ...userData, image: pickerResult.uri });  // Guardamos la imagen seleccionada en el estado
+      }
+    } else {
+      alert('Permission to access gallery was denied');
+    }
+  };
+
+  const renderProduct = ({ item }) => (
+    <ExpandableProduct
+      product={item}
+      gameId={gameId}
+      userId={userId}
+      screenType="ProfileScreen"
+    />
+  );
+
+  return (
+    <View style={styles.screenContainer}>
+      <GameHeader
+        title="RockProfile"
+        gameId={gameId} // Pasamos el gameId aquí
+        userId={userId}
+        onSettingsPress={() => console.log('Settings Pressed')}
+      />
+      <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.userInfoContainer}>
+        <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
+        <Text style={styles.userName}>{userData.userName}</Text>
+      </TouchableOpacity>
+
+      {/* Modal para editar el perfil */}
+      <Modal visible={isEditing} transparent={true} animationType="none">
+        <TouchableWithoutFeedback onPress={() => setIsEditing(false)}>
+          <View style={styles.modalContainer}>
+            <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+              <View style={styles.modalContent}>
+                <TouchableOpacity style={styles.closeButton} onPress={() => setIsEditing(false)}>
+                  <Ionicons name="close" size={24} color="black" />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Edit Profile</Text>
+
+                {/* Imagen seleccionable */}
+                <TouchableOpacity onPress={pickImage}>
+                  <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
+                </TouchableOpacity>
+
+                <TextInput
+                  value={userData.userName}
+                  onChangeText={(text) => setUserData({ ...userData, name: text })}
+                  style={styles.input}
+                  placeholder="Enter your name"
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Texto de productos en itálica */}
+      <Text style={styles.productsTitle}>Your Products</Text>
+
+      {/* FlatList para mostrar los productos comprados */}
+      <FlatList
+        data={userProducts}
+        renderItem={renderProduct}
+        keyExtractor={(item, index) => index.toString()}
+        numColumns={2}
+        style={styles.flatList}
+        contentContainerStyle={styles.flatListContainer}
+      />
+      <NavigationBar navigation={navigation} />
+    </View>
+  );
+};
+
+export default ProfileScreen;
