@@ -84,8 +84,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   rewardContainer: {
-    marginTop: 16,
-    padding: 12,
+    padding: 10,
     backgroundColor: '#2ecc71',
     borderRadius: 8,
     alignItems: 'center',

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, ScrollView, Alert } from 'react-native';
+import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useGameContext } from '../context/GameContext';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
@@ -8,6 +8,8 @@ import PlayerRankingComponent from '../components/PlayerRankingComponent';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigation } from '@react-navigation/native';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../firebase';
 
 const EndOfRoundScreen = ({ route }) => {
   const { gameId, userId } = route.params;
@@ -15,12 +17,14 @@ const EndOfRoundScreen = ({ route }) => {
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
   const [hasReceivedReward, setHasReceivedReward] = useState(false);
   const [rewardMessage, setRewardMessage] = useState(null);
+  const [roundRewards, setRoundRewards] = useState(null);
   const allPlayersReady = players.every(player => player.readyForNextRound);
   const navigation = useNavigation();
 
   useEffect(() => {
     console.log('EndOfRoundScreen mounted');
     const userRef = doc(db, 'users', userId);
+    const gameRef = doc(db, 'games', gameId);
 
     const unsubscribeUser = onSnapshot(userRef, async (doc) => {
       if (doc.exists()) {
@@ -28,19 +32,40 @@ const EndOfRoundScreen = ({ route }) => {
         const gameData = userData.games?.[gameId] || {};
         const selectedIndustry = gameData.selectedIndustry || 'No selection';
         setUserSelectedIndustry(selectedIndustry);
+      }
+    });
 
-        // Verificar si el jugador acertó y aún no ha recibido la recompensa
-        if (winningIndustry && selectedIndustry === winningIndustry && !hasReceivedReward) {
+    const unsubscribeGame = onSnapshot(gameRef, async (doc) => {
+      if (doc.exists()) {
+        const gameData = doc.data();
+        
+        // Si los premios no han sido asignados, asignarlos
+        if (!gameData.rewardsAssigned) {
           try {
-            const reward = 100 + Math.floor(gameData.waste * 0.5);
-            await updateDoc(userRef, {
-              [`games.${gameId}.rockCoins`]: (gameData.rockCoins || 0) + reward,
-              [`games.${gameId}.hasReceivedReward`]: true
-            });
-            setHasReceivedReward(true);
-            setRewardMessage(`¡Has acertado! Recompensa obtenida: ${reward} RockCoins`);
+            const assignRewardsFunction = httpsCallable(functions, 'assignRoundRewards');
+            const result = await assignRewardsFunction({ gameId });
+            console.log('Premios asignados:', result.data);
           } catch (error) {
-            console.error('Error al otorgar la recompensa:', error);
+            console.error('Error al asignar premios:', error);
+          }
+        }
+
+        // Actualizar los premios mostrados
+        if (gameData.roundRewards) {
+          setRoundRewards(gameData.roundRewards);
+          const userRewards = gameData.roundRewards[userId];
+          if (userRewards) {
+            let message = '';
+            if (userRewards.industryReward) {
+              message += `You've got it right! \n +${userRewards.industryReward} RockCoins \n`;
+              if (userRewards.wasteRemoved > 0) {
+                message += `Recycled waste: ${userRewards.wasteRemoved}\n`;
+              }
+            }
+            if (userRewards.miningRewards) {
+              message += `You have mined blocks! +${userRewards.miningRewards} RockCoins`;
+            }
+            setRewardMessage(message);
           }
         }
       }
@@ -49,8 +74,9 @@ const EndOfRoundScreen = ({ route }) => {
     return () => {
       console.log('EndOfRoundScreen unmounted');
       unsubscribeUser();
+      unsubscribeGame();
     };
-  }, [gameId, userId, winningIndustry, hasReceivedReward]);
+  }, [gameId, userId]);
 
   const handleReady = async () => {
     try {
@@ -111,18 +137,19 @@ const EndOfRoundScreen = ({ route }) => {
         <BlockchainComponent gameId={gameId} />
       </ScrollView>
 
-      {!isReadyForNextRound ? (
-        <TouchableOpacity 
-          style={styles.readyButton}
-          onPress={handleReady}
-        >
+      <TouchableOpacity 
+        style={styles.readyButton}
+        onPress={handleReady}
+        disabled={isReadyForNextRound}
+      >
+        {!isReadyForNextRound ? (
           <Text style={styles.readyButtonText}>Ready for Next Round</Text>
-        </TouchableOpacity>
-      ) : (
-        <Text style={styles.waitingText}>Waiting for other players...</Text>
-      )}
+        ) : (
+          <ActivityIndicator color="#fff" size="small" />
+        )}
+      </TouchableOpacity>
     </View>
   );
 };
 
-export default EndOfRoundScreen; 
+export default EndOfRoundScreen;

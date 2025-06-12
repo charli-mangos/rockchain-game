@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   blockchainContainer: {
-    marginTop: 0,
+    marginTop: -18,
   },
   blockchainContent: {
     flexDirection: 'row',

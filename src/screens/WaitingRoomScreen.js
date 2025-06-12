@@ -13,8 +13,10 @@ const WaitingRoomScreen = ({ route }) => {
   const [gameStatus, setGameStatus] = useState('waiting'); 
   const [roundTime, setRoundTime] = useState(null);
   const [remainingTime, setRemainingTime] = useState(null);
+  const [countdown, setCountdown] = useState(null);
   const navigation = useNavigation();
   const intervalRef = useRef(null);
+  const countdownRef = useRef(null);
   const roundStarted = useRef(false);
   const hasNavigated = useRef(false);
 
@@ -35,13 +37,10 @@ const WaitingRoomScreen = ({ route }) => {
 
         if (!hasNavigated.current) {
           hasNavigated.current = true;
-          // Esperar un momento antes de navegar para asegurar que el estado se ha actualizado
-          setTimeout(() => {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
-        });
-          }, 1000);
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
+          });
         }
       } catch (error) {
         console.error("Error starting new round:", error);
@@ -49,6 +48,24 @@ const WaitingRoomScreen = ({ route }) => {
         roundStarted.current = false;
       }
     }
+  };
+
+  const startCountdown = () => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+    }
+    
+    setCountdown(3);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownRef.current);
+          startNewRound();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   useFocusEffect(
@@ -64,15 +81,26 @@ const WaitingRoomScreen = ({ route }) => {
           setPlayerCount(gameData.players?.length || 1);
           setGameStatus(gameData.status);
   
-          if (gameData.roundTime) {
-            const newRoundTime = gameData.roundTime.toDate();
-            if (!roundTime || newRoundTime.getTime() !== roundTime.getTime()) {
-              setRoundTime(newRoundTime);
-              console.log("Updated roundTime from Firestore:", newRoundTime);
-            }
+          // Verificar si todos los jugadores están en la sala de espera
+          const allPlayersInWaitingRoom = gameData.players?.every(playerId => {
+            const playerRef = doc(db, 'users', playerId);
+            return new Promise((resolve) => {
+              const unsubscribe = onSnapshot(playerRef, (playerDoc) => {
+                if (playerDoc.exists()) {
+                  const playerData = playerDoc.data();
+                  resolve(playerData.games?.[gameId]?.readyForNextRound === true);
+                } else {
+                  resolve(false);
+                }
+                unsubscribe();
+              });
+            });
+          });
+
+          if (allPlayersInWaitingRoom && !countdownRef.current) {
+            startCountdown();
           }
 
-          // Si el estado es 'in_progress' y no hemos navegado, navegar al Market
           if (gameData.status === 'in_progress' && !hasNavigated.current) {
             hasNavigated.current = true;
             navigation.reset({
@@ -90,50 +118,20 @@ const WaitingRoomScreen = ({ route }) => {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
+        if (countdownRef.current) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+        }
       };
     }, [gameId])
   );
-
-  useEffect(() => {
-    if (!roundTime) {
-      console.log("Waiting for roundTime to be set.");
-      return;
-    }
-  
-    console.log("Initializing countdown. Round time:", roundTime);
-  
-    intervalRef.current = setInterval(() => {
-      const now = new Date();
-      const diff = roundTime.getTime() - now.getTime();
-      const timeDiff = Math.max(0, Math.round(diff / 1000));
-  
-      if (timeDiff !== remainingTime) {
-        setRemainingTime(timeDiff);
-        console.log("Remaining time updated:", timeDiff);
-      }
-   
-      if (timeDiff <= 0) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-        console.log("Countdown finished, starting new round.");
-        startNewRound();
-      }
-    }, 1000);
-  
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [roundTime]);
 
   return (
     <View style={styles.container}>
       <WaitingRoomHeader title={"Waiting Room"} />
       <Text style={styles.label}>Players: {playerCount}</Text>
-      {gameStatus === 'starting' && remainingTime !== null ? (
-        <Text style={styles.countdownText}>Starting in {remainingTime}...</Text>
+      {countdown !== null ? (
+        <Text style={styles.countdownText}>Starting in {countdown}...</Text>
       ) : (
         <Text style={styles.label}>Waiting for other players...</Text>
       )}
