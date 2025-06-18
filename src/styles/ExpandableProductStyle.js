@@ -30,6 +30,24 @@ const styles = StyleSheet.create({
       fontSize: 14,
       textAlign: 'center',
       color: '#888',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rockCoinIcon: {
+      width: 16,
+      height: 16,
+      color: '#888',
+      marginLeft: 4,
+    },
+    rockCoinIconAlign: {
+      marginBottom: 0,
+    },
+    priceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      marginBottom: 5,
     },
     modalContainer: {
       flex: 1,
@@ -69,7 +87,7 @@ const styles = StyleSheet.create({
     },
     detailText: {
       fontSize: 16,
-      marginBottom: 5,
+      marginBottom: 2,
     },
     buttonsContainer: {
       marginTop: 20,
@@ -120,10 +138,7 @@ const styles = StyleSheet.create({
       backgroundColor: '#cccccc',
     },
     qualityBadge: {
-      position: 'absolute',
-      top: 5,
-      left: 5,
-      backgroundColor: '#FFD700',
+      marginBottom: 2,
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: 5,
@@ -133,6 +148,35 @@ const styles = StyleSheet.create({
       fontSize: 12,
       fontWeight: 'bold',
       color: '#fff',
+    },
+    qualityContainer: {
+      position: 'absolute',
+      top: 5,
+      left: 5,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 5,
+      zIndex: 10,
+    },
+    qualityRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 5,
+    },
+    rockCoinIconDetail: {
+      width: 16,
+      height: 16,
+      marginLeft: 4,
+      marginTop: -2,
+    },
+    productPriceClosed: {
+      fontSize: 16,
+      marginBottom: 5,
+      fontWeight: 'bold',
+      textAlign: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
   

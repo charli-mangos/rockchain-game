@@ -16,11 +16,26 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
   const { setBlockId, incrementMiningQueue } = useGameContext(); // Importar correctamente el contexto
 
   const images = {
-    'Red': require('../assets/Red.png'),
-    'Black': require('../assets/Black.png'),
-    'Gray': require('../assets/Gray.png'),
-    'White': require('../assets/White.png'),
-    'Cream': require('../assets/Cream.png'),
+    'Red': {
+      'Block': require('../assets/RedBlock.png'),
+      'Slab': require('../assets/RedSlab.png')
+    },
+    'Black': {
+      'Block': require('../assets/BlackBlock.png'),
+      'Slab': require('../assets/BlackSlab.png')
+    },
+    'Gray': {
+      'Block': require('../assets/GrayBlock.png'),
+      'Slab': require('../assets/GraySlab.png')
+    },
+    'White': {
+      'Block': require('../assets/WhiteBlock.png'),
+      'Slab': require('../assets/WhiteSlab.png')
+    },
+    'Cream': {
+      'Block': require('../assets/CreamBlock.png'),
+      'Slab': require('../assets/CreamSlab.png')
+    }
   };
 
   const toggleExpand = () => {
@@ -251,12 +266,25 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
     <>
       {/* Vista compacta */}
       <TouchableOpacity style={styles.productContainer} onPress={toggleExpand}>
-        <View style={styles.qualityBadge}>
+        <View style={[
+          styles.qualityContainer,
+          product.quality === 'A' && { backgroundColor: '#2ecc71' },
+          product.quality === 'B' && { backgroundColor: '#f1c40f' },
+          product.quality === 'C' && { backgroundColor: '#e74c3c' }
+        ]}>
           <Text style={styles.qualityText}>{product.quality}</Text>
         </View>
-        <Image style={styles.productIcon} source={images[product.marbleType]} />
+        <Image style={styles.productIcon} source={images[product.marbleType][product.type]} />
         <Text style={styles.productText}>{product.marbleType + ' ' + product.type}</Text>
-        <Text style={styles.productPrice}>${product.currentPrice}</Text>
+        <View style={styles.priceRow}>
+          <Text style={styles.productPrice}>{product.currentPrice}</Text>
+          <Image 
+            source={require('../assets/RockCoinBlack.png')} 
+            style={[styles.rockCoinIcon, styles.rockCoinIconAlign]}
+            resizeMode="contain"
+            tintColor="#888"
+          />
+        </View>
       </TouchableOpacity>
 
       {/* Modal expandido */}   
@@ -276,14 +304,26 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
                     <Ionicons name="close-outline" size={24} color="#000" />
                   </TouchableOpacity>
                 </View>
-                <Image style={styles.expandedProductIcon} source={images[product.marbleType]} />
-                <Text style={styles.detailText}>Description: {product.description || 'No description available'}</Text>
-                <Text style={styles.detailText}>
-                  Quality: {product.quality || 'Unknown'} {/* Evitar undefined */}
-                </Text>                
-                <Text style={styles.detailText}>
-                    Price: <Text style={styles.negativeText}>${product.currentPrice}</Text>
-                </Text>
+                <Image style={styles.expandedProductIcon} source={images[product.marbleType][product.type]} />
+                <View style={styles.qualityRow}>
+                  <Text style={styles.detailText}>Quality: </Text>
+                  <View style={[
+                    styles.qualityBadge,
+                    product.quality === 'A' && { backgroundColor: '#2ecc71' },
+                    product.quality === 'B' && { backgroundColor: '#f1c40f' },
+                    product.quality === 'C' && { backgroundColor: '#e74c3c' }
+                  ]}>
+                    <Text style={styles.qualityText}>{product.quality}</Text>
+                  </View>
+                </View>
+                <View style={styles.priceRow}>
+                  <Text style={styles.detailText}>Price: <Text style={{fontWeight: 'bold'}}>{product.currentPrice}</Text></Text>
+                  <Image 
+                    source={require('../assets/RockCoinBlack.png')} 
+                    style={styles.rockCoinIconDetail} 
+                    resizeMode="contain"
+                  />
+                </View>
                 <Text style={styles.detailText}>
                     Waste: <Text style={styles.negativeText}>{product.waste}</Text>
                 </Text>

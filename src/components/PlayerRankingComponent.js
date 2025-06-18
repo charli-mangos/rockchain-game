@@ -1,9 +1,10 @@
-import React from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, FlatList, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const PlayerRankingComponent = ({ players, title }) => {
-  const renderHeader = () => (
+  // Memoizar el header para evitar re-renders innecesarios
+  const ListHeader = useMemo(() => (
     <View style={styles.headerRow}>
       <View style={styles.headerCell}>
         <Text style={styles.headerText}>Rank</Text>
@@ -12,7 +13,11 @@ const PlayerRankingComponent = ({ players, title }) => {
         <Text style={styles.headerText}>Player</Text>
       </View>
       <View style={styles.headerCell}>
-        <Ionicons name="rocket" size={20} color="#666" />
+        <Image 
+          source={require('../assets/RockCoinBlack.png')} 
+          style={[styles.rockCoinIcon, { tintColor: '#666' }]} 
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.headerCell}>
         <Ionicons name="trash" size={20} color="#666" />
@@ -21,9 +26,10 @@ const PlayerRankingComponent = ({ players, title }) => {
         <Ionicons name="trending-up" size={20} color="#666" />
       </View>
     </View>
-  );
+  ), []);
 
-  const renderPlayerItem = ({ item, index }) => {
+  // Memoizar el renderizado de cada item
+  const renderPlayerItem = useMemo(() => ({ item, index }) => {
     const balance = item.rockCoins - item.waste;
     const balanceColor = balance > 0 ? '#2ecc71' : '#e74c3c';
     
@@ -48,7 +54,7 @@ const PlayerRankingComponent = ({ players, title }) => {
         </View>
       </View>
     );
-  };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -57,8 +63,11 @@ const PlayerRankingComponent = ({ players, title }) => {
         data={players}
         renderItem={renderPlayerItem}
         keyExtractor={(item) => item.userId}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={ListHeader}
         scrollEnabled={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={5}
       />
     </View>
   );
@@ -78,6 +87,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#ddd',
+    backgroundColor: '#f8f8f8',
   },
   row: {
     flexDirection: 'row',
@@ -98,6 +108,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 16,
     color: '#666',
+    fontWeight: '600',
   },
   rankText: {
     fontSize: 16,
@@ -111,6 +122,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
   },
+  rockCoinIcon: {
+    width: 20,
+    height: 20,
+  },
 });
 
-export default PlayerRankingComponent; 
+export default React.memo(PlayerRankingComponent); 

@@ -17,6 +17,12 @@ export default StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
+  playerCountLabel: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
   subText: {
     fontSize: 18,
     color: '#666',

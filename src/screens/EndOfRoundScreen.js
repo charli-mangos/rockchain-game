@@ -57,13 +57,10 @@ const EndOfRoundScreen = ({ route }) => {
           if (userRewards) {
             let message = '';
             if (userRewards.industryReward) {
-              message += `You've got it right! \n +${userRewards.industryReward} RockCoins \n`;
+              message += `+${userRewards.industryReward} RockCoins \n`;
               if (userRewards.wasteRemoved > 0) {
                 message += `Recycled waste: ${userRewards.wasteRemoved}\n`;
               }
-            }
-            if (userRewards.miningRewards) {
-              message += `You have mined blocks! +${userRewards.miningRewards} RockCoins`;
             }
             setRewardMessage(message);
           }
@@ -134,7 +131,11 @@ const EndOfRoundScreen = ({ route }) => {
           </View>
         </View>
 
-        <BlockchainComponent gameId={gameId} />
+        <BlockchainComponent 
+          gameId={gameId} 
+          title="Mined Blocks" 
+          showReward={true}
+        />
       </ScrollView>
 
       <TouchableOpacity 
@@ -143,7 +144,7 @@ const EndOfRoundScreen = ({ route }) => {
         disabled={isReadyForNextRound}
       >
         {!isReadyForNextRound ? (
-          <Text style={styles.readyButtonText}>Ready for Next Round</Text>
+          <Text style={styles.readyButtonText}>Next Round</Text>
         ) : (
           <ActivityIndicator color="#fff" size="small" />
         )}

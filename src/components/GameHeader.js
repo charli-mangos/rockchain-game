@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Image } from 'react-native';
 import { db } from '../../firebase';
 import { GameContext } from '../context/GameContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -121,7 +121,10 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
             <Animated.Text style={[styles.bitcoin, { transform: [{ scale: rockCoinsAnim }], color: rockCoinsColor }]}>
               {rockCoins}
             </Animated.Text>
-            <Ionicons name="logo-bitcoin" size={24} color="#000" />
+            <Image 
+              source={require('../assets/RockCoinBlack.png')} 
+              style={styles.rockCoinIcon} 
+            />
           </View>
           <View style={styles.trashContainer}>
             <Animated.Text style={[styles.resources, { transform: [{ scale: wasteAnim }], color: wasteColor }]}>
@@ -300,6 +303,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  rockCoinIcon: {
+    width: 24,
+    height: 24,
+    marginLeft: 5,
   },
 });
 

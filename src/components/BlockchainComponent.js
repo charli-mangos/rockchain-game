@@ -4,7 +4,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useUserName } from '../hooks/useUserName';
 
-const BlockCard = ({ block, index }) => {
+const BlockCard = ({ block, index, showReward }) => {
   const minerId = block.winner?.userId;
   const minerName = useUserName(minerId);
   
@@ -17,6 +17,11 @@ const BlockCard = ({ block, index }) => {
       <Text style={styles.blockDetails}>
         Time: {((block.winner?.responseTime || 0) / 1000).toFixed(2)}s
       </Text>
+      {showReward && block.winner && (
+        <View style={styles.rewardContainer}>
+          <Text style={styles.rewardText}>+50</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -25,7 +30,7 @@ const BlockConnection = () => (
   <View style={styles.blockConnection} />
 );
 
-const BlockchainComponent = ({ gameId, title = "Blockchain" }) => {
+const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false }) => {
   const [blocks, setBlocks] = useState([]);
 
   useEffect(() => {
@@ -69,7 +74,7 @@ const BlockchainComponent = ({ gameId, title = "Blockchain" }) => {
           >
             {blocks.map((block, index) => (
               <React.Fragment key={block.id}>
-                <BlockCard block={block} index={index} />
+                <BlockCard block={block} index={index} showReward={showReward} />
                 {index < blocks.length - 1 && <BlockConnection />}
               </React.Fragment>
             ))}
@@ -103,6 +108,7 @@ const styles = StyleSheet.create({
     padding: 15,
     minWidth: 150,
     marginVertical: 10,
+    position: 'relative',
   },
   blockNumber: {
     fontSize: 16,
@@ -145,6 +151,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginTop: 8,
+  },
+  rewardContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#2ecc71',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  rewardText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

@@ -10,32 +10,52 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+    backgroundColor: '#f8f8f8',
+  },
+  row: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  headerCell: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 21,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  cell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   headerText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#888',
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  nameText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  valueText: {
+    fontSize: 16,
+    color: '#000',
+  },
+  rockCoinIcon: {
+    width: 20,
+    height: 20,
+    marginVertical: 2,
   },
   icon: {
     flex: 0.5,
     textAlign: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    backgroundColor: '#f9f9f9',
-    marginBottom: 1,
-    marginHorizontal: 21,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
   },
   name: {
     flex: 1,
@@ -54,12 +74,15 @@ const styles = StyleSheet.create({
   },
   marbleContainer: {
     flex: 1,
+    paddingHorizontal: 16,
+    marginTop: 8,
   },
   chartContainer: {
     flex: 1,
     justifyContent: "center", 
     alignItems: "center",
     backgroundColor: '#ffffff',
+    marginTop: 16,
   },
 });
 

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Dimensions } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, Text, FlatList, Dimensions, Image } from 'react-native';
 import { db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { LineChart } from 'react-native-chart-kit';
@@ -9,7 +9,6 @@ import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/ChatScreenStyles';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useGameContext } from '../context/GameContext';
-
 
 const ChatScreen = ({ navigation, route }) => {
   const { marketData } = useGameContext();  // ✅ Usar datos en tiempo real desde `GameContext`
@@ -78,9 +77,13 @@ const ChatScreen = ({ navigation, route }) => {
   // }, [gameId]);
 
   const updateMarbleBasePrices = (roundsData, typeFilter, qualityFilter) => {
-    if (!roundsData['1']) return;
+    if (!roundsData || Object.keys(roundsData).length === 0) return;
 
-    const filteredPrices = Object.entries(roundsData['1']).map(([marbleType, productData]) => ({
+    // Obtener la última ronda disponible
+    const lastRound = Math.max(...Object.keys(roundsData).map(Number));
+    const currentRoundData = roundsData[lastRound];
+
+    const filteredPrices = Object.entries(currentRoundData).map(([marbleType, productData]) => ({
         marbleType,
         price: productData[typeFilter]?.[qualityFilter]?.price || 0,
         waste: productData[typeFilter]?.[qualityFilter]?.waste || 0,
@@ -94,8 +97,9 @@ const ChatScreen = ({ navigation, route }) => {
   const generateFilteredData = (roundsData, typeFilter, qualityFilter) => {
     const filteredData = [];
   
-    // Obtener todos los tipos de mármol
-    const marbleTypes = Object.keys(roundsData['1'] || {});
+    // Obtener todos los tipos de mármol de la última ronda
+    const lastRound = Math.max(...Object.keys(roundsData).map(Number));
+    const marbleTypes = Object.keys(roundsData[lastRound] || {});
   
     // Agregar ronda 0 con valores en 0
     const roundZero = {
@@ -143,24 +147,13 @@ const ChatScreen = ({ navigation, route }) => {
 
   // Actualizar filtros al cambiar el tipo o calidad
   useEffect(() => {
-    handleFilterChange(selectedType, selectedQuality);
-  }, [selectedType, selectedQuality]);
-
-  const handleFilterChange = (type, quality) => {
     if (!marketData) return;
 
     const roundsData = marketData.rounds || {};
-    const newFilteredData = generateFilteredData(roundsData, type, quality);
+    const newFilteredData = generateFilteredData(roundsData, selectedType, selectedQuality);
     setPriceHistory(newFilteredData);
-
-    const filteredPrices = Object.entries(roundsData['1'] || {}).map(([marbleType, productData]) => ({
-      marbleType,
-      price: productData[type]?.[quality]?.price || 0,
-      waste: productData[type]?.[quality]?.waste || 0,
-    }));
-
-    setMarbleBasePrices(filteredPrices);
-  };
+    updateMarbleBasePrices(roundsData, selectedType, selectedQuality);
+  }, [selectedType, selectedQuality, marketData]);
 
   // // Manejar cambios en los filtros
   // const handleFilterChange = (type, quality) => {
@@ -229,25 +222,49 @@ const ChatScreen = ({ navigation, route }) => {
     fillShadowGradientTo: '#ffffff',
   };
 
-  // Renderizar encabezado de la lista
-  const renderHeader = () => (
+  // Memoizar el header para evitar re-renders innecesarios
+  const ListHeader = useMemo(() => (
     <View style={styles.headerRow}>
-      <Text style={styles.headerText}>Marble Type</Text>
-      <Ionicons name="logo-bitcoin" size={20} color="#888" style={styles.icon} />
-      <Ionicons name="trash" size={20} color="#888" style={styles.icon} />
+      <View style={styles.headerCell}>
+        <Text style={styles.headerText}>Type</Text>
+      </View>
+      <View style={styles.headerCell}>
+        <Image 
+          source={require('../assets/RockCoinBlack.png')} 
+          style={[styles.rockCoinIcon, { tintColor: '#666' }]} 
+          resizeMode="contain"
+        />
+      </View>
+      <View style={styles.headerCell}>
+        <Ionicons name="trash" size={20} color="#666" />
+      </View>
+      <View style={styles.headerCell}>
+        <Ionicons name="trending-up" size={20} color="#666" />
+      </View>
     </View>
-  );
+  ), []);
 
-  // Renderizar elementos de la lista
-  const renderPriceItem = ({ item }) => (
+  // Memoizar el renderizado de cada item
+  const renderPriceItem = useMemo(() => ({ item }) => (
     <View style={styles.row}>
-      <Text style={{ color: marbleColors[item.marbleType], flex: 1, fontSize: 16, fontWeight: 'bold' }}>
+      <View style={styles.cell}>
+        <Text style={[styles.nameText, { color: marbleColors[item.marbleType] }]}>
         {item.marbleType}
       </Text>
-      <Text style={styles.rockCoins}>{item.price}</Text>
-      <Text style={styles.waste}>{item.waste}</Text>
+      </View>
+      <View style={styles.cell}>
+        <Text style={styles.valueText}>{item.price}</Text>
+      </View>
+      <View style={styles.cell}>
+        <Text style={styles.valueText}>{item.waste}</Text>
+      </View>
+      <View style={styles.cell}>
+        <Text style={[styles.valueText, { color: item.balance > 0 ? '#2ecc71' : '#e74c3c' }]}>
+          {item.balance}
+        </Text>
+      </View>
     </View>
-  );
+  ), [marbleColors]);
 
   if (!marketData) {
     return (
@@ -298,7 +315,10 @@ const ChatScreen = ({ navigation, route }) => {
           data={sortedMarbleBasePrices}
           keyExtractor={(item, index) => `${item.marbleType}-${index}`}
           renderItem={renderPriceItem}
-          ListHeaderComponent={renderHeader}
+          ListHeaderComponent={ListHeader}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
         />
       </View>
 
@@ -313,7 +333,13 @@ const ChatScreen = ({ navigation, route }) => {
         ]}
         setOpen={setOpenMetric}
         setValue={setSelectedMetric}
-        containerStyle={{ width: '35%', height: 50, alignSelf: 'center' }}
+        containerStyle={{ 
+          width: '35%', 
+          height: 50, 
+          alignSelf: 'center',
+          marginTop: 16,
+          marginBottom: 0
+        }}
       />
 
       {/* Gráfica */}
@@ -336,4 +362,4 @@ const ChatScreen = ({ navigation, route }) => {
   );
 };
 
-export default ChatScreen;
+export default React.memo(ChatScreen);

@@ -62,9 +62,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     position: 'absolute',
-    bottom: 40,
-    left: 16,
-    right: 16,
+    bottom: 50,
+    left: 20,
+    right: 20,
   },
   readyButtonText: {
     color: '#fff',

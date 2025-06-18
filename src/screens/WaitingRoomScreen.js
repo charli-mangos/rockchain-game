@@ -37,10 +37,10 @@ const WaitingRoomScreen = ({ route }) => {
 
         if (!hasNavigated.current) {
           hasNavigated.current = true;
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
-          });
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
+        });
         }
       } catch (error) {
         console.error("Error starting new round:", error);
@@ -129,7 +129,7 @@ const WaitingRoomScreen = ({ route }) => {
   return (
     <View style={styles.container}>
       <WaitingRoomHeader title={"Waiting Room"} />
-      <Text style={styles.label}>Players: {playerCount}</Text>
+      <Text style={styles.playerCountLabel}>Players: {playerCount}</Text>
       {countdown !== null ? (
         <Text style={styles.countdownText}>Starting in {countdown}...</Text>
       ) : (
