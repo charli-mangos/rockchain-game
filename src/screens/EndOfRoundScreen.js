@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useGameContext } from '../context/GameContext';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigation } from '@react-navigation/native';
 import { httpsCallable } from 'firebase/functions';
@@ -15,80 +15,187 @@ const EndOfRoundScreen = ({ route }) => {
   const { gameId, userId } = route.params;
   const { players, round, isReadyForNextRound, markPlayerReady, winningIndustry } = useGameContext();
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
-  const [hasReceivedReward, setHasReceivedReward] = useState(false);
   const [rewardMessage, setRewardMessage] = useState(null);
   const [roundRewards, setRoundRewards] = useState(null);
-  const allPlayersReady = players.every(player => player.readyForNextRound);
   const navigation = useNavigation();
 
-  useEffect(() => {
-    console.log('EndOfRoundScreen mounted');
-    const userRef = doc(db, 'users', userId);
-    const gameRef = doc(db, 'games', gameId);
+  // Refs para controlar el estado de procesamiento
+  const rewardsProcessedRef = useRef(false);
+  const currentRoundRef = useRef(round);
+  const unsubscribeRef = useRef(null);
+  const effectRunRef = useRef(false);
+  const isNavigatingRef = useRef(false); // Nuevo ref para controlar navegación
 
-    const unsubscribeUser = onSnapshot(userRef, async (doc) => {
-      if (doc.exists()) {
-        const userData = doc.data();
-        const gameData = userData.games?.[gameId] || {};
-        const selectedIndustry = gameData.selectedIndustry || 'No selection';
+  // Resetear estado cuando cambia la ronda
+  useEffect(() => {
+    if (currentRoundRef.current !== round) {
+      console.log(`🔄 Ronda cambiada de ${currentRoundRef.current} a ${round}`);
+      currentRoundRef.current = round;
+      rewardsProcessedRef.current = false;
+      effectRunRef.current = false;
+      isNavigatingRef.current = false; // Resetear estado de navegación
+      setRewardMessage(null);
+      setRoundRewards(null);
+      
+      // Limpiar cualquier suscripción anterior
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+      
+      console.log(`🧹 Estados reseteados para ronda ${round}`);
+    }
+  }, [round]);
+
+  // Efecto principal para manejar recompensas
+  useEffect(() => {
+    // Evitar múltiples ejecuciones del mismo efecto
+    if (effectRunRef.current) {
+      console.log('⚠️ Efecto ya ejecutado, evitando re-ejecución');
+      return;
+    }
+    
+    effectRunRef.current = true;
+    console.log(`🎮 EndOfRoundScreen - Ronda ${round}, userId: ${userId}`);
+    
+    const gameRef = doc(db, 'games', gameId);
+    const userRef = doc(db, 'users', userId);
+
+    const unsubscribe = onSnapshot(gameRef, async (gameDoc) => {
+      if (!gameDoc.exists()) return;
+      
+      const gameData = gameDoc.data();
+      console.log(`📊 Estado del juego: rewardsAssigned=${gameData.rewardsAssigned}, round=${gameData.round}, currentRoundRef=${currentRoundRef.current}, isNavigating=${isNavigatingRef.current}`);
+
+      // PROTECCIÓN CRÍTICA: No procesar recompensas si estamos navegando
+      if (isNavigatingRef.current) {
+        console.log('🚫 Navegación en progreso, evitando procesamiento de recompensas');
+        return;
+      }
+      
+      // Solo procesar recompensas si:
+      // 1. No se han asignado recompensas en el backend
+      // 2. No se han procesado localmente para esta ronda
+      // 3. La ronda actual coincide con la ronda del juego
+      // 4. NO estamos en proceso de navegación
+      // 5. El estado del juego es 'roundEnd'
+      if (!gameData.rewardsAssigned && 
+          !rewardsProcessedRef.current && 
+          gameData.round === round &&
+          !isNavigatingRef.current &&
+          gameData.status === 'roundEnd') {
+        console.log(`💰 Asignando recompensas para la ronda ${round}`);
+        try {
+          const assignRewardsFunction = httpsCallable(functions, 'assignRoundRewards');
+          const result = await assignRewardsFunction({ gameId });
+          console.log('✅ Recompensas asignadas:', result.data);
+          rewardsProcessedRef.current = true;
+          } catch (error) {
+          console.error('❌ Error al asignar recompensas:', error);
+          // Si hay error, no marcar como procesado para permitir reintento
+          rewardsProcessedRef.current = false;
+        }
+      } else {
+        console.log(`🚫 No se procesan recompensas: rewardsAssigned=${gameData.rewardsAssigned}, processed=${rewardsProcessedRef.current}, round=${gameData.round}, currentRound=${round}, navigating=${isNavigatingRef.current}, status=${gameData.status}`);
+      }
+      
+      // Mostrar recompensas si existen y no se han mostrado aún
+      if (gameData.roundRewards && !rewardMessage && gameData.round === round && !isNavigatingRef.current) {
+        console.log('📋 Mostrando recompensas:', gameData.roundRewards);
+        setRoundRewards(gameData.roundRewards);
+        
+        const userRewards = gameData.roundRewards[userId];
+        if (userRewards) {
+          let message = '';
+          let totalRewards = 0;
+          
+          // Recompensa por industria
+          if (userRewards.industryReward && userRewards.industryReward > 0) {
+            message += `Industry Reward: +${userRewards.industryReward} RockCoins\n`;
+            totalRewards += userRewards.industryReward;
+            if (userRewards.wasteRemoved > 0) {
+              message += `Recycled waste: ${userRewards.wasteRemoved}\n`;
+      }
+          }
+          
+          // SOLO mostrar recompensas por industria y reciclaje en el cartel verde
+          // Las recompensas por minado se muestran de otra manera (en los bloques)
+          
+          // Total de recompensas (solo industria + reciclaje)
+          if (totalRewards > 0) {
+            message += `\nTotal: +${totalRewards} RockCoins`;
+            console.log(`🎁 Mostrando mensaje de recompensas para ronda ${round}: ${message}`);
+            setRewardMessage(message);
+          }
+        }
+      } else if (gameData.roundRewards && gameData.round !== round) {
+        // Si hay recompensas pero son de una ronda diferente, limpiarlas
+        console.log(`🧹 Limpiando recompensas de ronda anterior: ${gameData.round} vs ${round}`);
+        setRewardMessage(null);
+        setRoundRewards(null);
+      }
+    });
+
+    // Obtener industria seleccionada del usuario
+    const unsubscribeUser = onSnapshot(userRef, (userDoc) => {
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const gameUserData = userData.games?.[gameId] || {};
+        const selectedIndustry = gameUserData.selectedIndustry || 'No selection';
         setUserSelectedIndustry(selectedIndustry);
       }
     });
 
-    const unsubscribeGame = onSnapshot(gameRef, async (doc) => {
-      if (doc.exists()) {
-        const gameData = doc.data();
-        
-        // Si los premios no han sido asignados, asignarlos
-        if (!gameData.rewardsAssigned) {
-          try {
-            const assignRewardsFunction = httpsCallable(functions, 'assignRoundRewards');
-            const result = await assignRewardsFunction({ gameId });
-            console.log('Premios asignados:', result.data);
-          } catch (error) {
-            console.error('Error al asignar premios:', error);
-          }
-        }
-
-        // Actualizar los premios mostrados
-        if (gameData.roundRewards) {
-          setRoundRewards(gameData.roundRewards);
-          const userRewards = gameData.roundRewards[userId];
-          if (userRewards) {
-            let message = '';
-            if (userRewards.industryReward) {
-              message += `+${userRewards.industryReward} RockCoins \n`;
-              if (userRewards.wasteRemoved > 0) {
-                message += `Recycled waste: ${userRewards.wasteRemoved}\n`;
-              }
-            }
-            setRewardMessage(message);
-          }
-        }
-      }
-    });
+    unsubscribeRef.current = () => {
+      unsubscribe();
+      unsubscribeUser();
+    };
 
     return () => {
-      console.log('EndOfRoundScreen unmounted');
-      unsubscribeUser();
-      unsubscribeGame();
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
     };
-  }, [gameId, userId]);
+  }, [gameId, userId, round]); // Dependencias específicas
 
   const handleReady = async () => {
     try {
+      console.log('🚀 Usuario presionó Next Round');
+      
+      // ACTIVAR PROTECCIÓN DE NAVEGACIÓN
+      isNavigatingRef.current = true;
+      console.log('🔒 Activando protección de navegación');
+      
+      // Resetear estados solo cuando el usuario presiona Next Round
+      setRewardMessage(null);
+      setRoundRewards(null);
+      rewardsProcessedRef.current = false;
+      effectRunRef.current = false;
+      
+      // Si es la ronda 3, navegar a GameResultsScreen usando reset para evitar bucle
+      if (round === 3) {
+        console.log('🏁 Ronda 3 completada, navegando a resultados finales');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'GameResults', params: { gameId, userId } }],
+        });
+      } else {
+        // Para rondas 1 y 2, comportamiento normal
       await markPlayerReady();
       navigation.navigate('WaitingRoom', { gameId, userId });
+      }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
       Alert.alert('Error', 'No se pudo marcar como listo para la siguiente ronda');
+      // Si hay error, desactivar protección de navegación
+      isNavigatingRef.current = false;
     }
   };
 
   return (
     <View style={styles.container}>
       <GameHeader 
-        title={`Round ${round} Complete`} 
+        title={round === 3 ? 'Game Complete!' : `Round ${round} Complete`} 
         userId={userId} 
         gameId={gameId}
         currentScreen="EndOfRound"
@@ -135,16 +242,19 @@ const EndOfRoundScreen = ({ route }) => {
           gameId={gameId} 
           title="Mined Blocks" 
           showReward={true}
+          filterByRound={round}
         />
       </ScrollView>
 
-      <TouchableOpacity 
-        style={styles.readyButton}
-        onPress={handleReady}
+        <TouchableOpacity 
+          style={styles.readyButton}
+          onPress={handleReady}
         disabled={isReadyForNextRound}
       >
         {!isReadyForNextRound ? (
-          <Text style={styles.readyButtonText}>Next Round</Text>
+          <Text style={styles.readyButtonText}>
+            {round === 3 ? 'End Game' : 'Next Round'}
+          </Text>
         ) : (
           <ActivityIndicator color="#fff" size="small" />
         )}
@@ -153,4 +263,4 @@ const EndOfRoundScreen = ({ route }) => {
   );
 };
 
-export default EndOfRoundScreen;
+export default EndOfRoundScreen; 

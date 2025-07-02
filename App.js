@@ -7,6 +7,7 @@ import GameScreen from './src/screens/GameScreen';
 import WaitingRoomScreen from './src/screens/WaitingRoomScreen';
 import GameTabs from './src/components/GameTabs';  // Importar el componente GameTabs que maneja el Tab Navigator
 import EndOfRoundScreen from './src/screens/EndOfRoundScreen';
+import GameResultsScreen from './src/screens/GameResultsScreen';
 import { callGenerateProducts } from './src/components/callGenerateProducts';
 import { GameProvider } from './src/context/GameContext';
 
@@ -80,6 +81,31 @@ const App = () => {
                 navigation={navigation}
               >
                 <EndOfRoundScreen route={route} />
+              </GameProvider>
+            );
+          }}
+        </Stack.Screen>
+        <Stack.Screen
+          name="GameResults"
+          options={{ 
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        >
+          {({ route, navigation }) => {
+            if (!route.params.gameId || !route.params.userId) {
+              console.error('Game ID or User ID is missing.');
+              navigation.navigate('Login');
+              return null;
+            }
+
+            return (
+              <GameProvider
+                gameId={route.params.gameId}
+                userId={route.params.userId}
+                navigation={navigation}
+              >
+                <GameResultsScreen route={route} />
               </GameProvider>
             );
           }}

@@ -82,7 +82,9 @@ exports.startGame = onCall({
     await gameRef.update({
       status: 'starting',
       roundTime: admin.firestore.Timestamp.fromDate(roundStartTime),
-      round: 1
+      round: 1,
+      rewardsAssigned: false,
+      roundRewards: null
     });
 
     console.log(`✅ Juego iniciado exitosamente: ${gameId}`);

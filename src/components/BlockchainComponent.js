@@ -30,22 +30,59 @@ const BlockConnection = () => (
   <View style={styles.blockConnection} />
 );
 
-const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false }) => {
+const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null }) => {
   const [blocks, setBlocks] = useState([]);
 
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId) {
+      console.log('❌ No hay gameId, no se pueden cargar bloques');
+      return;
+    }
+
+    console.log(`⛓️ BlockchainComponent - Cargando bloques para gameId: ${gameId}, filterByRound: ${filterByRound}`);
 
     const blocksRef = collection(db, 'blockchain', gameId, 'blocks');
+    console.log(`🔍 Consultando colección: blockchain/${gameId}/blocks`);
     
     const unsubscribe = onSnapshot(blocksRef, (snapshot) => {
+      console.log(`📊 Snapshot recibido, docs count: ${snapshot.docs.length}`);
+      console.log(`📊 Snapshot empty: ${snapshot.empty}`);
+      
+      if (snapshot.empty) {
+        console.log('📭 No hay documentos en la colección de bloques');
+        setBlocks([]);
+        return;
+      }
+      
       const allDocs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
+      console.log(`📦 Total de bloques encontrados: ${allDocs.length}`);
+      console.log(`📋 Datos de bloques:`, allDocs);
+      
       // Filtrar solo los bloques que tienen un winner (minados correctamente)
-      const minedBlocks = allDocs.filter(block => block.winner);
+      let minedBlocks = allDocs.filter(block => {
+        const hasWinner = !!block.winner;
+        console.log(`🔍 Bloque ${block.id}: tiene winner = ${hasWinner}`, block.winner);
+        return hasWinner;
+      });
+      
+      console.log(`🏆 Bloques minados (con winner): ${minedBlocks.length}`);
+      console.log(`🏆 Datos de bloques minados:`, minedBlocks);
+      
+      // Si se especifica un filtro de ronda, aplicar el filtro
+      if (filterByRound !== null) {
+        minedBlocks = minedBlocks.filter(block => {
+          const matchesRound = block.round === filterByRound;
+          console.log(`🔍 Bloque ${block.id}: ronda ${block.round} vs ${filterByRound} = ${matchesRound}`);
+          return matchesRound;
+        });
+        console.log(`🔍 Bloques filtrados por ronda ${filterByRound}: ${minedBlocks.length}`);
+      } else {
+        console.log(`🌐 Mostrando todos los bloques sin filtro de ronda`);
+      }
       
       // Ordenar los bloques por timestamp (usando el ID que contiene el timestamp)
       minedBlocks.sort((a, b) => {
@@ -54,13 +91,18 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false 
         return aTime - bTime;
       });
 
+      console.log(`📋 Bloques finales a mostrar: ${minedBlocks.length}`);
       setBlocks(minedBlocks);
     }, (error) => {
-      console.error('Error fetching blocks:', error);
+      console.error('❌ Error fetching blocks:', error);
+      console.error('❌ Error details:', error.message, error.code);
     });
 
-    return () => unsubscribe();
-  }, [gameId]);
+    return () => {
+      console.log('🧹 Limpiando suscripción de bloques');
+      unsubscribe();
+    };
+  }, [gameId, filterByRound]);
 
   return (
     <View style={styles.blockchainSection}>

@@ -33,6 +33,7 @@ const { roundTimer } = require('./src/handlers/roundTimer');
 const { syncPlayers } = require('./src/handlers/syncPlayers');
 const { selectWinningIndustry } = require('./src/handlers/selectWinningIndustry');
 const { assignRoundRewards } = require('./src/handlers/assignRoundRewards');
+const { endRound } = require('./src/handlers/endRound');
 
 exports.createGame = createGame;
 exports.joinGame = joinGame;
@@ -47,6 +48,7 @@ exports.roundTimer = roundTimer;
 exports.syncPlayers = syncPlayers;
 exports.selectWinningIndustry = selectWinningIndustry;
 exports.assignRoundRewards = assignRoundRewards;
+exports.endRound = endRound;
 // Create and deploy your first functions
 // https://firebase.google.com/docs/functions/get-started
 

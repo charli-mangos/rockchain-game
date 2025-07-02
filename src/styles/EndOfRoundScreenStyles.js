@@ -84,15 +84,18 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   rewardContainer: {
-    padding: 10,
+    padding: 15,
     backgroundColor: '#2ecc71',
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 10,
   },
   rewardText: {
     fontSize: 16,
     color: '#fff',
     fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
 

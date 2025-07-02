@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Alert } from 'react-native';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../firebase';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -28,6 +28,24 @@ const WaitingRoomScreen = ({ route }) => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+
+      // VERIFICACIÓN ADICIONAL: Asegurar que el estado esté limpio antes de iniciar
+      try {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await getDoc(gameRef);
+        if (gameDoc.exists()) {
+          const gameData = gameDoc.data();
+          console.log(`🔍 Estado del juego antes de iniciar ronda: status=${gameData.status}, rewardsAssigned=${gameData.rewardsAssigned}`);
+          
+          // Si el estado no está limpio, esperar un poco más
+          if (gameData.rewardsAssigned === false && gameData.roundRewards === null) {
+            console.log('⏳ Estado de transición detectado, esperando 2 segundos...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      } catch (error) {
+        console.error('Error verificando estado del juego:', error);
       }
 
       const roundTimerFunction = httpsCallable(functions, 'roundTimer');
