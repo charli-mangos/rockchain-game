@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useGameContext } from '../context/GameContext';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -15,8 +15,8 @@ import MiningScreen from '../screens/MiningScreen';
 const Tab = createBottomTabNavigator();
 
 const Tabs = ({ route }) => {
-  const { gameId, userId } = route.params;
-  const { setShowMiningBubble } = useGameContext();
+  const { gameId, userId } = useGameContextHybrid();
+  const { setShowMiningBubble } = useGameContextHybrid();
 
   return (
     <Tab.Navigator 
@@ -46,8 +46,8 @@ const Tabs = ({ route }) => {
 };
 
 const GameTabs = ({ route }) => {
-  const { gameId, userId } = route.params;
-  const { miningQueue, showMiningBubble, setShowMiningBubble } = useGameContext();
+  const { gameId, userId } = useGameContextHybrid();
+  const { miningQueue, showMiningBubble, setShowMiningBubble } = useGameContextHybrid();
   const navigation = useNavigation();
 
   return (

@@ -1,19 +1,27 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { useGameContext } from '../context/GameContext';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, functions } from '../../firebase';
 import { useNavigation } from '@react-navigation/native';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../firebase';
+import { callAuthenticatedFunction } from '../utils/authHelper';
 
 const EndOfRoundScreen = ({ route }) => {
-  const { gameId, userId } = route.params;
-  const { players, round, isReadyForNextRound, markPlayerReady, winningIndustry } = useGameContext();
+  const { gameId, userId } = useGameContextHybrid();
+  const { allPlayersData, round, isReadyForNextRound, markPlayerReady, winningIndustry } = useGameContextHybrid();
+  
+  // Usar los datos completos de todos los jugadores
+  const players = allPlayersData.sort((a, b) => {
+    // Ordenar por balance (RockCoins - Waste) de mayor a menor
+    const balanceA = a.rockCoins - a.waste;
+    const balanceB = b.rockCoins - b.waste;
+    return balanceB - balanceA;
+  });
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
   const [rewardMessage, setRewardMessage] = useState(null);
   const [roundRewards, setRoundRewards] = useState(null);
@@ -87,7 +95,13 @@ const EndOfRoundScreen = ({ route }) => {
         console.log(`💰 Asignando recompensas para la ronda ${round}`);
         try {
           const assignRewardsFunction = httpsCallable(functions, 'assignRoundRewards');
-          const result = await assignRewardsFunction({ gameId });
+          
+          // Usar verificación de autenticación
+          const result = await callAuthenticatedFunction(
+            () => assignRewardsFunction({ gameId }),
+            'assignRoundRewards'
+          );
+          
           console.log('✅ Recompensas asignadas:', result.data);
           rewardsProcessedRef.current = true;
           } catch (error) {
@@ -180,9 +194,11 @@ const EndOfRoundScreen = ({ route }) => {
           routes: [{ name: 'GameResults', params: { gameId, userId } }],
         });
       } else {
-        // Para rondas 1 y 2, comportamiento normal
-      await markPlayerReady();
-      navigation.navigate('WaitingRoom', { gameId, userId });
+        // Para rondas 1 y 2, solo marcar como listo
+        // markPlayerReady() ya maneja la navegación a WaitingRoom
+        console.log(`🔄 Marcando como listo para ronda ${round + 1}`);
+        await markPlayerReady();
+        // NO navegar aquí, markPlayerReady() ya lo hace
       }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
@@ -209,7 +225,7 @@ const EndOfRoundScreen = ({ route }) => {
         <PlayerRankingComponent 
           players={players} 
           title="Round Rankings" 
-          showReadyStatus={true}
+          currentUserId={userId}
         />
 
         <View style={styles.industryContainer}>

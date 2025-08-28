@@ -4,11 +4,14 @@ import { auth, db, functions } from '../../firebase';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
+import { callAuthenticatedFunction } from '../utils/authHelper';
 import styles from '../styles/LoginStyles';
 import WelcomeHeader from '../components/WelcomeHeader';
 import RotatingCube from '../components/RotatingCube';
+import DismissKeyboardView from '../components/DismissKeyboardView';
 
-const LoginScreen = ({ navigation }) => {
+const LoginScreen = ({ navigation, route }) => {
+  const { setGameParams } = route.params || {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [userName, setUserName] = useState('');
@@ -25,9 +28,17 @@ const LoginScreen = ({ navigation }) => {
     console.log('Creating game...');
     const createGameFunction = httpsCallable(functions, 'createGame');
     try {
-      const result = await createGameFunction({ userId });
+      // Usar verificación de autenticación
+      const result = await callAuthenticatedFunction(
+        () => createGameFunction({ userId }),
+        'createGame'
+      );
+      
       const { gameId, gameCode } = result.data;
       console.log('Game created with ID:', gameId);
+      console.log('🔍 LoginScreen - createGame resultado completo:', result.data);
+      console.log('🔍 LoginScreen - gameId extraído:', gameId);
+      console.log('🔍 LoginScreen - gameCode extraído:', gameCode);
       return { gameId, gameCode };
     } catch (e) {
       console.error('Error creating game:', e);
@@ -46,7 +57,19 @@ const LoginScreen = ({ navigation }) => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const userId = userCredential.user.uid;
       const gameData = await createGame(userId);
-      navigation.navigate('Game', { gameId: gameData.gameId, gameCode: gameData.gameCode, userId: userId });
+      console.log('LoginScreen - Game created successfully:', gameData);
+      console.log('LoginScreen - Game data details:', {
+        gameId: gameData.gameId,
+        gameCode: gameData.gameCode,
+        success: gameData.success
+      });
+      
+      if (setGameParams) {
+        console.log('LoginScreen - Setting game params:', { gameId: gameData.gameId, userId: userId });
+        setGameParams({ gameId: gameData.gameId, userId: userId });
+      } else {
+        navigation.navigate('Game', { gameId: gameData.gameId, gameCode: gameData.gameCode, userId: userId });
+      }
     } catch (error) {
       switch (error.code) {
         case 'auth/wrong-password':
@@ -80,9 +103,22 @@ const LoginScreen = ({ navigation }) => {
 
       await saveUserToFirestore(userId, email, userName); // Guarda userName en Firestore
 
-      const gameData = await createGame(userId);
       Alert.alert("Registration Successful", "You have successfully registered!");
-      navigation.navigate('Game', { gameId: gameData.gameId, gameCode: gameData.gameCode, userId: userId });
+      
+      const gameData = await createGame(userId);
+      console.log('LoginScreen - Game created successfully (register):', gameData);
+      console.log('LoginScreen - Game data details (register):', {
+        gameId: gameData.gameId,
+        gameCode: gameData.gameCode,
+        success: gameData.success
+      });
+      
+      if (setGameParams) {
+        console.log('LoginScreen - Setting game params (register):', { gameId: gameData.gameId, userId: userId });
+        setGameParams({ gameId: gameData.gameId, userId: userId });
+      } else {
+        navigation.navigate('Game', { gameId: gameData.gameId, gameCode: gameData.gameCode, userId: userId });
+      }
     } catch (error) {
       setError(error.message);
     } finally {
@@ -112,7 +148,7 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <DismissKeyboardView style={styles.container}>
       <WelcomeHeader title="Welcome to RockChain" />
       {loading ? (
         <RotatingCube size={80} color="#000" /> 
@@ -166,7 +202,7 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </>
       )}
-    </View>
+    </DismissKeyboardView>
   );
 };
 

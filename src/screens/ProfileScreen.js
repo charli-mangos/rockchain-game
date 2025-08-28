@@ -8,13 +8,13 @@ import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/ProfileScreenStyles';
 import GameHeader from '../components/GameHeader';
 import ExpandableProduct from '../components/ExpandableProduct';
-import { useGameContext } from '../context/GameContext';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 
 
 const ProfileScreen = ({ navigation, route }) => {
-  const { userData, userProducts } = useGameContext(); 
+  const { userData, webSocketInventory, gameId, userId } = useGameContextHybrid();
+  const userProducts = webSocketInventory.products || []; 
   const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
-  const { gameId, userId } = route.params || {};
 
   // Función para seleccionar una imagen desde la galería
   const pickImage = async () => {
@@ -45,61 +45,85 @@ const ProfileScreen = ({ navigation, route }) => {
   );
 
   return (
-    <View style={styles.screenContainer}>
-      <GameHeader
-        title="RockProfile"
-        gameId={gameId} // Pasamos el gameId aquí
-        userId={userId}
-        onSettingsPress={() => console.log('Settings Pressed')}
-      />
-      <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.userInfoContainer}>
-        <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
-        <Text style={styles.userName}>{userData.userName}</Text>
-      </TouchableOpacity>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.screenContainer}>
+        <GameHeader
+          title="RockProfile"
+          gameId={gameId} // Pasamos el gameId aquí
+          userId={userId}
+          onSettingsPress={() => console.log('Settings Pressed')}
+        />
+        <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.userInfoContainer}>
+          <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
+          <Text style={styles.userName}>{userData.userName}</Text>
+        </TouchableOpacity>
 
-      {/* Modal para editar el perfil */}
-      <Modal visible={isEditing} transparent={true} animationType="none">
-        <TouchableWithoutFeedback onPress={() => setIsEditing(false)}>
-          <View style={styles.modalContainer}>
-            <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-              <View style={styles.modalContent}>
-                <TouchableOpacity style={styles.closeButton} onPress={() => setIsEditing(false)}>
-                  <Ionicons name="close" size={24} color="black" />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>Edit Profile</Text>
-
-                {/* Imagen seleccionable */}
-                <TouchableOpacity onPress={pickImage}>
-                  <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
-                </TouchableOpacity>
-
-                <TextInput
-                  value={userData.userName}
-                  onChangeText={(text) => setUserData({ ...userData, name: text })}
-                  style={styles.input}
-                  placeholder="Enter your name"
-                  placeholderTextColor="#999"
-                />
-              </View>
-            </TouchableWithoutFeedback>
+        {/* Información del inventario */}
+        <View style={styles.inventoryInfo}>
+          <Text style={styles.inventoryTitle}>Inventory Status</Text>
+          <View style={styles.inventoryStats}>
+            <View style={styles.inventoryStatRow}>
+              <Image 
+                source={require('../assets/RockCoinBlack.png')} 
+                style={styles.inventoryIcon} 
+              />
+              <Text style={styles.inventoryStat}>RockCoins: {webSocketInventory.rockCoins || 600}</Text>
+            </View>
+            <View style={styles.inventoryStatRow}>
+              <Ionicons name="trash" size={20} color="#000" />
+              <Text style={styles.inventoryStat}>Waste: {webSocketInventory.waste || 0}</Text>
+            </View>
+            <View style={styles.inventoryStatRow}>
+              <Ionicons name="cube" size={20} color="#000" />
+              <Text style={styles.inventoryStat}>Products: {userProducts.length}</Text>
+            </View>
           </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        </View>
 
-      {/* Texto de productos en itálica */}
-      <Text style={styles.productsTitle}>Your Products</Text>
+        {/* Modal para editar el perfil */}
+        <Modal visible={isEditing} transparent={true} animationType="none">
+          <TouchableWithoutFeedback onPress={() => setIsEditing(false)}>
+            <View style={styles.modalContainer}>
+              <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+                <View style={styles.modalContent}>
+                  <TouchableOpacity style={styles.closeButton} onPress={() => setIsEditing(false)}>
+                    <Ionicons name="close" size={24} color="black" />
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>Edit Profile</Text>
 
-      {/* FlatList para mostrar los productos comprados */}
-      <FlatList
-        data={userProducts}
-        renderItem={renderProduct}
-        keyExtractor={(item, index) => index.toString()}
-        numColumns={2}
-        style={styles.flatList}
-        contentContainerStyle={styles.flatListContainer}
-      />
-      <NavigationBar navigation={navigation} />
-    </View>
+                  {/* Imagen seleccionable */}
+                  <TouchableOpacity onPress={pickImage}>
+                    <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
+                  </TouchableOpacity>
+
+                  <TextInput
+                    value={userData.userName}
+                    onChangeText={(text) => setUserData({ ...userData, name: text })}
+                    style={styles.input}
+                    placeholder="Enter your name"
+                    placeholderTextColor="#999"
+                  />
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        {/* Texto de productos en itálica */}
+        <Text style={styles.productsTitle}>Your Products</Text>
+
+        {/* FlatList para mostrar los productos comprados */}
+        <FlatList
+          data={userProducts}
+          renderItem={renderProduct}
+          keyExtractor={(item, index) => index.toString()}
+          numColumns={2}
+          style={styles.flatList}
+          contentContainerStyle={styles.flatListContainer}
+        />
+        <NavigationBar navigation={navigation} />
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 

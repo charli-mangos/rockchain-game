@@ -32,8 +32,8 @@ exports.endRound = onCall({
     // Solo terminar la ronda si está en progreso
     if (status !== 'in_progress' && status !== 'playing') {
       console.log(`⚠️ Juego no está en progreso: ${status}`);
-      // Si ya está en roundEnd, no hacer nada
-      if (status === 'roundEnd') {
+      // Si ya está en waiting_for_players, no hacer nada
+      if (status === 'waiting_for_players') {
         return { 
           success: true, 
           message: `Round ${round} already ended.`,
@@ -44,6 +44,8 @@ exports.endRound = onCall({
     }
 
     console.log(`🏁 Terminando ronda ${round}`);
+    console.log(`🏆 Winning Industry actual: ${gameData.winningIndustry}`);
+    console.log(`📊 Estado actual: ${status}`);
 
     // PROTECCIÓN: Usar transacción para evitar conflictos
     const result = await db.runTransaction(async (transaction) => {
@@ -58,7 +60,7 @@ exports.endRound = onCall({
       // Verificar que el estado no haya cambiado durante la transacción
       if (currentStatus !== 'in_progress' && currentStatus !== 'playing') {
         console.log(`⚠️ Estado cambió durante transacción: ${currentStatus}`);
-        if (currentStatus === 'roundEnd') {
+        if (currentStatus === 'waiting_for_players') {
           return { 
             success: true, 
             message: `Round ${round} already ended.`,
@@ -68,12 +70,17 @@ exports.endRound = onCall({
         throw new Error('Game state changed during transaction');
       }
 
-      // Actualizar estado a roundEnd para permitir asignación de recompensas
+      // Actualizar estado a waiting_for_players para permitir navegación a EndOfRound
       transaction.update(gameRef, {
-        status: 'roundEnd',
+        status: 'waiting_for_players',
         rewardsAssigned: false,
-        roundRewards: null
+        roundRewards: null,
+        // Asegurar que winningIndustry esté configurado
+        winningIndustry: currentGameData.winningIndustry || null
       });
+
+      console.log(`✅ Transacción completada - Estado actualizado a waiting_for_players`);
+      console.log(`🏆 Winning Industry preservado: ${currentGameData.winningIndustry}`);
 
       return { 
         success: true, 
@@ -82,7 +89,7 @@ exports.endRound = onCall({
       };
     });
 
-    console.log(`✅ Ronda ${round} terminada, estado actualizado a roundEnd`);
+    console.log(`✅ Ronda ${round} terminada, estado actualizado a waiting_for_players`);
     return result;
 
   } catch (error) {

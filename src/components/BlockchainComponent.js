@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 import { useUserName } from '../hooks/useUserName';
 
 const BlockCard = ({ block, index, showReward }) => {
@@ -31,6 +30,7 @@ const BlockConnection = () => (
 );
 
 const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null }) => {
+  const { webSocketInventory, minedBlocks, round } = useGameContextHybrid();
   const [blocks, setBlocks] = useState([]);
 
   useEffect(() => {
@@ -39,70 +39,28 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
       return;
     }
 
-    console.log(`⛓️ BlockchainComponent - Cargando bloques para gameId: ${gameId}, filterByRound: ${filterByRound}`);
+    console.log(`⛓️ BlockchainComponent - Usando datos del WebSocket para gameId: ${gameId}, filterByRound: ${filterByRound}`);
+    console.log(`📊 minedBlocks actuales:`, minedBlocks);
+    console.log(`📊 minedBlocks.length:`, minedBlocks?.length || 0);
+    console.log(`📊 round actual:`, round);
 
-    const blocksRef = collection(db, 'blockchain', gameId, 'blocks');
-    console.log(`🔍 Consultando colección: blockchain/${gameId}/blocks`);
-    
-    const unsubscribe = onSnapshot(blocksRef, (snapshot) => {
-      console.log(`📊 Snapshot recibido, docs count: ${snapshot.docs.length}`);
-      console.log(`📊 Snapshot empty: ${snapshot.empty}`);
-      
-      if (snapshot.empty) {
-        console.log('📭 No hay documentos en la colección de bloques');
-        setBlocks([]);
-        return;
-      }
-      
-      const allDocs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      console.log(`📦 Total de bloques encontrados: ${allDocs.length}`);
-      console.log(`📋 Datos de bloques:`, allDocs);
-      
-      // Filtrar solo los bloques que tienen un winner (minados correctamente)
-      let minedBlocks = allDocs.filter(block => {
-        const hasWinner = !!block.winner;
-        console.log(`🔍 Bloque ${block.id}: tiene winner = ${hasWinner}`, block.winner);
-        return hasWinner;
-      });
-      
-      console.log(`🏆 Bloques minados (con winner): ${minedBlocks.length}`);
-      console.log(`🏆 Datos de bloques minados:`, minedBlocks);
-      
-      // Si se especifica un filtro de ronda, aplicar el filtro
-      if (filterByRound !== null) {
-        minedBlocks = minedBlocks.filter(block => {
-          const matchesRound = block.round === filterByRound;
-          console.log(`🔍 Bloque ${block.id}: ronda ${block.round} vs ${filterByRound} = ${matchesRound}`);
-          return matchesRound;
-        });
-        console.log(`🔍 Bloques filtrados por ronda ${filterByRound}: ${minedBlocks.length}`);
-      } else {
-        console.log(`🌐 Mostrando todos los bloques sin filtro de ronda`);
-      }
-      
-      // Ordenar los bloques por timestamp (usando el ID que contiene el timestamp)
-      minedBlocks.sort((a, b) => {
-        const aTime = parseInt(a.id.split('-')[1]);
-        const bTime = parseInt(b.id.split('-')[1]);
-        return aTime - bTime;
-      });
+    // Usar bloques minados directamente del WebSocket
+    const blocksToShow = minedBlocks
+      .filter(block => {
+        // Si se especifica un filtro de ronda, aplicar el filtro
+        if (filterByRound !== null) {
+          return block.round === filterByRound;
+        }
+        return true; // Mostrar todos los bloques si no hay filtro
+      })
+      .sort((a, b) => a.timestamp - b.timestamp); // Ordenar por timestamp
 
-      console.log(`📋 Bloques finales a mostrar: ${minedBlocks.length}`);
-      setBlocks(minedBlocks);
-    }, (error) => {
-      console.error('❌ Error fetching blocks:', error);
-      console.error('❌ Error details:', error.message, error.code);
-    });
+    console.log(`🏆 Bloques minados desde WebSocket: ${blocksToShow.length}`);
+    console.log(`🏆 Datos de bloques minados:`, blocksToShow);
 
-    return () => {
-      console.log('🧹 Limpiando suscripción de bloques');
-      unsubscribe();
-    };
-  }, [gameId, filterByRound]);
+    console.log(`📋 Bloques finales a mostrar: ${blocksToShow.length}`);
+    setBlocks(blocksToShow);
+  }, [gameId, filterByRound, minedBlocks, round]);
 
   return (
     <View style={styles.blockchainSection}>

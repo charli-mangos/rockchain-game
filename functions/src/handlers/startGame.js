@@ -75,19 +75,24 @@ exports.startGame = onCall({
       throw new Error('Failed to select winning industry');
     }
 
-    // Programar el inicio del juego en 3 segundos
-    const roundStartTime = new Date(Date.now() + 3000);
+    // Establecer solo status: "starting" - NO roundTime (habrá fase de preparación)
+    console.log(`⏰ Configurando estado starting sin roundTime`);
+    console.log(`⏰ Habrá fase de preparación antes del countdown de 3 segundos`);
     
-    // Actualizar el estado del juego a "starting"
+    // Actualizar el estado del juego a "starting" (solo transición)
     await gameRef.update({
       status: 'starting',
-      roundTime: admin.firestore.Timestamp.fromDate(roundStartTime),
       round: 1,
       rewardsAssigned: false,
       roundRewards: null
     });
 
     console.log(`✅ Juego iniciado exitosamente: ${gameId}`);
+    console.log(`✅ Estado actualizado a: starting (sin roundTime)`);
+    console.log(`✅ WaitingRoomScreen mostrará "Preparing game..."`);
+    console.log(`✅ Después se llamará a roundTimer() para preparar todo`);
+    console.log(`✅ Luego se establecerá roundTime y countdown de 3s`);
+    
     return { success: true, message: 'Game started successfully.' };
   } catch (error) {
     console.error('❌ Error al iniciar el juego:', error);

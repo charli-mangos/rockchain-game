@@ -38,35 +38,58 @@ exports.createGame = onCall({
   };
 
   try {
-    // Eliminar cualquier juego existente para este usuario
+    // Eliminar juegos existentes solo para este usuario
     const db = admin.firestore();
     const batch = db.batch();
 
-    // Eliminar todos los documentos en la colección "games"
-    const gamesSnapshot = await db.collection('games').get();
-    gamesSnapshot.forEach((doc) => {
+    // Buscar juegos donde este usuario es el host
+    const userGamesSnapshot = await db.collection('games')
+      .where('hostId', '==', userId)
+      .get();
+    
+    // Eliminar juegos donde el usuario es host
+    userGamesSnapshot.forEach((doc) => {
       batch.delete(doc.ref);
     });
 
-    // Eliminar todos los documentos en la colección "market"
-    const marketSnapshot = await db.collection('market').get();
-    marketSnapshot.forEach((doc) => {
+    // Buscar y eliminar datos de blockchain para juegos del usuario
+    const userBlockchainSnapshot = await db.collection('blockchain')
+      .where('hostId', '==', userId)
+      .get();
+    
+    userBlockchainSnapshot.forEach((doc) => {
       batch.delete(doc.ref);
     });
 
-    // Eliminar todos los documentos en la colección "blockchain"
-    const blockchainSnapshot = await db.collection('blockchain').get();
-    blockchainSnapshot.forEach((doc) => {
+    // Buscar y eliminar productos de market para juegos del usuario
+    const userMarketSnapshot = await db.collection('market')
+      .where('hostId', '==', userId)
+      .get();
+    
+    userMarketSnapshot.forEach((doc) => {
       batch.delete(doc.ref);
     });
 
     // Ejecutar el batch
     await batch.commit();
-    console.log('✅ Datos de juegos anteriores eliminados');
+    console.log(`✅ Datos de juegos anteriores del usuario ${userId} eliminados`);
 
     // Crear nuevo juego
     const gameRef = await db.collection('games').add(gameData);
     console.log('✅ Juego creado con ID:', gameRef.id);
+
+    // Verificar si existen productos globales, si no, generarlos
+    const productsRef = db.collection('products');
+    const productsSnapshot = await productsRef.limit(1).get();
+    
+    if (productsSnapshot.empty) {
+      console.log('⚠️ No se encontraron productos globales, generándolos...');
+      const { generateProductsInternal } = require('./generateGlobalProducts');
+      await generateProductsInternal();
+      console.log('✅ Productos globales generados');
+    } else {
+      console.log('✅ Productos globales encontrados');
+    }
 
     // Asignar productos al juego
     await assignProductsToGame({ gameId: gameRef.id, round: 1 });

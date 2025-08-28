@@ -5,9 +5,10 @@ import { doc, updateDoc } from 'firebase/firestore';
 import NavigationBar from '../components/NavigationBar';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/RecycleScreenStyles';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 
 const RecycleScreen = ({ navigation, route }) => {
-  const { gameId, userId } = route.params;
+  const { gameId, userId } = useGameContextHybrid();
   const industries = ['Pharmaceutical', 'Construction', 'Additive Manufacturing'];
   const [selectedIndustry, setSelectedIndustry] = useState(null);
 

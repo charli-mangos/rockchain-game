@@ -46,6 +46,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 18,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#666',
+  },
+  divider: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginVertical: 20,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  waitingText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+    fontStyle: 'italic',
+  },
 });
 
 export default styles;

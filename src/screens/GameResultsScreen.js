@@ -4,13 +4,22 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db, functions } from '../../firebase';
 import { useNavigation } from '@react-navigation/native';
 import { httpsCallable } from 'firebase/functions';
+import { callAuthenticatedFunction } from '../utils/authHelper';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
-import { useGameContext } from '../context/GameContext';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 
 const GameResultsScreen = ({ route }) => {
-  const { gameId, userId } = route.params;
-  const { players } = useGameContext(); // Usar el contexto como StatsScreen
+  const { gameId, userId } = useGameContextHybrid();
+  const { allPlayersData } = useGameContextHybrid(); // Usar el contexto híbrido
+  
+  // Usar los datos completos de todos los jugadores
+  const players = allPlayersData.sort((a, b) => {
+    // Ordenar por balance (RockCoins - Waste) de mayor a menor
+    const balanceA = a.rockCoins - a.waste;
+    const balanceB = b.rockCoins - b.waste;
+    return balanceB - balanceA;
+  });
   const [userPosition, setUserPosition] = useState(0);
   const [userRockCoins, setUserRockCoins] = useState(0);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
@@ -23,7 +32,12 @@ const GameResultsScreen = ({ route }) => {
     
     const createGameFunction = httpsCallable(functions, 'createGame');
     try {
-      const result = await createGameFunction({ userId });
+      // Usar verificación de autenticación
+      const result = await callAuthenticatedFunction(
+        () => createGameFunction({ userId }),
+        'createGame'
+      );
+      
       const { gameId: newGameId, gameCode } = result.data;
       console.log('✅ Nueva partida creada con ID:', newGameId, 'Código:', gameCode);
       
@@ -108,7 +122,7 @@ const GameResultsScreen = ({ route }) => {
         <PlayerRankingComponent 
           players={players} 
           title="Final Rankings" 
-          showReadyStatus={false}
+          currentUserId={userId}
         />
         
 

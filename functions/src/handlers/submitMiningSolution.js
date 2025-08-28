@@ -1,5 +1,6 @@
 const { onCall } = require("firebase-functions/v2/https");
 const admin = require('firebase-admin');
+const { httpsCallable } = require('firebase-functions/v2/https');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -13,10 +14,10 @@ exports.submitMiningSolution = onCall({
   console.log('🔄 Request data recibida:', request.data);
   console.log('🔑 Auth data:', request.auth);
   
-  const { gameId, blockId, response, responseTime } = request.data || {};
+  const { gameId, blockId, response, responseTime, isCorrect, timestamp } = request.data || {};
   const userId = request.auth?.uid;
 
-  console.log('📊 Datos extraídos:', { gameId, blockId, response, responseTime, userId });
+  console.log('📊 Datos extraídos:', { gameId, blockId, response, responseTime, userId, isCorrect, timestamp });
 
   // Validación de parámetros
   if (!userId) {
@@ -96,7 +97,8 @@ exports.submitMiningSolution = onCall({
       throw new Error('Invalid response format');
     }
 
-    const isWinner = userResponse === correctAnswer;
+    // Usar isCorrect del cliente si está disponible, sino calcularlo
+    const isWinner = isCorrect !== undefined ? isCorrect : (userResponse === correctAnswer);
     console.log('✅ Verificación de respuesta:', {
       userResponse,
       correctAnswer,
@@ -108,7 +110,7 @@ exports.submitMiningSolution = onCall({
       response: userResponse,
       responseTime,
       isWinner,
-      timestamp: Date.now()
+      timestamp: timestamp || Date.now()
     };
 
     // Actualiza las respuestas en el bloque
@@ -141,6 +143,98 @@ exports.submitMiningSolution = onCall({
         isActive: false,
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+
+      // NUEVO: Verificar si todos los bloques de la ronda están completados
+      console.log('🔍 Verificando si todos los bloques de la ronda están completados...');
+      try {
+        const blocksRef = db.collection('blockchain').doc(gameId).collection('blocks');
+        const blocksSnapshot = await blocksRef
+          .where('round', '==', blockData.round)
+          .get();
+        
+        const roundBlocks = blocksSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        console.log(`📊 Bloques de la ronda ${blockData.round}: ${roundBlocks.length}`);
+        console.log(`📋 Estado de bloques:`, roundBlocks.map(b => ({
+          id: b.id,
+          isActive: b.isActive,
+          hasWinner: !!b.winner,
+          completedAt: b.completedAt
+        })));
+        
+        // Verificar si todos los bloques de la ronda están completados
+        const completedBlocks = roundBlocks.filter(block => 
+          block.isActive === false || block.winner || block.completedAt
+        );
+        
+        const allBlocksCompleted = completedBlocks.length === roundBlocks.length;
+        
+        console.log(`🏁 Bloques completados: ${completedBlocks.length}/${roundBlocks.length}`);
+        console.log(`🏁 Todos los bloques completados: ${allBlocksCompleted}`);
+        
+        if (allBlocksCompleted && roundBlocks.length > 0) {
+          console.log('🎯 TODOS LOS BLOQUES DE LA RONDA COMPLETADOS - Llamando a evaluateRound');
+          
+          // Llamar a evaluateRound para finalizar la ronda de manera más robusta
+          try {
+            const evaluateRoundFunction = httpsCallable(functions, 'evaluateRound');
+            const evaluateResult = await evaluateRoundFunction({ gameId });
+            console.log('✅ evaluateRound resultado:', evaluateResult.data);
+          } catch (error) {
+            console.error('❌ Error llamando a evaluateRound:', error);
+            // Si falla evaluateRound, usar la lógica anterior como respaldo
+            console.log('🔄 Usando lógica de respaldo para finalizar ronda');
+            
+            // Usar una transacción para evitar conflictos
+            await db.runTransaction(async (transaction) => {
+              const gameDoc = await transaction.get(gameRef);
+              if (!gameDoc.exists) {
+                throw new Error('Game not found during end round transaction');
+              }
+              
+              const currentGameData = gameDoc.data();
+              const currentStatus = currentGameData.status;
+              
+              console.log(`🎮 Estado actual del juego: ${currentStatus}, ronda: ${currentGameData.round}`);
+              
+              // Solo terminar la ronda si está en progreso
+              if (currentStatus === 'in_progress' || currentStatus === 'playing') {
+                console.log(`🏁 Actualizando estado del juego a waiting_for_players`);
+                
+                // NUEVO: Asegurar que tenemos un winningIndustry
+                let winningIndustry = currentGameData.winningIndustry;
+                if (!winningIndustry) {
+                  console.log(`⚠️ No hay winningIndustry, seleccionando uno por defecto`);
+                  // Seleccionar industria por defecto si no hay una
+                  const industries = ['Construction', 'Technology', 'Healthcare', 'Finance', 'Energy'];
+                  winningIndustry = industries[Math.floor(Math.random() * industries.length)];
+                }
+                
+                transaction.update(gameRef, {
+                  status: 'waiting_for_players',
+                  rewardsAssigned: false,
+                  roundRewards: null,
+                  winningIndustry: winningIndustry,
+                  roundEndTime: admin.firestore.FieldValue.serverTimestamp()
+                });
+                
+                console.log(`✅ Ronda ${currentGameData.round} terminada automáticamente`);
+                console.log(`🏆 Winning Industry: ${winningIndustry}`);
+              } else {
+                console.log(`⚠️ Juego no está en progreso: ${currentStatus}`);
+              }
+            });
+          }
+        } else {
+          console.log(`⏳ Esperando a que se completen más bloques (${completedBlocks.length}/${roundBlocks.length})`);
+        }
+      } catch (error) {
+        console.error('❌ Error verificando finalización de ronda:', error);
+        // No fallar la respuesta del usuario por este error
+      }
     }
 
     // Ejecutar todas las actualizaciones en una sola transacción

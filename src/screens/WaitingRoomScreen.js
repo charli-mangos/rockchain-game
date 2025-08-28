@@ -1,157 +1,221 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, Alert } from 'react-native';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../../firebase';
+import { View, Text, Platform } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 import styles from '../styles/WaitingScreenStyles';
 import WaitingRoomHeader from '../components/WaitingRoomHeader';
 
 const WaitingRoomScreen = ({ route }) => {
-  const { gameId, userId } = route.params;
-  const [playerCount, setPlayerCount] = useState(1); 
-  const [gameStatus, setGameStatus] = useState('waiting'); 
-  const [roundTime, setRoundTime] = useState(null);
-  const [remainingTime, setRemainingTime] = useState(null);
-  const [countdown, setCountdown] = useState(null);
+  const { 
+    gameId, 
+    userId,
+    hostId, 
+    countdown: contextCountdown, 
+    roundTime: contextRoundTime, 
+    gameStatus: contextGameStatus,
+    isWebSocketConnected,
+    readyToPlay,
+    playerCount
+  } = useGameContextHybrid();
+  
+  const [waitingRoomCountdown, setWaitingRoomCountdown] = useState(null);
   const navigation = useNavigation();
-  const intervalRef = useRef(null);
-  const countdownRef = useRef(null);
-  const roundStarted = useRef(false);
-  const hasNavigated = useRef(false);
 
-  const startNewRound = async () => {
-    if (!roundStarted.current && gameId && !hasNavigated.current) {
-      roundStarted.current = true;
-      console.log("Round is starting, calling roundTimer...");
+  // Refs para controlar la navegación
+  const hasNavigatedRef = useRef(false);
+  const countdownValueRef = useRef(null);
+  const effectRunRef = useRef(false);
 
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+  // Calcular si el usuario actual es el host
+  const isHost = userId === hostId;
 
-      // VERIFICACIÓN ADICIONAL: Asegurar que el estado esté limpio antes de iniciar
-      try {
-        const gameRef = doc(db, 'games', gameId);
-        const gameDoc = await getDoc(gameRef);
-        if (gameDoc.exists()) {
-          const gameData = gameDoc.data();
-          console.log(`🔍 Estado del juego antes de iniciar ronda: status=${gameData.status}, rewardsAssigned=${gameData.rewardsAssigned}`);
-          
-          // Si el estado no está limpio, esperar un poco más
-          if (gameData.rewardsAssigned === false && gameData.roundRewards === null) {
-            console.log('⏳ Estado de transición detectado, esperando 2 segundos...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
-      } catch (error) {
-        console.error('Error verificando estado del juego:', error);
-      }
+  // Log de plataforma al inicio
+  console.log(`📱 WaitingRoomScreen iniciado en ${Platform.OS}`);
+  console.log(`🔌 WebSocket conectado: ${isWebSocketConnected}`);
 
-      const roundTimerFunction = httpsCallable(functions, 'roundTimer');
-      try {
-        const result = await roundTimerFunction({ gameId });
-        console.log("roundTimer function called successfully:", result.data.message); 
-
-        if (!hasNavigated.current) {
-          hasNavigated.current = true;
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
-        });
-        }
-      } catch (error) {
-        console.error("Error starting new round:", error);
-        Alert.alert('Error', 'Failed to start the new round. Please try again.');
-        roundStarted.current = false;
-      }
-    }
-  };
-
-  const startCountdown = () => {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
+  // FUNCIÓN HELPER: Determinar qué mensaje mostrar
+  const getDisplayMessage = () => {
+    if (contextGameStatus === 'starting' && waitingRoomCountdown !== null && waitingRoomCountdown > 0) {
+      return `Game starting in ${waitingRoomCountdown}...`;
     }
     
-    setCountdown(3);
-    countdownRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(countdownRef.current);
-          startNewRound();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (contextGameStatus === 'starting') {
+      return "Preparing game...";
+    }
+    
+    if (contextGameStatus === 'in_progress') {
+      return "Preparing to start...";
+    }
+    
+    return "Waiting for all players to be ready...";
   };
 
+  // EFECTO PARA MANEJAR COUNTDOWN DE WAITING ROOM (3 segundos)
+  useEffect(() => {
+    console.log(`⏰ WaitingRoomScreen - contextGameStatus: ${contextGameStatus}, waitingRoomCountdown: ${waitingRoomCountdown}`);
+    console.log(`📱 Plataforma: ${Platform.OS}`);
+    console.log(`🔌 WebSocket conectado: ${isWebSocketConnected}`);
+    
+    // Solo procesar si estamos en starting
+    if (contextGameStatus !== 'starting') {
+      console.log(`⏰ No procesando countdown - contextGameStatus: ${contextGameStatus}`);
+      return;
+    }
+    
+    // Solo iniciar countdown si no hay uno activo
+    if (countdownValueRef.current !== null) {
+      console.log(`⏰ Countdown ya activo: ${countdownValueRef.current}`);
+      return;
+    }
+    
+    // Protección contra múltiples ejecuciones
+    if (effectRunRef.current) {
+      console.log(`⚠️ Efecto ya ejecutado, evitando re-ejecución`);
+      return;
+    }
+    
+    effectRunRef.current = true;
+    console.log(`🔄 Estado starting detectado, iniciando countdown de 3 segundos`);
+    
+    // Iniciar countdown fijo de 3 segundos
+    countdownValueRef.current = 3;
+    setWaitingRoomCountdown(3);
+    
+    console.log(`🎯 Iniciando countdown simplificado`);
+    
+    // Countdown simplificado con 3 timeouts separados
+    console.log(`⏰ Programando countdown: 3 → 2 → 1 → 0`);
+    
+    // Tick 1: 3 → 2
+    setTimeout(() => {
+      console.log(`⏰ Countdown tick: 3 → 2`);
+      if (countdownValueRef.current !== null) {
+        countdownValueRef.current = 2;
+        setWaitingRoomCountdown(2);
+      }
+    }, 1000);
+    
+    // Tick 2: 2 → 1
+    setTimeout(() => {
+      console.log(`⏰ Countdown tick: 2 → 1`);
+      if (countdownValueRef.current !== null) {
+        countdownValueRef.current = 1;
+        setWaitingRoomCountdown(1);
+      }
+    }, 2000);
+    
+    // Tick 3: 1 → 0 (navegación)
+    setTimeout(() => {
+      console.log(`⏰ Countdown tick: 1 → 0`);
+      if (countdownValueRef.current !== null) {
+        countdownValueRef.current = 0;
+        setWaitingRoomCountdown(0);
+        
+        console.log(`✅ Countdown terminado. Navegando a GameTabs...`);
+        console.log(`🧭 hasNavigatedRef.current:`, hasNavigatedRef.current);
+        
+        countdownValueRef.current = null;
+        effectRunRef.current = false;
+          
+          if (!hasNavigatedRef.current) {
+            hasNavigatedRef.current = true;
+          console.log(`🚀 Ejecutando navigation.reset a GameTabs`);
+          
+          // Usar WebSocket si está disponible
+          if (isWebSocketConnected) {
+            console.log(`🔌 Usando WebSocket para readyToPlay`);
+            readyToPlay();
+          }
+          
+          // Navegar a GameTabs
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
+              });
+          
+          return;
+        } else {
+          console.log(`⚠️ Ya se ha navegado, evitando navegación duplicada`);
+        }
+      }
+    }, 3000);
+    
+    console.log(`⏰ Countdown programado exitosamente`);
+    
+    // Cleanup function
+    return () => {
+      console.log(`🧹 Cleanup del efecto de countdown`);
+      
+      // No ejecutar cleanup si ya se ha navegado
+      if (hasNavigatedRef.current) {
+        console.log(`🚫 Cleanup omitido - ya se ha navegado`);
+        return;
+      }
+      
+      // Reset del flag de ejecución
+      effectRunRef.current = false;
+    };
+  }, [contextGameStatus, isWebSocketConnected, readyToPlay, gameId, userId, navigation]);
+
+  // EFECTO PARA LIMPIAR COUNTDOWN CUANDO CAMBIE EL ESTADO
+  useEffect(() => {
+    // Solo limpiar si el estado NO es starting y hay un countdown activo
+    if (contextGameStatus !== 'starting' && countdownValueRef.current !== null) {
+      console.log(`🧹 Limpiando countdown de waiting room - estado cambió a: ${contextGameStatus}`);
+      
+      // No ejecutar cleanup si ya se ha navegado
+      if (hasNavigatedRef.current) {
+        console.log(`🚫 Cleanup omitido - ya se ha navegado`);
+        return;
+      }
+      
+      countdownValueRef.current = null;
+      setWaitingRoomCountdown(null);
+      
+      // Reset del flag de ejecución
+      effectRunRef.current = false;
+    }
+  }, [contextGameStatus, waitingRoomCountdown]);
+
+  // EFECTO PARA SUSCRIPCIÓN AL JUEGO
   useFocusEffect(
     React.useCallback(() => {
       console.log("WaitingRoomScreen gained focus");
-      roundStarted.current = false;
-      hasNavigated.current = false;
-  
-      const gameRef = doc(db, 'games', gameId);
-      const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const gameData = docSnapshot.data();
-          setPlayerCount(gameData.players?.length || 1);
-          setGameStatus(gameData.status);
-  
-          // Verificar si todos los jugadores están en la sala de espera
-          const allPlayersInWaitingRoom = gameData.players?.every(playerId => {
-            const playerRef = doc(db, 'users', playerId);
-            return new Promise((resolve) => {
-              const unsubscribe = onSnapshot(playerRef, (playerDoc) => {
-                if (playerDoc.exists()) {
-                  const playerData = playerDoc.data();
-                  resolve(playerData.games?.[gameId]?.readyForNextRound === true);
-                } else {
-                  resolve(false);
-                }
-                unsubscribe();
-              });
-            });
-          });
-
-          if (allPlayersInWaitingRoom && !countdownRef.current) {
-            startCountdown();
+      
+      // Solo resetear si no hay un countdown activo
+      if (countdownValueRef.current === null) {
+        hasNavigatedRef.current = false; // Reset del ref de navegación
+        console.log(`🔄 Reseteando refs de navegación`);
+      } else {
+        console.log(`⏰ Countdown activo (${countdownValueRef.current}), no reseteando refs`);
           }
 
-          if (gameData.status === 'in_progress' && !hasNavigated.current) {
-            hasNavigated.current = true;
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
-            });
-          }
-        }
-      });
-  
       return () => {
-        console.log("WaitingRoomScreen lost focus or unmounted");
-        unsubscribe();
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
+        console.log("WaitingRoomScreen lost focus");
+        
+        // No ejecutar cleanup si ya se ha navegado
+        if (hasNavigatedRef.current) {
+          console.log(`🚫 Cleanup omitido - ya se ha navegado`);
+          return;
         }
-        if (countdownRef.current) {
-          clearInterval(countdownRef.current);
-          countdownRef.current = null;
+        
+        // Solo limpiar countdown si está activo
+        if (countdownValueRef.current !== null) {
+          countdownValueRef.current = null;
         }
       };
-    }, [gameId])
+    }, [gameId, userId, navigation])
   );
 
   return (
     <View style={styles.container}>
       <WaitingRoomHeader title={"Waiting Room"} />
       <Text style={styles.playerCountLabel}>Players: {playerCount}</Text>
-      {countdown !== null ? (
-        <Text style={styles.countdownText}>Starting in {countdown}...</Text>
-      ) : (
-        <Text style={styles.label}>Waiting for other players...</Text>
+      <Text style={styles.label}>{getDisplayMessage()}</Text>
+      {!isWebSocketConnected && (
+        <Text style={[styles.label, { color: '#F44336', fontSize: 12 }]}>
+          ⚠️ WebSocket desconectado - usando modo fallback
+        </Text>
       )}
     </View>
   );

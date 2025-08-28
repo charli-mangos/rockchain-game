@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import LoginScreen from './src/screens/LoginScreen';
@@ -9,7 +9,7 @@ import GameTabs from './src/components/GameTabs';  // Importar el componente Gam
 import EndOfRoundScreen from './src/screens/EndOfRoundScreen';
 import GameResultsScreen from './src/screens/GameResultsScreen';
 import { callGenerateProducts } from './src/components/callGenerateProducts';
-import { GameProvider } from './src/context/GameContext';
+import { GameProviderHybrid } from './src/context/GameContextHybrid';
 
 import { HermesInternal } from 'react-native';
 console.log("Hermes está activo:", !!HermesInternal);
@@ -18,6 +18,11 @@ console.log("Hermes está activo:", !!HermesInternal);
 const Stack = createStackNavigator();
 
 const App = () => {
+  const [gameParams, setGameParams] = useState(null);
+  
+  // Logging para debug
+  console.log('🔍 App.js - gameParams actual:', gameParams);
+
   // useEffect(() => {
   //   // Llama a la función solo una vez
   //   callGenerateProducts();
@@ -25,92 +30,41 @@ const App = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
-        initialRouteName="Login"
-        screenOptions={{
-          gestureEnabled: false,
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Game" component={GameScreen} />
-        <Stack.Screen name="WaitingRoom" component={WaitingRoomScreen} />
-        <Stack.Screen
-          name="GameTabs"
-          options={{ 
-            headerShown: false,
+      {gameParams ? (
+        <GameProviderHybrid gameId={gameParams.gameId} userId={gameParams.userId}>
+          <Stack.Navigator 
+            initialRouteName="Game"
+            screenOptions={{
+              gestureEnabled: false,
+              headerShown: false,
+            }}
+          >
+            <Stack.Screen
+              name="Game"
+              component={GameScreen}
+              initialParams={{ setGameParams, gameId: gameParams.gameId, userId: gameParams.userId }}
+            />
+            <Stack.Screen name="WaitingRoom" component={WaitingRoomScreen} />
+            <Stack.Screen name="GameTabs" component={GameTabs} />
+            <Stack.Screen name="EndOfRound" component={EndOfRoundScreen} />
+            <Stack.Screen name="GameResults" component={GameResultsScreen} />
+          </Stack.Navigator>
+        </GameProviderHybrid>
+      ) : (
+        <Stack.Navigator 
+          initialRouteName="Login"
+          screenOptions={{
             gestureEnabled: false,
+            headerShown: false,
           }}
         >
-          {({ route, navigation }) => {
-            if (!route.params.gameId || !route.params.userId) {
-              console.error('Game ID or User ID is missing.');
-              navigation.navigate('Login');
-              return null;
-            }
-
-            return (
-              <GameProvider
-                gameId={route.params.gameId}
-                userId={route.params.userId}
-                navigation={navigation}
-              >
-                <GameTabs route={route} />
-              </GameProvider>
-            );
-          }}
-        </Stack.Screen>
-        <Stack.Screen
-          name="EndOfRound"
-          options={{ 
-            headerShown: false,
-            gestureEnabled: false,
-          }}
-        >
-          {({ route, navigation }) => {
-            if (!route.params.gameId || !route.params.userId) {
-              console.error('Game ID or User ID is missing.');
-              navigation.navigate('Login');
-              return null;
-            }
-
-            return (
-              <GameProvider
-                gameId={route.params.gameId}
-                userId={route.params.userId}
-                navigation={navigation}
-              >
-                <EndOfRoundScreen route={route} />
-              </GameProvider>
-            );
-          }}
-        </Stack.Screen>
-        <Stack.Screen
-          name="GameResults"
-          options={{ 
-            headerShown: false,
-            gestureEnabled: false,
-          }}
-        >
-          {({ route, navigation }) => {
-            if (!route.params.gameId || !route.params.userId) {
-              console.error('Game ID or User ID is missing.');
-              navigation.navigate('Login');
-              return null;
-            }
-
-            return (
-              <GameProvider
-                gameId={route.params.gameId}
-                userId={route.params.userId}
-                navigation={navigation}
-              >
-                <GameResultsScreen route={route} />
-              </GameProvider>
-            );
-          }}
-        </Stack.Screen>
-      </Stack.Navigator>
+          <Stack.Screen
+            name="Login" 
+            component={LoginScreen}
+            initialParams={{ setGameParams }}
+          />
+        </Stack.Navigator>
+      )}
     </NavigationContainer>
   );
 };

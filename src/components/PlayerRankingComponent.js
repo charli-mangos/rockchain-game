@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-const PlayerRankingComponent = ({ players, title }) => {
+const PlayerRankingComponent = ({ players, title, currentUserId }) => {
   // Memoizar el header para evitar re-renders innecesarios
   const ListHeader = useMemo(() => (
     <View style={styles.headerRow}>
@@ -23,6 +23,9 @@ const PlayerRankingComponent = ({ players, title }) => {
         <Ionicons name="trash" size={20} color="#666" />
       </View>
       <View style={styles.headerCell}>
+        <Ionicons name="cube" size={20} color="#666" />
+      </View>
+      <View style={styles.headerCell}>
         <Ionicons name="trending-up" size={20} color="#666" />
       </View>
     </View>
@@ -32,29 +35,33 @@ const PlayerRankingComponent = ({ players, title }) => {
   const renderPlayerItem = useMemo(() => ({ item, index }) => {
     const balance = item.rockCoins - item.waste;
     const balanceColor = balance > 0 ? '#2ecc71' : '#e74c3c';
+    const isCurrentUser = currentUserId && item.userId === currentUserId;
     
     return (
-      <View style={styles.row}>
+      <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
         <View style={styles.cell}>
-          <Text style={styles.rankText}>#{index + 1}</Text>
+          <Text style={[styles.rankText, isCurrentUser && styles.currentUserText]}>#{index + 1}</Text>
         </View>
         <View style={styles.cell}>
-          <Text style={styles.nameText}>{item.userName}</Text>
+          <Text style={[styles.nameText, isCurrentUser && styles.currentUserText]}>{item.userName}</Text>
         </View>
         <View style={styles.cell}>
-          <Text style={styles.valueText}>{item.rockCoins}</Text>
+          <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.rockCoins}</Text>
         </View>
         <View style={styles.cell}>
-          <Text style={styles.valueText}>{item.waste}</Text>
+          <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.waste}</Text>
         </View>
         <View style={styles.cell}>
-          <Text style={[styles.valueText, { color: balanceColor }]}>
+          <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.blocksMined || 0}</Text>
+        </View>
+        <View style={styles.cell}>
+          <Text style={[styles.valueText, { color: balanceColor }, isCurrentUser && styles.currentUserText]}>
             {balance}
           </Text>
         </View>
       </View>
     );
-  }, []);
+  }, [currentUserId]);
 
   return (
     <View style={styles.container}>
@@ -125,6 +132,15 @@ const styles = StyleSheet.create({
   rockCoinIcon: {
     width: 20,
     height: 20,
+  },
+  currentUserRow: {
+    backgroundColor: '#e3f2fd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196f3',
+  },
+  currentUserText: {
+    fontWeight: 'bold',
+    color: '#1976d2',
   },
 });
 

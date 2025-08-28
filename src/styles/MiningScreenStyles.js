@@ -8,6 +8,10 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#fff',
   },
+  mainContent: {
+    flex: 1,
+    width: '100%',
+  },
   problemContainer: {
     flex: 1,
     padding: 20,
@@ -17,13 +21,13 @@ const styles = StyleSheet.create({
   },
   blockInfoContainer: {
     width: '100%',
-    marginBottom: 50,
+    marginBottom: 30, // Reducido de 50 a 30
     alignItems: 'flex-start',
   },
   blockInfoText: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 6, // Reducido de 8 a 6
   },
   transactionInfoText: {
     fontSize: 16,
@@ -33,12 +37,12 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 30,
+    marginTop: 20, // Reducido de 30 a 20
   },
   problemText: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 16, // Reducido de 20 a 16
     textAlign: 'center',
   },
   input: {
@@ -59,6 +63,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: '100%',
     alignItems: 'center',
+    marginTop: 16, // Aumentado de 8 a 16 para mejor espaciado
   },
   submitButtonDisabled: {
     backgroundColor: '#ccc',
@@ -206,6 +211,70 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  // Estilos para el campo de respuesta personalizado
+  answerContainer: {
+    width: '100%',
+    marginBottom: 16, // Reducido de 24 a 16
+    alignItems: 'center',
+  },
+  answerLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#34495e',
+    marginBottom: 8, // Reducido de 12 a 8
+    textAlign: 'center',
+  },
+  answerDisplay: {
+    width: '100%',
+    height: 70,
+    borderWidth: 3,
+    borderColor: '#007AFF',
+    borderRadius: 8, // Mismo borderRadius que el botón Submit
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30, // Mismo padding que el botón Submit
+    shadowColor: '#007AFF',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  answerDisplayActive: {
+    borderColor: '#0056b3',
+    backgroundColor: '#ffffff',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  answerText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    textAlign: 'center',
+  },
+  // Estilos para el teclado personalizado
+  customKeyboard: {
+    marginBottom: 0,
+    marginTop: 0,
+    marginHorizontal: 0, // Sin márgenes horizontales para ocupar todo el ancho
+  },
+  // Estilos para el Modal del teclado
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'transparent', // Cambiado de rgba(0, 0, 0, 0.3) a transparent
+    justifyContent: 'flex-end',
+  },
+  keyboardModal: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    paddingBottom: 20,
+    width: '100%', // Ocupar todo el ancho
+    borderTopLeftRadius: 16, // Bordes redondeados solo arriba
+    borderTopRightRadius: 16,
   },
 });
 

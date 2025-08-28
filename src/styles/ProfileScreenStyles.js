@@ -30,6 +30,41 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  inventoryInfo: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#87ceeb',
+  },
+  inventoryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    color: '#2f4f4f',
+  },
+  inventoryStats: {
+    flexDirection: 'column',
+    justifyContent: 'space-around',
+  },
+  inventoryStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  inventoryIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 8,
+  },
+  inventoryStat: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4682b4',
+  },
   productsTitle: {
     fontSize: 16,
     fontStyle: 'italic',  // Texto en itálica

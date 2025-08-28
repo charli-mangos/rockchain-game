@@ -1,19 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { View, Alert, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Modal, TouchableWithoutFeedback } from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import { doc,setDoc, collection, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, Image, Alert, Modal, TouchableWithoutFeedback } from 'react-native';
+import { doc, updateDoc, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db, functions } from '../../firebase';
-import styles from '../styles/ExpandableProductStyle';
 import { httpsCallable } from 'firebase/functions';
-import { useGameContext } from '../context/GameContext';
+import { callAuthenticatedFunction } from '../utils/authHelper';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useProductDetails } from '../hooks/useProductDetails';
+import { useNavigation } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import styles from '../styles/ExpandableProductStyle';
+import webSocketService from '../services/WebSocketService';
 
 
 const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
   const [expanded, setExpanded] = useState(false);
   const [showSummary, setShowSummary] = useState(false); // Controla si se muestra el resumen de compra
   const navigation = useNavigation();
-  const { setBlockId, incrementMiningQueue } = useGameContext(); // Importar correctamente el contexto
+  const { setCurrentBlockId, incrementMiningQueue, webSocketInventory } = useGameContextHybrid(); // Importar correctamente el contexto
 
   const images = {
     'Red': {
@@ -66,9 +69,24 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       console.log('Generating mining problem with data:', requestData);
 
       const generateMiningProblem = httpsCallable(functions, 'generateMiningProblem');
-      const result = await generateMiningProblem(requestData);
+      
+      // Usar verificación de autenticación
+      const result = await callAuthenticatedFunction(
+        () => generateMiningProblem(requestData),
+        'generateMiningProblem'
+      );
   
       console.log('Mining problem created successfully:', result.data);
+      
+      // Notificar a través de WebSocket si está disponible
+      if (webSocketService.isConnected && result.data?.blockId) {
+        console.log('🔌 Notificando nuevo problema de minado vía WebSocket');
+        webSocketService.notifyNewMiningProblem(
+          result.data.blockId,
+          result.data.data
+        );
+      }
+      
       return result.data;
     } catch (error) {
       console.error('Error in generateProblem:', {
@@ -90,30 +108,92 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         throw new Error('Game ID is required but was not provided');
       }
 
-      console.log('Starting purchase with data:', {
-        gameId,
-        productId: product.id,
-        userId
-      });
+      // console.log('Starting purchase with data:', {
+      //   gameId,
+      //   productId: product.id,
+      //   userId,
+      //   product: {
+      //     id: product.id,
+      //     type: product.type,
+      //     marbleType: product.marbleType,
+      //     currentPrice: product.currentPrice,
+      //     waste: product.waste
+      //   }
+      // });
+
+      // Verificar que gameId es válido
+      if (!gameId || typeof gameId !== 'string' || gameId.length === 0) {
+        console.error('Invalid gameId:', gameId);
+        Alert.alert("Purchase Failed", "Invalid game ID. Please restart the game.");
+        return;
+      }
+
+      console.log('Attempting to access game document with ID:', gameId);
+
+      // Pequeño retraso para asegurar que el juego esté completamente creado
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const gameRef = doc(db, 'games', gameId);
       const userRef = doc(db, 'users', userId);
   
-      // Obtener los datos del juego
+      // Verificar que el documento existe antes de intentar obtenerlo
+      console.log('Checking if game document exists...');
       const gameSnapshot = await getDoc(gameRef);
+      
+      if (!gameSnapshot.exists()) {
+        console.error('Game document does not exist:', gameId);
+        Alert.alert("Purchase Failed", "Game not found. Please try again.");
+        return;
+      }
+      
       const gameData = gameSnapshot.data();
+      
+      if (!gameData) {
+        console.error('Game data is null or undefined for gameId:', gameId);
+        Alert.alert("Purchase Failed", "Game data is corrupted. Please try again.");
+        return;
+      }
+      
+      console.log('Game data retrieved:', gameData);
       const productList = gameData.productList || [];
+      console.log('Product list from game:', productList);
+      console.log('Looking for product with ID:', product.id);
+      
+      // Si la lista de productos está vacía, esperar un poco y reintentar
+      if (productList.length === 0) {
+        console.log('Product list is empty, waiting for products to load...');
+        Alert.alert("Purchase Failed", "Products are still loading. Please try again in a moment.");
+        return;
+      }
   
       // Verificar si el producto existe
       const productToRemove = productList.find((item) => item.id === product.id);
+      console.log('Product found:', productToRemove);
+      
       if (!productToRemove) {
+        console.error('Product not found in productList. Available products:', productList.map(p => ({ id: p.id, type: p.type, marbleType: p.marbleType })));
         Alert.alert("Purchase Failed", "This product is no longer available.");
         return;
       }
   
       // Validar saldo del usuario
       const userSnapshot = await getDoc(userRef);
+      
+      if (!userSnapshot.exists()) {
+        console.error('User document does not exist:', userId);
+        Alert.alert("Purchase Failed", "User not found. Please try again.");
+        return;
+      }
+      
       const userData = userSnapshot.data();
+      
+      if (!userData) {
+        console.error('User data is null or undefined for userId:', userId);
+        Alert.alert("Purchase Failed", "User data is corrupted. Please try again.");
+        return;
+      }
+      
+      console.log('User data retrieved:', userData);
       const userRockCoins = userData.games[gameId]?.rockCoins || 0;
       const userWaste = userData.games[gameId]?.waste || 0;
   
@@ -122,16 +202,18 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         return;
       }
   
-      // Actualizar los datos en Firestore
-      await updateDoc(gameRef, {
-        productList: arrayRemove(productToRemove),
-      });
-  
-      await updateDoc(userRef, {
-        [`games.${gameId}.products`]: arrayUnion(productToRemove),
-        [`games.${gameId}.rockCoins`]: userRockCoins - product.currentPrice,
-        [`games.${gameId}.waste`]: userWaste + product.waste,
-      });
+      // Procesar compra vía WebSocket
+      if (webSocketService.isConnected) {
+        console.log('🛒 Procesando compra vía WebSocket');
+        webSocketService.socket.emit('product_transaction', {
+          gameId,
+          userId,
+          product: productToRemove,
+          transactionType: 'purchase'
+        });
+      } else {
+        console.log('⚠️ WebSocket no conectado, procesando localmente');
+      }
 
       // Generar problema de minería
       await generateProblem(product, 'purchase');
@@ -155,35 +237,25 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
 
   const handleSell = async (product) => {
     try {
-      const gameRef = doc(db, 'games', gameId);
-      const userRef = doc(db, 'users', userId);
-
-      // Obtener datos actuales del usuario y del juego
-      const userSnapshot = await getDoc(userRef);
-      const userData = userSnapshot.data();
-      const gameSnapshot = await getDoc(gameRef);
-      const gameData = gameSnapshot.data();
-
-      const userProducts = userData.games[gameId]?.products || [];
-      const productToSell = userProducts.find((item) => item.id === product.id);
+      // Usar el inventario del WebSocket en lugar de Firestore
+      const productToSell = webSocketInventory.products.find((item) => item.id === product.id);
       if (!productToSell) {
         Alert.alert("Sell Failed", "This product is no longer available.");
         return;
       }
 
-      const userRockCoins = userData.games[gameId]?.rockCoins || 0;
-      const userWaste = userData.games[gameId]?.waste || 0;
-
-      // Actualizar Firestore
-      await updateDoc(userRef, {
-        [`games.${gameId}.products`]: arrayRemove(productToSell), // Eliminar del inventario del usuario
-        [`games.${gameId}.rockCoins`]: userRockCoins + product.currentPrice, // Sumar dinero al usuario
-        [`games.${gameId}.waste`]: Math.max(0, userWaste - product.waste), // Restar el waste
-      });
-
-      await updateDoc(gameRef, {
-        productList: arrayUnion(productToSell), // Añadir al mercado
-      });
+      // Procesar venta vía WebSocket
+      if (webSocketService.isConnected) {
+        console.log('🛒 Procesando venta vía WebSocket');
+        webSocketService.socket.emit('product_transaction', {
+          gameId,
+          userId,
+          product: productToSell,
+          transactionType: 'sell'
+        });
+      } else {
+        console.log('⚠️ WebSocket no conectado, procesando localmente');
+      }
 
       // Generar problema de minería
       await generateProblem(product, 'sell');
@@ -200,14 +272,8 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
 
   const handleTransform = async (product) => {
     try {
-      const userRef = doc(db, 'users', userId);
-  
-      // Obtener datos del usuario
-      const userSnapshot = await getDoc(userRef);
-      const userData = userSnapshot.data();
-  
-      const userProducts = userData.games[gameId]?.products || [];
-      const productToTransform = userProducts.find((item) => item.id === product.id);
+      // Usar el inventario del WebSocket en lugar de Firestore
+      const productToTransform = webSocketInventory.products.find((item) => item.id === product.id);
       if (!productToTransform) {
         Alert.alert("Transform Failed", "This product is no longer available.");
         return;
@@ -217,8 +283,6 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         Alert.alert("Transform Not Allowed", "Slabs cannot be transformed.");
         return;
       }
-  
-      const userWaste = userData.games[gameId]?.waste || 0;
   
       // Determinar multiplicadores según el tipo
       const newType = "Slab";
@@ -237,15 +301,20 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         waste: newWaste,
       };
   
-      // Actualizar Firestore
-      await updateDoc(userRef, {
-        [`games.${gameId}.products`]: arrayRemove(productToTransform), // Eliminar el producto original
-      });
-  
-      await updateDoc(userRef, {
-        [`games.${gameId}.products`]: arrayUnion(transformedProduct), // Añadir el producto transformado
-        [`games.${gameId}.waste`]: userWaste + wasteExtra, // Incrementar el waste del usuario
-      });
+      // Procesar transformación vía WebSocket
+      if (webSocketService.isConnected) {
+        console.log('🔄 Procesando transformación vía WebSocket');
+        webSocketService.socket.emit('product_transaction', {
+          gameId,
+          userId,
+          product: productToTransform,
+          transactionType: 'transform',
+          transformedProduct: transformedProduct,
+          wasteExtra: wasteExtra
+        });
+      } else {
+        console.log('⚠️ WebSocket no conectado, procesando localmente');
+      }
       
       // Generar problema de minería
       await generateProblem(transformedProduct, 'transform');

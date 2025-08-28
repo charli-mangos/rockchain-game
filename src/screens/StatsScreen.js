@@ -3,13 +3,20 @@ import { View } from 'react-native';
 import styles from '../styles/StatsScreenStyles';
 import GameHeader from '../components/GameHeader';
 import NavigationBar from '../components/NavigationBar';
-import { useGameContext } from '../context/GameContext';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
 
 const StatsScreen = ({ navigation, route }) => {
-  const { gameId, userId } = route.params;
-  const { players } = useGameContext();
+  const { gameId, userId, allPlayersData } = useGameContextHybrid();
+  
+  // Usar los datos completos de todos los jugadores
+  const players = allPlayersData.sort((a, b) => {
+    // Ordenar por balance (RockCoins - Waste) de mayor a menor
+    const balanceA = a.rockCoins - a.waste;
+    const balanceB = b.rockCoins - b.waste;
+    return balanceB - balanceA;
+  });
 
   return (
     <View style={styles.screenContainer}>
@@ -24,7 +31,7 @@ const StatsScreen = ({ navigation, route }) => {
         <PlayerRankingComponent 
           players={players} 
           title="Global Rankings" 
-          showReadyStatus={false}
+          currentUserId={userId}
         />
       </View>
 

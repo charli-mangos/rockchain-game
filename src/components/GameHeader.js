@@ -1,16 +1,17 @@
-import React, { useContext, useState, useEffect, useRef } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Image } from 'react-native';
-import { db } from '../../firebase';
-import { GameContext } from '../context/GameContext';
+import React, { useState, useEffect, useContext, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Image, Alert } from 'react-native';
+import { functions } from '../../firebase';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 import { Ionicons } from '@expo/vector-icons';
 import { Animated, Easing } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { httpsCallable } from 'firebase/functions';
+import { callAuthenticatedFunction } from '../utils/authHelper';
 
 const GameHeader = ({ title, userId, gameId, currentScreen }) => {
-  const { countdown, round } = useContext(GameContext);
-  const [rockCoins, setRockCoins] = useState(0);
-  const [waste, setWaste] = useState(0);
+  const { countdown, round, webSocketInventory } = useGameContextHybrid();
+  const rockCoins = webSocketInventory.rockCoins || 600;
+  const waste = webSocketInventory.waste || 0;
   const rockCoinsAnim = useRef(new Animated.Value(1)).current;
   const wasteAnim = useRef(new Animated.Value(1)).current;
   const [prevRockCoins, setPrevRockCoins] = useState(0);
@@ -19,73 +20,68 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
   const [wasteColor, setWasteColor] = useState("#000");
   const navigation = useNavigation();
   const [showExitModal, setShowExitModal] = useState(false);
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
 
-  useEffect(() => {
-    const userRef = doc(db, 'users', userId);
-      
-    const unsubscribeUser = onSnapshot(userRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const userData = docSnapshot.data();
-        const gameData = userData.games?.[gameId] || {};
-  
-        setRockCoins(gameData.rockCoins || 0);
-        setWaste(gameData.waste || 0);
-        console.log("Updated rockCoins and waste from user data:", gameData);
-      } else {
-        console.error("User document does not exist:", userId);
-      }
-    });
-
-    return () => {
-      unsubscribeUser();
-    };
-  }, [userId, gameId]);
+  // Los datos ahora vienen del WebSocket a través del contexto
+  // No necesitamos leer de Firestore
 
   useEffect(() => {
     if (rockCoins !== prevRockCoins) {
       const color = rockCoins > prevRockCoins ? "#00C853" : "#D32F2F";
       setRockCoinsColor(color);
       
-      Animated.sequence([
-        Animated.timing(rockCoinsAnim, {
-          toValue: 1.5,
-          duration: 200,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(rockCoinsAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setRockCoinsColor("#000"));
+      // Usar requestAnimationFrame para evitar problemas de renderizado
+      requestAnimationFrame(() => {
+        Animated.sequence([
+          Animated.timing(rockCoinsAnim, {
+            toValue: 1.5,
+            duration: 200,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(rockCoinsAnim, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          // Usar setTimeout para evitar setState durante render
+          setTimeout(() => setRockCoinsColor("#000"), 0);
+        });
+      });
   
       setPrevRockCoins(rockCoins);
     }
-  }, [rockCoins]);
+  }, [rockCoins, prevRockCoins]);
   
   useEffect(() => {
     if (waste !== prevWaste) {
-      const color = waste > prevWaste ?"#D32F2F" : "#00C853";
+      const color = waste > prevWaste ? "#D32F2F" : "#00C853";
       setWasteColor(color);
       
-      Animated.sequence([
-        Animated.timing(wasteAnim, {
-          toValue: 1.5,
-          duration: 200,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(wasteAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setWasteColor("#000")); 
+      // Usar requestAnimationFrame para evitar problemas de renderizado
+      requestAnimationFrame(() => {
+        Animated.sequence([
+          Animated.timing(wasteAnim, {
+            toValue: 1.5,
+            duration: 200,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(wasteAnim, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          // Usar setTimeout para evitar setState durante render
+          setTimeout(() => setWasteColor("#000"), 0);
+        });
+      });
   
       setPrevWaste(waste); 
     }
-  }, [waste]);
+  }, [waste, prevWaste]);
 
   const handleBack = () => {
     navigation.goBack();
@@ -95,8 +91,37 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
     setShowExitModal(true);
   };
 
-  const handleConfirmExit = () => {
-    navigation.navigate('Game');
+  const createNewGame = async () => {
+    console.log('🔄 Creando nueva partida desde GameHeader...');
+    setIsCreatingGame(true);
+    
+    const createGameFunction = httpsCallable(functions, 'createGame');
+    try {
+      // Usar verificación de autenticación
+      const result = await callAuthenticatedFunction(
+        () => createGameFunction({ userId }),
+        'createGame'
+      );
+      
+      const { gameId: newGameId, gameCode } = result.data;
+      console.log('✅ Nueva partida creada con ID:', newGameId, 'Código:', gameCode);
+      
+      // Navegar a GameScreen con la nueva partida usando reset
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Game', params: { gameId: newGameId, gameCode, userId } }],
+      });
+    } catch (error) {
+      console.error('❌ Error al crear nueva partida:', error);
+      Alert.alert('Error', 'No se pudo crear la nueva partida. Inténtalo de nuevo.');
+    } finally {
+      setIsCreatingGame(false);
+    }
+  };
+
+  const handleConfirmExit = async () => {
+    setShowExitModal(false);
+    await createNewGame();
   };
 
   const handleCancelExit = () => {
@@ -169,12 +194,15 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
                 <Text style={styles.buttonText}>Cancelar</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.confirmButton]} 
-                onPress={handleConfirmExit}
-              >
-                <Text style={styles.buttonText}>Confirmar</Text>
-              </TouchableOpacity>
+                          <TouchableOpacity 
+              style={[styles.modalButton, styles.confirmButton, isCreatingGame && styles.disabledButton]} 
+              onPress={handleConfirmExit}
+              disabled={isCreatingGame}
+            >
+              <Text style={styles.buttonText}>
+                {isCreatingGame ? 'Creando...' : 'Confirmar'}
+              </Text>
+            </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -298,6 +326,9 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: '#ff4444',
+  },
+  disabledButton: {
+    backgroundColor: '#cccccc',
   },
   buttonText: {
     color: '#fff',

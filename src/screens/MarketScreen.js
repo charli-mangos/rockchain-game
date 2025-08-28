@@ -4,11 +4,14 @@ import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/MarketScreenStyles';
 import GameHeader from '../components/GameHeader';
 import ExpandableProduct from '../components/ExpandableProduct';
-import { useGameContext } from '../context/GameContext';
+import { useGameContextHybrid } from '../context/GameContextHybrid';
 
 const MarketScreen = ({ navigation, route }) => {
-  const { productList } = useGameContext();
-  const { gameId, userId } = route.params;
+  const { productList, gameId, userId } = useGameContextHybrid();
+  
+  // console.log('MarketScreen - productList:', productList);
+  // console.log('MarketScreen - gameId:', gameId);
+  // console.log('MarketScreen - userId:', userId);
 
   // const [products, setProducts] = useState([]);
 
@@ -60,21 +63,24 @@ const MarketScreen = ({ navigation, route }) => {
     // Implementa la lógica de compra aquí
   };
 
-  const renderProduct = ({ item }) => (
-    <ExpandableProduct
-      product={item}
-      gameId={gameId}
-      userId={userId}
-      screenType="MarketScreen"
-      onBuy={() => handleBuy(item)}
-    />
-  );
+  const renderProduct = ({ item }) => {
+    // console.log('MarketScreen - rendering product:', item);
+    return (
+      <ExpandableProduct
+        product={item}
+        gameId={gameId}
+        userId={userId}
+        screenType="MarketScreen"
+        onBuy={() => handleBuy(item)}
+      />
+    );
+  };
 
   return (
     <View style={styles.screenContainer}>
       <GameHeader
           title="RockMarket"
-          gameId={gameId} // Pasamos el gameId aquí
+          gameId={gameId}
           userId={userId}
           onSettingsPress={() => console.log('Settings Pressed')}
       />

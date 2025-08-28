@@ -9,10 +9,8 @@ if (!admin.apps.length) {
 // Función para generar un precio aleatorio dentro de un rango
 const getRandomPrice = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-exports.generateGlobalProducts = onCall({
-  maxInstances: 10,
-  memory: '256MiB',
-}, async (request) => {
+// Función interna para generar productos (sin onCall)
+const generateProductsInternal = async () => {
   try {
     const products = [];
     let productIdCounter = 1;
@@ -47,4 +45,15 @@ exports.generateGlobalProducts = onCall({
     console.error('❌ Error generando productos:', error);
     throw new Error('Failed to generate products.');
   }
+};
+
+// Función HTTP callable (mantener para compatibilidad)
+exports.generateGlobalProducts = onCall({
+  maxInstances: 10,
+  memory: '256MiB',
+}, async (request) => {
+  return await generateProductsInternal();
 });
+
+// Exportar la función interna para uso en otros handlers
+exports.generateProductsInternal = generateProductsInternal;
