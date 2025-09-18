@@ -4,6 +4,7 @@ import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { db, functions, auth } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useSimpleMiningContext } from '../context/SimpleMiningContext';
 import { callAuthenticatedFunction } from '../utils/authHelper';
 import webSocketService from '../services/WebSocketService';
 import styles from '../styles/MiningScreenStyles';
@@ -11,6 +12,7 @@ import GameHeader from '../components/GameHeader';
 import CustomNumericKeyboard from '../components/CustomNumericKeyboard';
 import NavigationBar from '../components/NavigationBar';
 import RotatingCube from '../components/RotatingCube';
+import SimpleUnifiedTimer from '../components/SimpleUnifiedTimer';
 import { usePlayerCount } from '../hooks/usePlayerCount';
 import { useResponses } from '../hooks/useResponses';
 import { useUserName } from "../hooks/useUserName";
@@ -22,11 +24,15 @@ const MiningScreen = ({ route, navigation }) => {
   const { gameId, userId } = useGameContextHybrid();
   const { 
     miningProblems, 
+    localPendingProblems,
+    miningQueue,
     currentProblemIndex, 
     nextProblem,
     hasMoreProblems,
     hasRespondedToProblem,
     markProblemAsResponded,
+    getNextAvailableProblem,
+    setCurrentProblemIndex,
     decrementMiningQueue, 
     setShowMiningBubble,
     isWaiting,
@@ -37,26 +43,34 @@ const MiningScreen = ({ route, navigation }) => {
     setCurrentBlockId,
     setCurrentTransactionUserName,
     setCurrentProductDetails,
-    setCurrentTransactionType,
-    setCurrentProblemIndex,
-    getNextAvailableProblem
-  } = useGameContextHybrid();  
+    setCurrentTransactionType
+  } = useGameContextHybrid();
+  
+  const { openProblem, currentViewStart } = useSimpleMiningContext();  
   const { responses, updateResponses } = useResponses(gameId, blockId);
   const [response, setResponse] = useState('');
-  const [problemStartTime, setProblemStartTime] = useState(null);
   const [currentProblem, setCurrentProblem] = useState(null);
   const [isLastBlock, setIsLastBlock] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false); // Nuevo estado para controlar la visibilidad del teclado
+  const [isExiting, setIsExiting] = useState(false);
+  const [currentTimerTime, setCurrentTimerTime] = useState(0); // Tiempo actual del cronómetro unificado
   const totalPlayers = usePlayerCount(gameId);
   const userName = useUserName(userId);
-  const activeProblem = miningProblems[currentProblemIndex]?.activeProblem || null;
-  const blockId = miningProblems[currentProblemIndex]?.id || null;
+  const activeProblem = localPendingProblems[currentProblemIndex]?.activeProblem || null;
+  
+  const blockId = localPendingProblems[currentProblemIndex]?.id || null;
   
   // Logs para debugging
   useEffect(() => {
+    // Si estamos saliendo, no hacer nada
+    if (isExiting) {
+      console.log('🚪 Saliendo del minado, no ejecutando logs de debug...');
+      return;
+    }
+    
     console.log(`🔍 MiningScreen Debug - blockId: ${blockId}, currentProblem: ${!!currentProblem}, activeProblem: ${!!activeProblem}`);
     console.log(`🔍 MiningScreen Debug - miningProblems.length: ${miningProblems.length}, currentProblemIndex: ${currentProblemIndex}`);
-  }, [blockId, currentProblem, activeProblem, miningProblems.length, currentProblemIndex]);
+  }, [blockId, currentProblem, activeProblem, miningProblems.length, currentProblemIndex, isExiting]);
   
   // Función segura para obtener el número de bloque
   const getBlockNumber = () => {
@@ -69,38 +83,146 @@ const MiningScreen = ({ route, navigation }) => {
     console.log(`✅ getBlockNumber: ${blockNumber} (de ${blockId})`);
     return blockNumber;
   };
+
+  // Función para actualizar el tiempo del cronómetro unificado
+  const updateTimerTime = (time) => {
+    setCurrentTimerTime(time);
+  };
+
+  // Función para formatear el tiempo en formato mm:ss.ms
+  const formatTime = (milliseconds) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const ms = Math.floor((milliseconds % 1000) / 10); // Centésimas de segundo
+    
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  };
   
   // Verificar si tenemos datos válidos para renderizar
   const hasValidData = blockId && currentProblem && activeProblem;
+  
+  // Logs de debugging para hasValidData (solo cuando cambia)
+  if (hasValidData && !results) {
+    console.log(`🔍 hasValidData check:`, {
+      blockId: !!blockId,
+      currentProblem: !!currentProblem,
+      activeProblem: !!activeProblem,
+      hasValidData,
+      blockIdValue: blockId,
+      currentProblemId: currentProblem?.id,
+      activeProblemId: activeProblem?.blockId
+    });
+  }
   
   // Obtener el nombre del usuario que realizó la transacción
   const transactionUserName = useUserName(activeProblem?.transactionDetails?.userId);
   // Obtener los detalles del producto
   const productDetails = useProductDetails(activeProblem?.transactionDetails?.productId, gameId);
 
-  // Efecto para inicializar el problema actual cuando se carga la pantalla
+  // EFECTO UNIFICADO: Manejar inicialización y limpieza de problemas
   useEffect(() => {
-    if (activeProblem && !currentProblem && blockId && !hasRespondedToProblem(blockId)) {
-      console.log(`✅ Inicializando nuevo problema - blockId: ${blockId}`);
-      setProblemStartTime(Date.now());
-      setResults(null);
-      setCurrentProblem(activeProblem);
-      setIsLastBlock(!hasMoreProblems());
-    } else if (blockId && hasRespondedToProblem(blockId)) {
-      console.log(`⚠️ Problema ${blockId} ya respondido, buscando siguiente...`);
-      // Si el problema actual ya fue respondido, buscar el siguiente
-      const nextIndex = getNextAvailableProblem();
-      if (nextIndex !== null) {
-        setCurrentProblemIndex(nextIndex);
-      }
+    console.log(`🔍 EFECTO UNIFICADO EJECUTÁNDOSE - Dependencias:`, {
+      activeProblem: !!activeProblem,
+      blockId,
+      isExiting,
+      results: !!results,
+      activeProblemData: activeProblem ? { problem: activeProblem.problem, blockId: activeProblem.blockId } : null
+    });
+    
+    // Si estamos saliendo, no hacer nada
+    if (isExiting) {
+      console.log('🚪 Saliendo del minado, no manejando problemas...');
+      return;
     }
-  }, [activeProblem, currentProblem, blockId, hasRespondedToProblem, hasMoreProblems]);
+    
+    // Si estamos mostrando resultados, no interferir
+    if (results) {
+      console.log('📊 Mostrando resultados, no ejecutando efecto de inicialización...');
+      return;
+    }
+    
+    console.log(`🔍 Efecto unificado - Estado actual:`, {
+      activeProblem: !!activeProblem,
+      currentProblem: !!currentProblem,
+      blockId,
+      currentProblemId: currentProblem?.id,
+      hasResponded: hasRespondedToProblem(blockId),
+      isExiting
+    });
+    
+    // Si no hay blockId, no hacer nada
+    if (!blockId) {
+      console.log('⚠️ No hay blockId, esperando...');
+      return;
+    }
+    
+    // Si cambia el blockId, limpiar estado anterior PRIMERO
+    if (blockId !== currentProblem?.id) {
+      console.log(`🔄 Nuevo blockId detectado: ${blockId}, limpiando estado anterior...`);
+      setResults(null);
+      // NO limpiar currentProblem aquí, se limpiará en handleNextProblem o handleExitMining
+      setIsWaiting(false);
+      setResponse('');
+      console.log('🧹 Estado limpiado para nuevo problema (manteniendo currentProblem para resultados)');
+    }
+    
+    // Después de limpiar, inicializar el nuevo problema
+    if (activeProblem && blockId) {
+      
+      // Solo inicializar si no hay currentProblem o si es un problema diferente
+      if (!currentProblem || currentProblem.id !== blockId) {
+        // Solo inicializar si no hay currentProblem o si es un problema diferente
+        console.log(`✅ Inicializando nuevo problema - blockId: ${blockId}`);
+        
+        setResults(null);
+        // Crear currentProblem con el id incluido
+        setCurrentProblem({
+          ...activeProblem,
+          id: blockId
+        });
+        
+        // Notificar al servidor que el usuario está viendo el problema (para registrar viewStart)
+        if (blockId && userId) {
+          console.log(`📡 Notificando al servidor que se está viendo el problema: ${blockId}`);
+          openProblem(blockId);
+        }
+        // isLastBlock se actualizará automáticamente en el useEffect
+      } else {
+      }
+    } else {
+    }
+    
+    // FORZAR INICIALIZACIÓN si tenemos activeProblem pero no currentProblem (fallback)
+    if (activeProblem && blockId && !currentProblem && !isExiting) {
+      setCurrentProblem({
+        ...activeProblem,
+        id: blockId
+      });
+      setResults(null);
+      // isLastBlock se actualizará automáticamente en el useEffect
+    }
+  }, [blockId, isExiting, results]);
 
   // Efecto para actualizar isLastBlock cuando cambia el estado de los problemas
   useEffect(() => {
-    // Verificar si este es el último problema disponible
-    setIsLastBlock(!hasMoreProblems());
-  }, [hasMoreProblems, currentProblemIndex, miningProblems]);
+    // Si estamos saliendo, no hacer nada
+    if (isExiting) {
+      console.log('🚪 Saliendo del minado, no actualizando isLastBlock...');
+      return;
+    }
+    
+    // Si estamos mostrando resultados, no actualizar isLastBlock
+    if (results) {
+      console.log('📊 Mostrando resultados, no actualizando isLastBlock...');
+      return;
+    }
+    
+    // Verificar si este es el último problema disponible en la cola local
+    const hasMore = localPendingProblems.length > 1; // Más de 1 porque el actual cuenta
+    setIsLastBlock(!hasMore);
+    console.log(`⛏️ isLastBlock actualizado: ${!hasMore} (localPendingProblems: ${localPendingProblems.length})`);
+  }, [localPendingProblems, isExiting, results]);
 
   // Efecto para mostrar/ocultar la burbuja de minado
   useEffect(() => {
@@ -109,6 +231,43 @@ const MiningScreen = ({ route, navigation }) => {
       setShowMiningBubble(false);
     };
   }, [setShowMiningBubble]);
+
+  // El cronómetro unificado maneja su propio tiempo y reset
+
+
+  // Efecto para resetear isExiting cuando se monte el componente (entrada al minado)
+  useEffect(() => {
+    // Resetear isExiting cuando se entra al minado
+    console.log('🚀 Entrando al minado, reseteando isExiting...');
+    
+    // Si estamos mostrando resultados, no interferir
+    if (results) {
+      console.log('📊 Mostrando resultados, no ajustando currentProblemIndex...');
+      setIsExiting(false);
+      return;
+    }
+    
+    // Ajustar currentProblemIndex si es necesario
+    if (localPendingProblems.length > 0) {
+      const nextIndex = getNextAvailableProblem();
+      if (nextIndex !== null && nextIndex !== currentProblemIndex) {
+        setCurrentProblemIndex(nextIndex);
+      }
+    }
+    
+    // FORZAR INICIALIZACIÓN si tenemos activeProblem pero no currentProblem
+    if (activeProblem && blockId && !currentProblem) {
+      setCurrentProblem({
+        ...activeProblem,
+        id: blockId
+      });
+      setResults(null);
+      // isLastBlock se actualizará automáticamente en el useEffect
+    }
+    
+    setIsExiting(false);
+  }, [localPendingProblems, results]);
+
 
   const handleSubmit = async () => {
     if (!response || !blockId || !currentProblem) {
@@ -142,7 +301,9 @@ const MiningScreen = ({ route, navigation }) => {
     const submitMiningSolution = httpsCallable(functions, 'submitMiningSolution');
   
     try {
-      const responseTime = Date.now() - problemStartTime;
+      // Usar el tiempo del cronómetro unificado como tiempo de respuesta
+      const responseTime = currentTimerTime;
+      console.log(`⏱️ Tiempo de respuesta del cronómetro unificado: ${responseTime}ms (${formatTime(responseTime)})`);
       const userResponse = parseFloat(response);
       const correctAnswer = parseFloat(currentProblem.solution);
       const isCorrect = userResponse === correctAnswer;
@@ -154,10 +315,9 @@ const MiningScreen = ({ route, navigation }) => {
         responseTime
       });
 
-      // Procesar la respuesta localmente primero
+      // ESTABLECER RESULTADOS PRIMERO para evitar navegación momentánea
       setResponse("");
-      await markProblemAsResponded(blockId);
-
+      
       // Guardar la respuesta correcta
       setCorrectAnswer(currentProblem.solution);
       setCurrentBlockId(blockId);
@@ -177,9 +337,32 @@ const MiningScreen = ({ route, navigation }) => {
 
       console.log('✅ Respuesta procesada localmente:', localResult);
 
-      // Mostrar resultado inmediato (solo la respuesta del jugador actual)
+      // Mostrar resultado inmediato PRIMERO (solo la respuesta del jugador actual)
       setResults([localResult]);
       setIsWaiting(false);
+
+      // AHORA procesar la respuesta (esto puede cambiar localPendingProblems)
+      await markProblemAsResponded(blockId);
+
+      // NO actualizar currentProblemIndex aquí - se hará cuando el usuario haga clic en "Next Block"
+      // Solo verificar si hay más problemas para mostrar el botón correcto
+      const hasMore = getNextAvailableProblem() !== null;
+      if (!hasMore) {
+        console.log(`🏁 No hay más problemas disponibles después de responder`);
+        setIsLastBlock(true);
+        
+        // Si no hay más problemas, limpiar miningQueue en el servidor y resetear timestamp
+        if (webSocketService.isConnected) {
+          console.log('🧹 Último problema respondido, limpiando miningQueue...');
+          webSocketService.socket.emit('clear_mining_queue', {
+            gameId,
+            userId
+          });
+        }
+      } else {
+        // console.log(`⏭️ Hay más problemas disponibles, se mostrará botón "Next Block"`);
+        setIsLastBlock(false);
+      }
 
       // Enviar respuesta vía WebSocket (tiempo real, sin interferir con otros)
       console.log('📞 Enviando respuesta vía WebSocket...', {
@@ -198,15 +381,13 @@ const MiningScreen = ({ route, navigation }) => {
           await webSocketService.connect();
         }
         
-        // Enviar vía WebSocket
-        webSocketService.socket.emit('submit_mining_response', {
-          gameId,
+        // Enviar vía WebSocket usando el nuevo sistema
+        webSocketService.socket.emit('mining:submit', {
           blockId,
           userId,
-          userName: userName || "Unknown",
           response: userResponse,
-          responseTime,
-          isCorrect: isCorrect
+          userName: userName || "Unknown",
+          responseTime: responseTime
         });
         
         console.log('✅ Respuesta enviada vía WebSocket');
@@ -217,8 +398,8 @@ const MiningScreen = ({ route, navigation }) => {
 
       console.log('📊 Resultado local mostrado:', localResult);
       
-      // Verificar si este era el último problema
-      setIsLastBlock(!hasMoreProblems());
+      // Verificar si este era el último problema (se actualizará automáticamente en el useEffect)
+      // setIsLastBlock se actualiza automáticamente cuando cambia localPendingProblems
       
       setIsWaiting(false);
       console.log('✅ Proceso de envío de respuesta completado');
@@ -250,24 +431,47 @@ const MiningScreen = ({ route, navigation }) => {
     setResults(null);
     setShowKeyboard(false); // Ocultar el teclado al cambiar de problema
     setResponse(''); // Limpiar la respuesta
+    setCurrentTimerTime(0); // Resetear el tiempo del cronómetro unificado
     
-    // Avanzar al siguiente problema
-    nextProblem();
+    
+    // Avanzar al siguiente problema disponible en la cola local
+    const nextIndex = getNextAvailableProblem();
+    if (nextIndex !== null) {
+      console.log(`⛏️ Navegando al siguiente problema: índice ${nextIndex}`);
+      setCurrentProblemIndex(nextIndex);
+    } else {
+      console.log(`⛏️ No hay más problemas disponibles, marcando como último bloque`);
+      setIsLastBlock(true);
+    }
   };
 
   const handleExitMining = () => {
     console.log('🚪 Saliendo del minado...');
     
-    // Limpiar el estado actual
+    // LIMPIEZA COMPLETA: Poner la pantalla como nueva
     setCurrentProblem(null);
     setResults(null);
-    setShowKeyboard(false); // Ocultar el teclado al salir
-    setResponse(''); // Limpiar la respuesta
-    setIsWaiting(false); // Asegurar que no esté en estado de espera
+    setShowKeyboard(false);
+    setResponse('');
+    setIsWaiting(false);
+    setCurrentTimerTime(0); // Resetear el tiempo del cronómetro unificado
+    // NO resetear currentProblemIndex aquí, se ajustará automáticamente al entrar
     
-    // Navegar a GameTabs en lugar de goBack
-    console.log('🎮 Navegando a GameTabs...');
-    navigation.navigate('GameTabs');
+    
+    // Limpiar miningQueue en el servidor
+    if (webSocketService.isConnected) {
+      console.log('🧹 Enviando clear_mining_queue al servidor...');
+      webSocketService.socket.emit('clear_mining_queue', {
+        gameId,
+        userId
+      });
+    }
+    
+    
+    // NO marcar isExiting aquí, se resetea automáticamente al entrar
+    
+    // Simplemente navegar al MarketScreen
+    navigation.navigate('Market');
   };
 
   // Función para mostrar el teclado
@@ -328,7 +532,7 @@ const MiningScreen = ({ route, navigation }) => {
                   <RotatingCube size={80} color="#000" /> 
                   <Text style={styles.waitingText}>Loading results...</Text>
                 </View>
-              ) : results ? (
+              ) : results && results.length > 0 && currentProblem ? (
                 <View style={styles.resultsContainer}>
                   <View style={styles.messageContainer}>
                     {results.find(r => r.userId === userId)?.isCorrect ? (
@@ -360,7 +564,7 @@ const MiningScreen = ({ route, navigation }) => {
                     )}
                     style={{ maxHeight: '50%', width: '100%' }}
                   />
-                  {!isLastBlock ? (
+                  {!isLastBlock && hasMoreProblems() ? (
                     <TouchableOpacity 
                       style={styles.nextBlockButton}
                       onPress={handleNextProblem}
@@ -376,24 +580,22 @@ const MiningScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
                   )}
                 </View>
-              ) : miningProblems.length === 0 ? (
-                <View style={styles.waitingContainer}>
-                  <Text style={styles.waitingText}>No mining problems available</Text>
-                  <TouchableOpacity 
-                    style={[styles.nextBlockButton, { backgroundColor: '#e74c3c' }]}
-                    onPress={handleExitMining}
-                  >
-                    <Text style={styles.nextBlockButtonText}>Exit Mining</Text>
-                  </TouchableOpacity>
-                </View>
               ) : hasValidData ? (
-                <View style={styles.problemContainer}>
-                  <View style={styles.blockInfoContainer}>
-                    <Text style={styles.blockInfoText}>Block {getBlockNumber()}</Text>
-                    <Text style={styles.transactionInfoText}>
-                      {transactionUserName} {currentProblem.transactionDetails?.type} {(productDetails?.description || 'Loading...').toLowerCase()}
-                    </Text>
-                  </View>
+                (() => {
+                  return (
+                    <View style={styles.problemContainer}>
+                      <View style={styles.blockInfoContainer}>
+                        <Text style={styles.blockInfoText}>Block #{getBlockNumber()}</Text>
+                        <Text style={styles.transactionInfoText}>
+                          {transactionUserName} {currentProblem.transactionDetails?.type} {(productDetails?.description || 'Loading...').toLowerCase()}
+                        </Text>
+                        {/* Cronómetro unificado con comunicación de tiempo */}
+                        <SimpleUnifiedTimer 
+                          blockId={blockId || 'loading'}
+                          isActive={!results && !isExiting}
+                          onTimeUpdate={updateTimerTime}
+                        />
+                      </View>
                   
                   <View style={styles.mathContainer}>
                     <Text style={styles.problemText}>{currentProblem.mathProblem}</Text>
@@ -421,6 +623,8 @@ const MiningScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
                   </View>
                 </View>
+                  );
+                })()
               ) : (
                 <View style={styles.waitingContainer}>
                   <RotatingCube size={80} color="#000" />
@@ -431,8 +635,9 @@ const MiningScreen = ({ route, navigation }) => {
               )}
             </KeyboardAvoidingView>
 
-            {!results && !isWaiting && miningProblems.length > 0 && hasValidData && (
+            {!results && !isWaiting && miningQueue > 0 && hasValidData && (
               <View style={styles.navigationButtons}>
+                {console.log(`🔨 [MINING-BUTTON] Mostrando botón con miningQueue=${miningQueue}, miningProblems.length=${miningProblems.length}`)}
                 <TouchableOpacity 
                   onPress={() => {
                     const prevIndex = currentProblemIndex - 1;
@@ -448,7 +653,7 @@ const MiningScreen = ({ route, navigation }) => {
 
                 <View style={styles.miningButtonContainer}>
                   <View style={styles.miningButton}>
-                    <Text style={styles.miningButtonText}>{miningProblems.length}</Text>
+                    <Text style={styles.miningButtonText}>{miningQueue}</Text>
                     <Ionicons name="hammer-outline" size={24} color="#000" />
                   </View>
                 </View>

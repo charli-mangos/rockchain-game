@@ -12,8 +12,17 @@ import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
 
 const EndOfRoundScreen = ({ route }) => {
-  const { gameId, userId } = useGameContextHybrid();
-  const { allPlayersData, round, isReadyForNextRound, markPlayerReady, winningIndustry } = useGameContextHybrid();
+  const { 
+    gameId, 
+    userId, 
+    allPlayersData, 
+    round, 
+    isReadyForNextRound, 
+    markPlayerReady, 
+    winningIndustry,
+    isWebSocketConnected,
+    webSocketService
+  } = useGameContextHybrid();
   
   // Usar los datos completos de todos los jugadores
   const players = allPlayersData.sort((a, b) => {
@@ -22,6 +31,15 @@ const EndOfRoundScreen = ({ route }) => {
     const balanceB = b.rockCoins - b.waste;
     return balanceB - balanceA;
   });
+
+  // Debug: Log de datos recibidos
+  console.log('🎮 [EndOfRoundScreen] Datos recibidos del contexto:');
+  console.log('🎮 [EndOfRoundScreen] allPlayersData:', allPlayersData);
+  console.log('🎮 [EndOfRoundScreen] allPlayersData.length:', allPlayersData.length);
+  console.log('🎮 [EndOfRoundScreen] players (ordenados):', players);
+  console.log('🎮 [EndOfRoundScreen] winningIndustry:', winningIndustry);
+  console.log('🎮 [EndOfRoundScreen] round:', round);
+  console.log('🎮 [EndOfRoundScreen] isWebSocketConnected:', isWebSocketConnected);
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
   const [rewardMessage, setRewardMessage] = useState(null);
   const [roundRewards, setRoundRewards] = useState(null);
@@ -55,7 +73,7 @@ const EndOfRoundScreen = ({ route }) => {
     }
   }, [round]);
 
-  // Efecto principal para manejar recompensas
+  // Efecto principal para manejar recompensas (simplificado para sistema híbrido)
   useEffect(() => {
     // Evitar múltiples ejecuciones del mismo efecto
     if (effectRunRef.current) {
@@ -65,7 +83,78 @@ const EndOfRoundScreen = ({ route }) => {
     
     effectRunRef.current = true;
     console.log(`🎮 EndOfRoundScreen - Ronda ${round}, userId: ${userId}`);
-    
+    console.log(`🔌 WebSocket conectado: ${isWebSocketConnected}`);
+
+    // Si estamos usando WebSocket, simplificar la lógica
+    if (isWebSocketConnected) {
+      console.log('🔌 Usando sistema híbrido - datos ya disponibles desde WebSocket');
+      
+      // Asignar recompensas usando WebSocket (con retraso para asegurar que los datos lleguen primero)
+      if (!rewardsProcessedRef.current) {
+        console.log('💰 Programando asignación de recompensas vía WebSocket en 1 segundo');
+        setTimeout(() => {
+          console.log('💰 Asignando recompensas vía WebSocket');
+          webSocketService.assignRoundRewards();
+          rewardsProcessedRef.current = true;
+        }, 1000);
+      }
+      
+      // Obtener industria seleccionada del usuario desde Firestore
+      const userRef = doc(db, 'users', userId);
+      const unsubscribeUser = onSnapshot(userRef, (userDoc) => {
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const gameUserData = userData.games?.[gameId] || {};
+          const selectedIndustry = gameUserData.selectedIndustry || 'No selection';
+          setUserSelectedIndustry(selectedIndustry);
+        }
+      });
+
+      // Escuchar recompensas asignadas desde WebSocket
+      const handleRewardsAssigned = (data) => {
+        console.log('💰 Recompensas asignadas recibidas en EndOfRoundScreen:', data);
+        if (data.roundRewards) {
+          setRoundRewards(data.roundRewards);
+          
+          const userRewards = data.roundRewards[userId];
+          if (userRewards) {
+            let message = '';
+            let totalRewards = 0;
+            
+            // Recompensa por industria
+            if (userRewards.industryReward && userRewards.industryReward > 0) {
+              message += `Industry Reward: +${userRewards.industryReward} RockCoins\n`;
+              totalRewards += userRewards.industryReward;
+              if (userRewards.wasteRemoved > 0) {
+                message += `Waste reduced: -${userRewards.wasteRemoved}\n`;
+              }
+            }
+            
+            // Total de recompensas (solo industria + reciclaje)
+            if (totalRewards > 0) {
+              message += `\nTotal: +${totalRewards} RockCoins`;
+              console.log(`🎁 Mostrando mensaje de recompensas para ronda ${round}: ${message}`);
+              setRewardMessage(message);
+            }
+          }
+        }
+      };
+
+      webSocketService.on('rewards_assigned', handleRewardsAssigned);
+
+      unsubscribeRef.current = () => {
+        unsubscribeUser();
+        webSocketService.off('rewards_assigned', handleRewardsAssigned);
+      };
+
+      return () => {
+        if (unsubscribeRef.current) {
+          unsubscribeRef.current();
+        }
+      };
+    }
+
+    // Fallback a Firestore si no hay WebSocket
     const gameRef = doc(db, 'games', gameId);
     const userRef = doc(db, 'users', userId);
 
@@ -128,8 +217,8 @@ const EndOfRoundScreen = ({ route }) => {
             message += `Industry Reward: +${userRewards.industryReward} RockCoins\n`;
             totalRewards += userRewards.industryReward;
             if (userRewards.wasteRemoved > 0) {
-              message += `Recycled waste: ${userRewards.wasteRemoved}\n`;
-      }
+              message += `Waste reduced: -${userRewards.wasteRemoved}\n`;
+            }
           }
           
           // SOLO mostrar recompensas por industria y reciclaje en el cartel verde
@@ -170,11 +259,12 @@ const EndOfRoundScreen = ({ route }) => {
         unsubscribeRef.current();
       }
     };
-  }, [gameId, userId, round]); // Dependencias específicas
+  }, [gameId, userId, round, isWebSocketConnected]); // Agregar isWebSocketConnected como dependencia
 
   const handleReady = async () => {
     try {
       console.log('🚀 Usuario presionó Next Round');
+      console.log(`🔌 WebSocket conectado: ${isWebSocketConnected}`);
       
       // ACTIVAR PROTECCIÓN DE NAVEGACIÓN
       isNavigatingRef.current = true;
@@ -194,11 +284,15 @@ const EndOfRoundScreen = ({ route }) => {
           routes: [{ name: 'GameResults', params: { gameId, userId } }],
         });
       } else {
-        // Para rondas 1 y 2, solo marcar como listo
+        // Para rondas 1 y 2, usar el sistema híbrido
+        if (isWebSocketConnected) {
+          console.log(`🔄 Marcando como listo para ronda ${round + 1} vía WebSocket`);
+          await markPlayerReady();
+        } else {
+          console.log(`🔄 Marcando como listo para ronda ${round + 1} vía Firestore (fallback)`);
+          await markPlayerReady();
+        }
         // markPlayerReady() ya maneja la navegación a WaitingRoom
-        console.log(`🔄 Marcando como listo para ronda ${round + 1}`);
-        await markPlayerReady();
-        // NO navegar aquí, markPlayerReady() ya lo hace
       }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
@@ -259,6 +353,7 @@ const EndOfRoundScreen = ({ route }) => {
           title="Mined Blocks" 
           showReward={true}
           filterByRound={round}
+          currentUserId={userId}
         />
       </ScrollView>
 

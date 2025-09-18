@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useSimpleMiningContext } from '../context/SimpleMiningContext';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import webSocketService from '../services/WebSocketService';
 
 import MarketScreen from '../screens/MarketScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -47,12 +49,41 @@ const Tabs = ({ route }) => {
 
 const GameTabs = ({ route }) => {
   const { gameId, userId } = useGameContextHybrid();
-  const { miningQueue, showMiningBubble, setShowMiningBubble } = useGameContextHybrid();
+  const { showMiningBubble, setShowMiningBubble, miningQueue } = useGameContextHybrid();
+  const simpleMiningContext = useSimpleMiningContext();
+  
+  // Usar el nuevo sistema si está disponible, sino fallback al existente
+  const pendingCount = simpleMiningContext?.pendingCount || miningQueue;
+  
   const navigation = useNavigation();
+
+  // console.log(`[GAMETABS] pendingCount=${pendingCount}, showMiningBubble=${showMiningBubble}, miningQueue=${miningQueue}, simpleMiningContext=${!!simpleMiningContext}`);
+
+  // Escuchar eventos de fin de ronda directamente en GameTabs
+  useEffect(() => {
+    console.log('🎮 GameTabs: Configurando listener para round_ended');
+    
+    const handleRoundEnded = (data) => {
+      console.log('🎮 GameTabs: Recibido round_ended:', data);
+      if (data.status === 'roundEnd') {
+        console.log('🎮 GameTabs: Navegando a EndOfRoundScreen');
+        navigation.navigate('EndOfRound', { gameId, userId });
+      }
+    };
+
+    // Registrar el listener
+    webSocketService.on('round_ended', handleRoundEnded);
+
+    // Cleanup
+    return () => {
+      console.log('🎮 GameTabs: Limpiando listener de round_ended');
+      webSocketService.off('round_ended', handleRoundEnded);
+    };
+  }, [gameId, userId, navigation]);
 
   return (
     <View style={{ flex: 1 }}>
-      {miningQueue > 0 && showMiningBubble && (
+      {pendingCount > 0 && showMiningBubble && (
         <View style={styles.miningBubbleContainer}>
           <TouchableOpacity 
             onPress={() => {
@@ -68,7 +99,7 @@ const GameTabs = ({ route }) => {
             }} 
             style={styles.miningBubble}
           >
-            <Text style={styles.miningBubbleText}>{miningQueue}</Text>
+            <Text style={styles.miningBubbleText}>{pendingCount}</Text>
             <Ionicons name="hammer-outline" size={24} color="#fff" />
           </TouchableOpacity>
         </View>

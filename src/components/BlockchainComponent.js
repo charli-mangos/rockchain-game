@@ -3,9 +3,10 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useGameContextHybrid } from '../context/GameContextHybrid';
 import { useUserName } from '../hooks/useUserName';
 
-const BlockCard = ({ block, index, showReward }) => {
+const BlockCard = ({ block, index, showReward, currentUserId }) => {
   const minerId = block.winner?.userId;
   const minerName = useUserName(minerId);
+  const isCurrentUserWinner = minerId === currentUserId;
   
   return (
     <View style={styles.blockCard}>
@@ -16,7 +17,7 @@ const BlockCard = ({ block, index, showReward }) => {
       <Text style={styles.blockDetails}>
         Time: {((block.winner?.responseTime || 0) / 1000).toFixed(2)}s
       </Text>
-      {showReward && block.winner && (
+      {showReward && block.winner && isCurrentUserWinner && (
         <View style={styles.rewardContainer}>
           <Text style={styles.rewardText}>+50</Text>
         </View>
@@ -29,27 +30,33 @@ const BlockConnection = () => (
   <View style={styles.blockConnection} />
 );
 
-const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null }) => {
+const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null, currentUserId }) => {
   const { webSocketInventory, minedBlocks, round } = useGameContextHybrid();
   const [blocks, setBlocks] = useState([]);
 
   useEffect(() => {
     if (!gameId) {
-      console.log('❌ No hay gameId, no se pueden cargar bloques');
+      console.log('❌ [BLOCKCHAIN] No hay gameId, no se pueden cargar bloques');
       return;
     }
 
-    console.log(`⛓️ BlockchainComponent - Usando datos del WebSocket para gameId: ${gameId}, filterByRound: ${filterByRound}`);
-    console.log(`📊 minedBlocks actuales:`, minedBlocks);
-    console.log(`📊 minedBlocks.length:`, minedBlocks?.length || 0);
-    console.log(`📊 round actual:`, round);
+    console.log(`⛓️ [BLOCKCHAIN] Usando datos del WebSocket para gameId: ${gameId}, filterByRound: ${filterByRound}`);
+    console.log(`📊 [BLOCKCHAIN] minedBlocks actuales:`, minedBlocks);
+    console.log(`📊 [BLOCKCHAIN] minedBlocks.length:`, minedBlocks?.length || 0);
+    console.log(`📊 [BLOCKCHAIN] round actual:`, round);
+    console.log(`📊 [BLOCKCHAIN] Array.isArray(minedBlocks):`, Array.isArray(minedBlocks));
 
     // Usar bloques minados directamente del WebSocket
     const blocksToShow = minedBlocks
       .filter(block => {
         // Si se especifica un filtro de ronda, aplicar el filtro
         if (filterByRound !== null) {
-          return block.round === filterByRound;
+          // TEMPORAL: Mostrar bloques de la ronda actual y la anterior para debugging
+          // TODO: Corregir la lógica del servidor para guardar la ronda correcta
+          const currentRound = round || 0;
+          const previousRound = currentRound - 1;
+          console.log(`🔍 [BLOCKCHAIN] Filtrando bloques: block.round=${block.round}, filterByRound=${filterByRound}, currentRound=${currentRound}, previousRound=${previousRound}`);
+          return block.round === filterByRound || block.round === previousRound;
         }
         return true; // Mostrar todos los bloques si no hay filtro
       })
@@ -57,10 +64,10 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
 
     console.log(`🏆 Bloques minados desde WebSocket: ${blocksToShow.length}`);
     console.log(`🏆 Datos de bloques minados:`, blocksToShow);
-
     console.log(`📋 Bloques finales a mostrar: ${blocksToShow.length}`);
     setBlocks(blocksToShow);
   }, [gameId, filterByRound, minedBlocks, round]);
+
 
   return (
     <View style={styles.blockchainSection}>
@@ -74,7 +81,7 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
           >
             {blocks.map((block, index) => (
               <React.Fragment key={block.id}>
-                <BlockCard block={block} index={index} showReward={showReward} />
+                <BlockCard block={block} index={index} showReward={showReward} currentUserId={currentUserId} />
                 {index < blocks.length - 1 && <BlockConnection />}
               </React.Fragment>
             ))}

@@ -1,7 +1,9 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import * as NavigationBar from 'expo-navigation-bar';
 import LoginScreen from './src/screens/LoginScreen';
 import GameScreen from './src/screens/GameScreen';
 import WaitingRoomScreen from './src/screens/WaitingRoomScreen';
@@ -10,6 +12,7 @@ import EndOfRoundScreen from './src/screens/EndOfRoundScreen';
 import GameResultsScreen from './src/screens/GameResultsScreen';
 import { callGenerateProducts } from './src/components/callGenerateProducts';
 import { GameProviderHybrid } from './src/context/GameContextHybrid';
+import { SimpleMiningProvider } from './src/context/SimpleMiningContext';
 
 import { HermesInternal } from 'react-native';
 console.log("Hermes está activo:", !!HermesInternal);
@@ -23,6 +26,13 @@ const App = () => {
   // Logging para debug
   console.log('🔍 App.js - gameParams actual:', gameParams);
 
+  // Ocultar la barra de navegación del sistema en Android
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+    }
+  }, []);
+
   // useEffect(() => {
   //   // Llama a la función solo una vez
   //   callGenerateProducts();
@@ -32,23 +42,25 @@ const App = () => {
     <NavigationContainer>
       {gameParams ? (
         <GameProviderHybrid gameId={gameParams.gameId} userId={gameParams.userId}>
-          <Stack.Navigator 
-            initialRouteName="Game"
-            screenOptions={{
-              gestureEnabled: false,
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen
-              name="Game"
-              component={GameScreen}
-              initialParams={{ setGameParams, gameId: gameParams.gameId, userId: gameParams.userId }}
-            />
-            <Stack.Screen name="WaitingRoom" component={WaitingRoomScreen} />
-            <Stack.Screen name="GameTabs" component={GameTabs} />
-            <Stack.Screen name="EndOfRound" component={EndOfRoundScreen} />
-            <Stack.Screen name="GameResults" component={GameResultsScreen} />
-          </Stack.Navigator>
+          <SimpleMiningProvider gameId={gameParams.gameId} userId={gameParams.userId}>
+            <Stack.Navigator 
+              initialRouteName="Game"
+              screenOptions={{
+                gestureEnabled: false,
+                headerShown: false,
+              }}
+            >
+              <Stack.Screen
+                name="Game"
+                component={GameScreen}
+                initialParams={{ setGameParams, gameId: gameParams.gameId, userId: gameParams.userId }}
+              />
+              <Stack.Screen name="WaitingRoom" component={WaitingRoomScreen} />
+              <Stack.Screen name="GameTabs" component={GameTabs} />
+              <Stack.Screen name="EndOfRound" component={EndOfRoundScreen} />
+              <Stack.Screen name="GameResults" component={GameResultsScreen} />
+            </Stack.Navigator>
+          </SimpleMiningProvider>
         </GameProviderHybrid>
       ) : (
         <Stack.Navigator 

@@ -15,13 +15,13 @@ const styles = StyleSheet.create({
   problemContainer: {
     flex: 1,
     padding: 20,
-    paddingTop: 50,
+    paddingTop: 20, // Reducido de 50 a 20
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
   blockInfoContainer: {
     width: '100%',
-    marginBottom: 30, // Reducido de 50 a 30
+    marginBottom: 10, // Reducido de 20 a 10
     alignItems: 'flex-start',
   },
   blockInfoText: {
@@ -33,16 +33,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
+  timerContainer: {
+    marginTop: 10,
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#007AFF',
+  },
+  timerText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    fontFamily: 'monospace', // Fuente monoespaciada para mejor legibilidad del tiempo
+  },
   mathContainer: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20, // Reducido de 30 a 20
+    marginTop: 10, // Reducido de 20 a 10
   },
   problemText: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16, // Reducido de 20 a 16
+    marginBottom: 12, // Reducido de 16 a 12
     textAlign: 'center',
   },
   input: {
@@ -185,15 +201,19 @@ const styles = StyleSheet.create({
   navBar: {
     flexDirection: 'row',
     width: '100%',
-    justifyContent: 'space-around',
+    justifyContent: 'center', // Centrar los botones
+    alignItems: 'center', // Centrar verticalmente
     borderTopWidth: 1,
     borderColor: '#ddd',
-    paddingVertical: 10,
-    paddingBottom: 20, 
+    paddingVertical: 10, // Reducido de 15 a 10 para barra más compacta
+    paddingBottom: 0, // Eliminar padding inferior para pegar al bottom
+    backgroundColor: '#fff', // Asegurar fondo blanco
   },
   icon: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center', // Centrar verticalmente
+    paddingVertical: 5, // Reducido de 8 a 5 para barra más compacta
   },
   nextBlockButton: {
     backgroundColor: '#007AFF',
@@ -215,19 +235,19 @@ const styles = StyleSheet.create({
   // Estilos para el campo de respuesta personalizado
   answerContainer: {
     width: '100%',
-    marginBottom: 16, // Reducido de 24 a 16
+    marginBottom: 8, // Reducido de 16 a 8
     alignItems: 'center',
   },
   answerLabel: {
     fontSize: 18,
     fontWeight: '600',
     color: '#34495e',
-    marginBottom: 8, // Reducido de 12 a 8
+    marginBottom: 4, // Reducido de 8 a 4
     textAlign: 'center',
   },
   answerDisplay: {
     width: '100%',
-    height: 70,
+    height: 55, // Reducido de 70 a 55
     borderWidth: 3,
     borderColor: '#007AFF',
     borderRadius: 8, // Mismo borderRadius que el botón Submit
@@ -261,20 +281,36 @@ const styles = StyleSheet.create({
   customKeyboard: {
     marginBottom: 0,
     marginTop: 0,
-    marginHorizontal: 0, // Sin márgenes horizontales para ocupar todo el ancho
+    marginHorizontal: 16, // Márgenes laterales para mejor apariencia
+    borderRadius: 0, // Sin bordes redondeados para que se adapte al modal
+    shadowOpacity: 0, // Sin sombra para mejor integración
+    elevation: 0,
   },
   // Estilos para el Modal del teclado
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'transparent', // Cambiado de rgba(0, 0, 0, 0.3) a transparent
+    backgroundColor: 'transparent', // Sin fondo para ver el problema
     justifyContent: 'flex-end',
   },
   keyboardModal: {
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    paddingBottom: 20,
+    backgroundColor: 'rgba(248, 249, 250, 0.95)', // Fondo semi-transparente
+    paddingBottom: 0, // Sin padding inferior para pegar al suelo
+    paddingTop: 16, // Solo padding superior
     width: '100%', // Ocupar todo el ancho
     borderTopLeftRadius: 16, // Bordes redondeados solo arriba
     borderTopRightRadius: 16,
+    // Asegurar que esté pegado al suelo
+    position: 'absolute',
+    bottom: 0,
+    // Añadir sombra sutil para separación visual
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });
 

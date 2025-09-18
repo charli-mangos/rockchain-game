@@ -102,9 +102,10 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#f8f9fa',
     borderRadius: 16,
-    padding: 12,
+    padding: 8, // Reducido de 12 a 8
+    paddingBottom: 16, // Padding inferior mayor para separar del suelo
     marginHorizontal: 0, // Sin márgenes horizontales
-    marginVertical: 8,
+    marginVertical: 4, // Reducido de 8 a 4
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -118,20 +119,22 @@ const styles = StyleSheet.create({
     maxWidth: '100%', // Ocupar todo el ancho disponible
     alignSelf: 'center',
     width: '100%', // Asegurar que ocupe todo el ancho disponible
+    // Mejorar adaptación a la pantalla
+    minHeight: 240, // Reducido de 280 a 240 para teclado más compacto
   },
   keyboard: {
-    gap: 12,
+    gap: 8, // Reducido de 12 a 8
     width: '100%', // Asegurar que el teclado ocupe todo el ancho del contenedor
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8, // Reducido de 12 a 8
     justifyContent: 'space-between',
     width: '100%', // Asegurar que las filas ocupen todo el ancho
   },
   key: {
     flex: 1,
-    height: 60,
+    height: 55, // Reducido de 65 a 55 para teclado más compacto
     backgroundColor: '#ffffff',
     borderRadius: 12,
     justifyContent: 'center',
@@ -146,7 +149,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
-    minWidth: 60, // Asegurar tamaño mínimo táctil
+    minWidth: 55, // Reducido de 65 a 55 para teclado más compacto
   },
   specialKey: {
     backgroundColor: '#f1f3f4',

@@ -132,6 +132,7 @@ const GameResultsScreen = ({ route }) => {
           title="Final Blockchain" 
           showReward={true}
           filterByRound={null} // Mostrar todos los bloques sin filtro de ronda
+          currentUserId={userId}
         />
       </ScrollView>
 

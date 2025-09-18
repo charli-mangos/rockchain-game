@@ -53,41 +53,27 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         throw new Error('Game ID is required but was not provided');
       }
 
-      const requestData = {
-        gameId: gameId,
-        transactionDetails: {
-          productId: product.id,
-          type: transType,
-          userId: userId,
-          productType: product.type,
-          marbleType: product.marbleType,
-          price: product.currentPrice,
-          waste: product.waste
-        }
-      };
+      console.log('🔌 Generando problema de minado vía WebSocket:', {
+        gameId,
+        product,
+        transType,
+        userId
+      });
 
-      console.log('Generating mining problem with data:', requestData);
-
-      const generateMiningProblem = httpsCallable(functions, 'generateMiningProblem');
-      
-      // Usar verificación de autenticación
-      const result = await callAuthenticatedFunction(
-        () => generateMiningProblem(requestData),
-        'generateMiningProblem'
-      );
-  
-      console.log('Mining problem created successfully:', result.data);
-      
-      // Notificar a través de WebSocket si está disponible
-      if (webSocketService.isConnected && result.data?.blockId) {
-        console.log('🔌 Notificando nuevo problema de minado vía WebSocket');
-        webSocketService.notifyNewMiningProblem(
-          result.data.blockId,
-          result.data.data
-        );
+      // Enviar transacción directamente al WebSocket
+      if (webSocketService.isConnected) {
+        webSocketService.socket.emit('product_transaction', {
+          gameId,
+          userId,
+          product,
+          transactionType: transType
+        });
+        
+        console.log('✅ Transacción enviada al WebSocket - el problema se generará automáticamente');
+        return { success: true, message: 'Transacción procesada vía WebSocket' };
+      } else {
+        throw new Error('WebSocket no está conectado');
       }
-      
-      return result.data;
     } catch (error) {
       console.error('Error in generateProblem:', {
         error,
@@ -211,10 +197,18 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
           product: productToRemove,
           transactionType: 'purchase'
         });
+        
+        // NO llamar a generateProblem ni incrementMiningQueue aquí
+        // El WebSocket se encarga de todo
+        console.log("Product purchased successfully via WebSocket");
+        setExpanded(false);
+        navigation.navigate('Profile', { gameId, userId });
+        return; // Salir aquí para evitar procesamiento local
       } else {
         console.log('⚠️ WebSocket no conectado, procesando localmente');
       }
 
+      // Solo procesar localmente si WebSocket no está conectado
       // Generar problema de minería
       await generateProblem(product, 'purchase');
       
@@ -253,10 +247,17 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
           product: productToSell,
           transactionType: 'sell'
         });
+        
+        // NO llamar a generateProblem ni incrementMiningQueue aquí
+        // El WebSocket se encarga de todo
+        console.log("Product sold successfully via WebSocket");
+        setExpanded(false);
+        return; // Salir aquí para evitar procesamiento local
       } else {
         console.log('⚠️ WebSocket no conectado, procesando localmente');
       }
 
+      // Solo procesar localmente si WebSocket no está conectado
       // Generar problema de minería
       await generateProblem(product, 'sell');
 
@@ -312,10 +313,17 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
           transformedProduct: transformedProduct,
           wasteExtra: wasteExtra
         });
+        
+        // NO llamar a generateProblem ni incrementMiningQueue aquí
+        // El WebSocket se encarga de todo
+        console.log("Product transformed successfully via WebSocket");
+        setExpanded(false);
+        return; // Salir aquí para evitar procesamiento local
       } else {
         console.log('⚠️ WebSocket no conectado, procesando localmente');
       }
       
+      // Solo procesar localmente si WebSocket no está conectado
       // Generar problema de minería
       await generateProblem(transformedProduct, 'transform');
       

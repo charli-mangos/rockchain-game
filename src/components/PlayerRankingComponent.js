@@ -3,6 +3,13 @@ import { View, Text, FlatList, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const PlayerRankingComponent = ({ players, title, currentUserId }) => {
+  // Debug: Log de datos recibidos
+  console.log('🏆 [PlayerRankingComponent] Datos recibidos:');
+  console.log('🏆 [PlayerRankingComponent] players:', players);
+  console.log('🏆 [PlayerRankingComponent] players.length:', players?.length || 0);
+  console.log('🏆 [PlayerRankingComponent] title:', title);
+  console.log('🏆 [PlayerRankingComponent] currentUserId:', currentUserId);
+  
   // Memoizar el header para evitar re-renders innecesarios
   const ListHeader = useMemo(() => (
     <View style={styles.headerRow}>
