@@ -254,7 +254,7 @@ const GameScreen = ({ route }) => {
       <View style={styles.container}>
         <WelcomeHeader title={"Start a RockChain"} />
         {loading ? (
-          <RotatingCube size={80} color="#000" /> 
+          <RotatingCube size={80} color="#ba5d17" /> 
         ) : (
           <View style={styles.inputContainer}>
             {/* Sección para el jugador para empezar su propia partida */}

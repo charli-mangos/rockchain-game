@@ -9,4 +9,4 @@ const DismissKeyboardView = ({ children, style, ...props }) => (
   </TouchableWithoutFeedback>
 );
 
-export default DismissKeyboardView; 
+export default DismissKeyboardView;

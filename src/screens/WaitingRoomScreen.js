@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Platform } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import styles from '../styles/WaitingScreenStyles';
 import WaitingRoomHeader from '../components/WaitingRoomHeader';
 
@@ -16,7 +16,7 @@ const WaitingRoomScreen = ({ route }) => {
     isWebSocketConnected,
     readyToPlay,
     playerCount
-  } = useGameContextHybrid();
+  } = useGameContextHybridRobust();
   
   const [waitingRoomCountdown, setWaitingRoomCountdown] = useState(null);
   const navigation = useNavigation();
@@ -119,19 +119,29 @@ const WaitingRoomScreen = ({ route }) => {
           
           if (!hasNavigatedRef.current) {
             hasNavigatedRef.current = true;
-          console.log(`🚀 Ejecutando navigation.reset a GameTabs`);
-          
-          // Usar WebSocket si está disponible
+          // SOLUCIÓN ROBUSTA: Siempre intentar ambos métodos
           if (isWebSocketConnected) {
-            console.log(`🔌 Usando WebSocket para readyToPlay`);
             readyToPlay();
           }
           
-          // Navegar a GameTabs
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
-              });
+          // FALLBACK ADICIONAL: Si después de 2 segundos no hay start_round, forzar inicio
+          setTimeout(() => {
+            if (contextGameStatus !== 'in_progress' && !contextRoundTime) {
+              // PROTECCIÓN: Solo navegar si no se ha navegado ya
+              if (!hasNavigatedRef.current) {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
+                });
+              }
+            }
+          }, 2000); // 2 segundos de gracia
+          
+          // Navegar a GameTabs inmediatamente también
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'GameTabs', params: { gameId, userId, screen: 'Market' } }],
+          });
           
           return;
         } else {

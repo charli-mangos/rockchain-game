@@ -6,7 +6,7 @@ const WaitingRoomHeader = ({ title }) => {
   
   return (
     <View style={styles.container}>
-      <RotatingCube size={100} color="#000" /> 
+      <RotatingCube size={100} color="#ba5d17" /> 
       <Text style={styles.title}>{title}</Text>
     </View>
   );

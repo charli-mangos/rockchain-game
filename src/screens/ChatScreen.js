@@ -8,11 +8,10 @@ import GameHeader from '../components/GameHeader';
 import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/ChatScreenStyles';
 import DropDownPicker from 'react-native-dropdown-picker';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const ChatScreen = ({ navigation, route }) => {
-  const { gameId, userId } = useGameContextHybrid();
-  const { marketData } = useGameContextHybrid();  // ✅ Usar datos en tiempo real desde `GameContext`
+  const { gameId, userId, marketData } = useGameContextHybridRobust();
   const [priceHistory, setPriceHistory] = useState([]); // Inicializar como array vacío
   const [round, setRound] = useState(0); // Inicializar como 0
   const [marbleBasePrices, setMarbleBasePrices] = useState([]); // Inicializar como array vacío

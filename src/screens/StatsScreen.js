@@ -3,12 +3,12 @@ import { View } from 'react-native';
 import styles from '../styles/StatsScreenStyles';
 import GameHeader from '../components/GameHeader';
 import NavigationBar from '../components/NavigationBar';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
 
 const StatsScreen = ({ navigation, route }) => {
-  const { gameId, userId, allPlayersData } = useGameContextHybrid();
+  const { gameId, userId, allPlayersData } = useGameContextHybridRobust();
   
   // Usar los datos completos de todos los jugadores
   const players = allPlayersData.sort((a, b) => {
@@ -32,6 +32,7 @@ const StatsScreen = ({ navigation, route }) => {
           players={players} 
           title="Global Rankings" 
           currentUserId={userId}
+          roundRewards={null}
         />
       </View>
 

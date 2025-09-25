@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useSimpleMiningContext } from '../context/SimpleMiningContext';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import webSocketService from '../services/WebSocketService';
+import { getWebSocketService } from '../services/WebSocketServiceUniversal';
+import RotatingCube from './RotatingCube';
 
 import MarketScreen from '../screens/MarketScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -16,9 +17,10 @@ import MiningScreen from '../screens/MiningScreen';
 
 const Tab = createBottomTabNavigator();
 
+
 const Tabs = ({ route }) => {
-  const { gameId, userId } = useGameContextHybrid();
-  const { setShowMiningBubble } = useGameContextHybrid();
+  const { gameId, userId, isCalculatingRewards } = useGameContextHybridRobust();
+  const { setShowMiningBubble } = useGameContextHybridRobust();
 
   return (
     <Tab.Navigator 
@@ -48,8 +50,8 @@ const Tabs = ({ route }) => {
 };
 
 const GameTabs = ({ route }) => {
-  const { gameId, userId } = useGameContextHybrid();
-  const { showMiningBubble, setShowMiningBubble, miningQueue } = useGameContextHybrid();
+  const { gameId, userId, isCalculatingRewards, gameStatus } = useGameContextHybridRobust();
+  const { showMiningBubble, setShowMiningBubble, miningQueue } = useGameContextHybridRobust();
   const simpleMiningContext = useSimpleMiningContext();
   
   // Usar el nuevo sistema si está disponible, sino fallback al existente
@@ -66,12 +68,13 @@ const GameTabs = ({ route }) => {
     const handleRoundEnded = (data) => {
       console.log('🎮 GameTabs: Recibido round_ended:', data);
       if (data.status === 'roundEnd') {
-        console.log('🎮 GameTabs: Navegando a EndOfRoundScreen');
-        navigation.navigate('EndOfRound', { gameId, userId });
+        console.log('🎮 GameTabs: round_ended recibido, esperando a que se procesen las recompensas...');
+        // NO navegar inmediatamente - esperar a que isCalculatingRewards sea false
       }
     };
 
     // Registrar el listener
+    const webSocketService = getWebSocketService();
     webSocketService.on('round_ended', handleRoundEnded);
 
     // Cleanup
@@ -80,6 +83,14 @@ const GameTabs = ({ route }) => {
       webSocketService.off('round_ended', handleRoundEnded);
     };
   }, [gameId, userId, navigation]);
+
+  // Navegar a EndOfRoundScreen cuando las recompensas estén listas
+  useEffect(() => {
+    if (gameStatus === 'roundEnd' && !isCalculatingRewards) {
+      console.log('🎮 GameTabs: Recompensas procesadas, navegando a EndOfRoundScreen');
+      navigation.navigate('EndOfRound', { gameId, userId });
+    }
+  }, [gameStatus, isCalculatingRewards, gameId, userId, navigation]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -105,6 +116,22 @@ const GameTabs = ({ route }) => {
         </View>
       )}
       <Tabs route={route} />
+      
+      {/* Indicador de "Calculating round rewards" */}
+      {isCalculatingRewards && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContainer}>
+            <RotatingCube 
+              size={80} 
+              color="#ba5d17" 
+              duration={2000}
+              containerStyle={styles.rotatingCubeContainer}
+            />
+            <Text style={styles.loadingText}>Calculating round rewards...</Text>
+            <Text style={styles.loadingSubtext}>Processing mining rewards and industry results</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -132,6 +159,47 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 15,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  rotatingCubeContainer: {
+    marginBottom: 20,
   },
 });
 

@@ -1,14 +1,74 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import RewardAnimation from './RewardAnimation';
 
-const PlayerRankingComponent = ({ players, title, currentUserId }) => {
+const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards }) => {
   // Debug: Log de datos recibidos
   console.log('🏆 [PlayerRankingComponent] Datos recibidos:');
   console.log('🏆 [PlayerRankingComponent] players:', players);
   console.log('🏆 [PlayerRankingComponent] players.length:', players?.length || 0);
   console.log('🏆 [PlayerRankingComponent] title:', title);
   console.log('🏆 [PlayerRankingComponent] currentUserId:', currentUserId);
+  console.log('🏆 [PlayerRankingComponent] roundRewards:', roundRewards);
+
+  // Estado para manejar animaciones de recompensas
+  const [rewardAnimations, setRewardAnimations] = useState({});
+  const [previousPlayers, setPreviousPlayers] = useState([]);
+
+  // Detectar cambios en los valores de los jugadores para mostrar animaciones
+  useEffect(() => {
+    if (players && previousPlayers.length > 0) {
+      const newAnimations = {};
+      
+      players.forEach((currentPlayer, index) => {
+        const previousPlayer = previousPlayers.find(p => p.userId === currentPlayer.userId);
+        
+        if (previousPlayer) {
+          // Detectar cambios en RockCoins
+          const rockCoinsDiff = currentPlayer.rockCoins - previousPlayer.rockCoins;
+          if (rockCoinsDiff > 0) {
+            newAnimations[`${currentPlayer.userId}_rockCoins`] = {
+              reward: rockCoinsDiff,
+              type: 'rockCoins',
+              isVisible: true
+            };
+          }
+          
+          // Detectar cambios en Waste (reducción)
+          const wasteDiff = previousPlayer.waste - currentPlayer.waste;
+          if (wasteDiff > 0) {
+            newAnimations[`${currentPlayer.userId}_waste`] = {
+              reward: wasteDiff,
+              type: 'waste',
+              isVisible: true
+            };
+          }
+        }
+      });
+      
+      if (Object.keys(newAnimations).length > 0) {
+        console.log('🎬 Iniciando animaciones de recompensas:', newAnimations);
+        setRewardAnimations(newAnimations);
+        
+        // Limpiar animaciones después de 3 segundos
+        setTimeout(() => {
+          setRewardAnimations({});
+        }, 3000);
+      }
+    }
+    
+    setPreviousPlayers(players || []);
+  }, [players]);
+
+  // Función para manejar la finalización de animaciones
+  const handleAnimationComplete = (animationKey) => {
+    setRewardAnimations(prev => {
+      const newAnimations = { ...prev };
+      delete newAnimations[animationKey];
+      return newAnimations;
+    });
+  };
   
   // Memoizar el header para evitar re-renders innecesarios
   const ListHeader = useMemo(() => (
@@ -44,6 +104,10 @@ const PlayerRankingComponent = ({ players, title, currentUserId }) => {
     const balanceColor = balance > 0 ? '#2ecc71' : '#e74c3c';
     const isCurrentUser = currentUserId && item.userId === currentUserId;
     
+    // Obtener animaciones para este jugador
+    const rockCoinsAnimation = rewardAnimations[`${item.userId}_rockCoins`];
+    const wasteAnimation = rewardAnimations[`${item.userId}_waste`];
+    
     return (
       <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
         <View style={styles.cell}>
@@ -52,11 +116,27 @@ const PlayerRankingComponent = ({ players, title, currentUserId }) => {
         <View style={styles.cell}>
           <Text style={[styles.nameText, isCurrentUser && styles.currentUserText]}>{item.userName}</Text>
         </View>
-        <View style={styles.cell}>
+        <View style={[styles.cell, styles.relativeCell]}>
           <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.rockCoins}</Text>
+          {rockCoinsAnimation && (
+            <RewardAnimation
+              reward={rockCoinsAnimation.reward}
+              type={rockCoinsAnimation.type}
+              isVisible={rockCoinsAnimation.isVisible}
+              onAnimationComplete={() => handleAnimationComplete(`${item.userId}_rockCoins`)}
+            />
+          )}
         </View>
-        <View style={styles.cell}>
+        <View style={[styles.cell, styles.relativeCell]}>
           <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.waste}</Text>
+          {wasteAnimation && (
+            <RewardAnimation
+              reward={wasteAnimation.reward}
+              type={wasteAnimation.type}
+              isVisible={wasteAnimation.isVisible}
+              onAnimationComplete={() => handleAnimationComplete(`${item.userId}_waste`)}
+            />
+          )}
         </View>
         <View style={styles.cell}>
           <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.blocksMined || 0}</Text>
@@ -68,7 +148,7 @@ const PlayerRankingComponent = ({ players, title, currentUserId }) => {
         </View>
       </View>
     );
-  }, [currentUserId]);
+  }, [currentUserId, rewardAnimations]);
 
   return (
     <View style={styles.container}>
@@ -118,6 +198,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  relativeCell: {
+    position: 'relative',
   },
   headerText: {
     fontSize: 16,

@@ -4,10 +4,10 @@ import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/MarketScreenStyles';
 import GameHeader from '../components/GameHeader';
 import ExpandableProduct from '../components/ExpandableProduct';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const MarketScreen = ({ navigation, route }) => {
-  const { productList, gameId, userId } = useGameContextHybrid();
+  const { productList, gameId, userId } = useGameContextHybridRobust();
   
   // console.log('MarketScreen - productList:', productList);
   // console.log('MarketScreen - gameId:', gameId);

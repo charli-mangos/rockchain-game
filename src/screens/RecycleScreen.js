@@ -1,15 +1,40 @@
 import React, { useContext, useState } from 'react';
 import { View, Text, Button, FlatList, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import NavigationBar from '../components/NavigationBar';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/RecycleScreenStyles';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const RecycleScreen = ({ navigation, route }) => {
-  const { gameId, userId } = useGameContextHybrid();
-  const industries = ['Pharmaceutical', 'Construction', 'Additive Manufacturing'];
+  const { gameId, userId } = useGameContextHybridRobust();
+  // Industrias que utilizan residuos físicos para waste management
+  const industryData = {
+    'Construction': {
+      icon: 'construct',
+      description: 'Building & Infrastructure',
+      color: '#FF9800'
+    },
+    'Technology': {
+      icon: 'hardware-chip',
+      description: 'Software & Hardware',
+      color: '#2196F3'
+    },
+    'Healthcare': {
+      icon: 'medical',
+      description: 'Medical & Pharmaceutical',
+      color: '#4CAF50'
+    },
+    'Energy': {
+      icon: 'flash',
+      description: 'Power & Renewable Energy',
+      color: '#FFC107'
+    }
+  };
+  
+  const industries = Object.keys(industryData);
   const [selectedIndustry, setSelectedIndustry] = useState(null);
 
   const handleSelect = async (industry) => {
@@ -26,24 +51,56 @@ const RecycleScreen = ({ navigation, route }) => {
     }
   };
 
-  const renderOption = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.optionButton,
-        selectedIndustry === item ? styles.selectedOption : null,
-      ]}
-      onPress={() => handleSelect(item)}
-    >
-      <Text
+  const renderOption = ({ item }) => {
+    const industry = industryData[item];
+    const isSelected = selectedIndustry === item;
+    
+    return (
+      <TouchableOpacity
         style={[
-          styles.optionText,
-          selectedIndustry === item ? { color: '#fff' } : { color: '#000' },
+          styles.optionButton,
+          isSelected ? [styles.selectedOption, { borderColor: industry.color }] : null,
         ]}
+        onPress={() => handleSelect(item)}
       >
-        {item}
-      </Text>
-    </TouchableOpacity>
-  );
+        <View style={styles.optionContent}>
+          <View style={[styles.iconContainer, { backgroundColor: isSelected ? industry.color : '#f0f0f0' }]}>
+            <Ionicons 
+              name={industry.icon} 
+              size={24} 
+              color={isSelected ? '#fff' : industry.color} 
+            />
+          </View>
+          <View style={styles.textContainer}>
+            <Text
+              style={[
+                styles.optionText,
+                isSelected ? { color: '#fff' } : { color: '#000' },
+              ]}
+            >
+              {item}
+            </Text>
+            <Text
+              style={[
+                styles.optionDescription,
+                isSelected ? { color: '#fff' } : { color: '#666' },
+              ]}
+            >
+              {industry.description}
+            </Text>
+          </View>
+          {isSelected && (
+            <Ionicons 
+              name="checkmark-circle" 
+              size={24} 
+              color="#4CAF50" 
+              style={styles.checkIcon}
+            />
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.screenContainer}>
@@ -56,10 +113,13 @@ const RecycleScreen = ({ navigation, route }) => {
 
         <View style={styles.questContainer}>
             <Text style={styles.questionText}>
-                Choose the industry you want to invest your waste in.
+                Select the Recycling Industry
             </Text>
             <Text style={styles.text}>
-                The result will be a random selection each round. Good luck!
+                Choose which industry you think will win this round. If you guess correctly, your waste will be reduced.
+            </Text>
+            <Text style={styles.subText}>
+                The winning industry is randomly selected each round. Good luck!
             </Text>
             <FlatList
                 data={industries}

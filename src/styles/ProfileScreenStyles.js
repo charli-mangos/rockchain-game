@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 10,
-    color: '#2f4f4f',
+    color: '#1d3d39',
   },
   inventoryStats: {
     flexDirection: 'column',
@@ -98,6 +98,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
+    color: '#1d3d39',
   },
   input: {
     width: '100%',

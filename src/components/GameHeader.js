@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Image, Alert } from 'react-native';
 import { functions } from '../../firebase';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { Ionicons } from '@expo/vector-icons';
 import { Animated, Easing } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -9,7 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
 
 const GameHeader = ({ title, userId, gameId, currentScreen }) => {
-  const { countdown, round, webSocketInventory } = useGameContextHybrid();
+  const { countdown, round, webSocketInventory } = useGameContextHybridRobust();
   const rockCoins = webSocketInventory.rockCoins || 600;
   const waste = webSocketInventory.waste || 0;
   const rockCoinsAnim = useRef(new Animated.Value(1)).current;
@@ -161,12 +161,14 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
       </View>
       <View style={styles.bottomContainer}>
         <Text style={styles.title}>{title}</Text>
-        <View style={styles.roundTimerContainer}>
-          <Text style={styles.round}>R{round}</Text>
-          <View style={styles.timerContainer}>
-            <Text style={countdown <= 10 ? styles.timerRed : styles.timer}>{countdown}s</Text>
+        {currentScreen !== 'EndOfRound' && (
+          <View style={styles.roundTimerContainer}>
+            <Text style={styles.round}>R{round}</Text>
+            <View style={styles.timerContainer}>
+              <Text style={countdown <= 10 ? styles.timerRed : styles.timer}>{countdown}s</Text>
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       <Modal

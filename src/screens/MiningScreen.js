@@ -3,10 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, Alert, ScrollView, KeyboardAvo
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { db, functions, auth } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useSimpleMiningContext } from '../context/SimpleMiningContext';
 import { callAuthenticatedFunction } from '../utils/authHelper';
-import webSocketService from '../services/WebSocketService';
+import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 import styles from '../styles/MiningScreenStyles';
 import GameHeader from '../components/GameHeader';
 import CustomNumericKeyboard from '../components/CustomNumericKeyboard';
@@ -21,7 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
 const MiningScreen = ({ route, navigation }) => {
-  const { gameId, userId } = useGameContextHybrid();
+  const { gameId, userId } = useGameContextHybridRobust();
   const { 
     miningProblems, 
     localPendingProblems,
@@ -44,7 +44,7 @@ const MiningScreen = ({ route, navigation }) => {
     setCurrentTransactionUserName,
     setCurrentProductDetails,
     setCurrentTransactionType
-  } = useGameContextHybrid();
+  } = useGameContextHybridRobust();
   
   const { openProblem, currentViewStart } = useSimpleMiningContext();  
   const { responses, updateResponses } = useResponses(gameId, blockId);
@@ -89,14 +89,13 @@ const MiningScreen = ({ route, navigation }) => {
     setCurrentTimerTime(time);
   };
 
-  // Función para formatear el tiempo en formato mm:ss.ms
+  // Función para formatear el tiempo en formato mm:ss
   const formatTime = (milliseconds) => {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    const ms = Math.floor((milliseconds % 1000) / 10); // Centésimas de segundo
     
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
   
   // Verificar si tenemos datos válidos para renderizar
@@ -352,7 +351,8 @@ const MiningScreen = ({ route, navigation }) => {
         setIsLastBlock(true);
         
         // Si no hay más problemas, limpiar miningQueue en el servidor y resetear timestamp
-        if (webSocketService.isConnected) {
+        const webSocketService = getWebSocketService();
+        if (webSocketService.isConnected && webSocketService.socket) {
           console.log('🧹 Último problema respondido, limpiando miningQueue...');
           webSocketService.socket.emit('clear_mining_queue', {
             gameId,
@@ -376,21 +376,24 @@ const MiningScreen = ({ route, navigation }) => {
       
       try {
         // Verificar que WebSocket esté conectado
+        const webSocketService = getWebSocketService();
         if (!webSocketService.isConnected) {
           console.log('⚠️ WebSocket no conectado, intentando conectar...');
           await webSocketService.connect();
         }
         
         // Enviar vía WebSocket usando el nuevo sistema
-        webSocketService.socket.emit('mining:submit', {
-          blockId,
-          userId,
-          response: userResponse,
-          userName: userName || "Unknown",
-          responseTime: responseTime
-        });
-        
-        console.log('✅ Respuesta enviada vía WebSocket');
+        if (webSocketService.socket) {
+          webSocketService.socket.emit('mining:submit', {
+            blockId,
+            userId,
+            response: userResponse,
+            userName: userName || "Unknown",
+            responseTime: responseTime
+          });
+          
+          console.log('✅ Respuesta enviada vía WebSocket');
+        }
       } catch (error) {
         console.error('❌ Error enviando respuesta vía WebSocket:', error);
         // No fallar si WebSocket falla, ya mostramos el resultado local
@@ -459,7 +462,8 @@ const MiningScreen = ({ route, navigation }) => {
     
     
     // Limpiar miningQueue en el servidor
-    if (webSocketService.isConnected) {
+    const webSocketService = getWebSocketService();
+    if (webSocketService.isConnected && webSocketService.socket) {
       console.log('🧹 Enviando clear_mining_queue al servidor...');
       webSocketService.socket.emit('clear_mining_queue', {
         gameId,
@@ -529,7 +533,7 @@ const MiningScreen = ({ route, navigation }) => {
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
               {isWaiting ? (
                 <View style={styles.waitingContainer}>
-                  <RotatingCube size={80} color="#000" /> 
+                  <RotatingCube size={80} color="#ba5d17" /> 
                   <Text style={styles.waitingText}>Loading results...</Text>
                 </View>
               ) : results && results.length > 0 && currentProblem ? (
@@ -627,7 +631,7 @@ const MiningScreen = ({ route, navigation }) => {
                 })()
               ) : (
                 <View style={styles.waitingContainer}>
-                  <RotatingCube size={80} color="#000" />
+                  <RotatingCube size={80} color="#ba5d17" />
                   <Text style={styles.waitingText}>
                     {!blockId ? 'Loading block...' : !currentProblem ? 'Loading problem...' : 'Preparing mining...'}
                   </Text>

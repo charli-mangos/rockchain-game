@@ -11,7 +11,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 21,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   scrollContent: {
     flexGrow: 1,
@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
   industryTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#1d3d39',
     marginBottom: 16,
   },
   industryInfo: {
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     position: 'absolute',
-    bottom: 50,
+    bottom: 30,
     left: 20,
     right: 20,
   },
@@ -96,6 +96,80 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  // Banner de éxito para acertar industria
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2ecc71',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
+    shadowColor: '#2ecc71',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  successBannerIcon: {
+    fontSize: 28,
+    marginRight: 12,
+    color: '#fff',
+  },
+  successBannerText: {
+    flex: 1,
+  },
+  successBannerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  successBannerSubtitle: {
+    fontSize: 13,
+    color: '#fff',
+    opacity: 0.9,
+    lineHeight: 18,
+  },
+  // Banner de fallo para no acertar industria
+  failBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e74c3c',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
+    shadowColor: '#e74c3c',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  failBannerIcon: {
+    fontSize: 28,
+    marginRight: 12,
+    color: '#fff',
+  },
+  failBannerText: {
+    flex: 1,
+  },
+  failBannerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  failBannerSubtitle: {
+    fontSize: 13,
+    color: '#fff',
+    opacity: 0.9,
+    lineHeight: 18,
   },
 });
 

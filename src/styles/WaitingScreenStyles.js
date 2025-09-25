@@ -16,6 +16,7 @@ export default StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
+    color: '#1d3d39',
   },
   playerCountLabel: {
     fontSize: 16,

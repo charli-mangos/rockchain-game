@@ -4,19 +4,19 @@ import { doc, updateDoc, getDoc, arrayUnion, arrayRemove } from 'firebase/firest
 import { db, functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useProductDetails } from '../hooks/useProductDetails';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import styles from '../styles/ExpandableProductStyle';
-import webSocketService from '../services/WebSocketService';
+import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 
 const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
   const [expanded, setExpanded] = useState(false);
   const [showSummary, setShowSummary] = useState(false); // Controla si se muestra el resumen de compra
   const navigation = useNavigation();
-  const { setCurrentBlockId, incrementMiningQueue, webSocketInventory } = useGameContextHybrid(); // Importar correctamente el contexto
+  const { setCurrentBlockId, incrementMiningQueue, webSocketInventory } = useGameContextHybridRobust();
 
   const images = {
     'Red': {
@@ -61,7 +61,8 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       });
 
       // Enviar transacción directamente al WebSocket
-      if (webSocketService.isConnected) {
+      const webSocketService = getWebSocketService();
+      if (webSocketService.isConnected && webSocketService.socket) {
         webSocketService.socket.emit('product_transaction', {
           gameId,
           userId,
@@ -188,8 +189,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         return;
       }
   
-      // Procesar compra vía WebSocket
-      if (webSocketService.isConnected) {
+      // Procesar compra vía WebSocket (como en el contexto original)
+      const webSocketService = getWebSocketService();
+      if (webSocketService.isConnected && webSocketService.socket) {
         console.log('🛒 Procesando compra vía WebSocket');
         webSocketService.socket.emit('product_transaction', {
           gameId,
@@ -198,26 +200,21 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
           transactionType: 'purchase'
         });
         
-        // NO llamar a generateProblem ni incrementMiningQueue aquí
-        // El WebSocket se encarga de todo
         console.log("Product purchased successfully via WebSocket");
         setExpanded(false);
         navigation.navigate('Profile', { gameId, userId });
         return; // Salir aquí para evitar procesamiento local
       } else {
         console.log('⚠️ WebSocket no conectado, procesando localmente');
+        
+        // Solo procesar localmente si WebSocket no está conectado
+        await generateProblem(product, 'purchase');
+        incrementMiningQueue();
+        
+        console.log("Product purchased successfully");
+        setExpanded(false);
+        navigation.navigate('Profile', { gameId, userId });
       }
-
-      // Solo procesar localmente si WebSocket no está conectado
-      // Generar problema de minería
-      await generateProblem(product, 'purchase');
-      
-      incrementMiningQueue();
-  
-      console.log("Product purchased successfully");
-
-      setExpanded(false);
-      navigation.navigate('Profile', { gameId, userId });
     } catch (error) {
       console.error("Error in handlePurchase:", {
         error,
@@ -238,8 +235,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         return;
       }
 
-      // Procesar venta vía WebSocket
-      if (webSocketService.isConnected) {
+      // Procesar venta vía WebSocket (como en el contexto original)
+      const webSocketService = getWebSocketService();
+      if (webSocketService.isConnected && webSocketService.socket) {
         console.log('🛒 Procesando venta vía WebSocket');
         webSocketService.socket.emit('product_transaction', {
           gameId,
@@ -248,23 +246,19 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
           transactionType: 'sell'
         });
         
-        // NO llamar a generateProblem ni incrementMiningQueue aquí
-        // El WebSocket se encarga de todo
         console.log("Product sold successfully via WebSocket");
         setExpanded(false);
         return; // Salir aquí para evitar procesamiento local
       } else {
         console.log('⚠️ WebSocket no conectado, procesando localmente');
+        
+        // Solo procesar localmente si WebSocket no está conectado
+        await generateProblem(product, 'sell');
+        incrementMiningQueue();
+        
+        console.log("Product sold successfully");
+        setExpanded(false);
       }
-
-      // Solo procesar localmente si WebSocket no está conectado
-      // Generar problema de minería
-      await generateProblem(product, 'sell');
-
-      incrementMiningQueue(); // Se incrementa la burbuja de minería
-
-      console.log("Product sold successfully");
-      setExpanded(false); // Cerrar el modal
     } catch (error) {
       console.error("Error selling product:", error);
       Alert.alert("Error", "An error occurred while processing the sale.");

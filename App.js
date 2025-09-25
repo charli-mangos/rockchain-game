@@ -10,12 +10,11 @@ import WaitingRoomScreen from './src/screens/WaitingRoomScreen';
 import GameTabs from './src/components/GameTabs';  // Importar el componente GameTabs que maneja el Tab Navigator
 import EndOfRoundScreen from './src/screens/EndOfRoundScreen';
 import GameResultsScreen from './src/screens/GameResultsScreen';
-import { callGenerateProducts } from './src/components/callGenerateProducts';
-import { GameProviderHybrid } from './src/context/GameContextHybrid';
+import { GameProviderHybridRobust } from './src/context/GameContextHybridRobust';
 import { SimpleMiningProvider } from './src/context/SimpleMiningContext';
+import NetworkStatusBanner from './src/components/NetworkStatusBanner';
 
 import { HermesInternal } from 'react-native';
-console.log("Hermes está activo:", !!HermesInternal);
 
 
 const Stack = createStackNavigator();
@@ -23,8 +22,6 @@ const Stack = createStackNavigator();
 const App = () => {
   const [gameParams, setGameParams] = useState(null);
   
-  // Logging para debug
-  console.log('🔍 App.js - gameParams actual:', gameParams);
 
   // Ocultar la barra de navegación del sistema en Android
   useEffect(() => {
@@ -33,16 +30,13 @@ const App = () => {
     }
   }, []);
 
-  // useEffect(() => {
-  //   // Llama a la función solo una vez
-  //   callGenerateProducts();
-  // }, []);
 
   return (
     <NavigationContainer>
       {gameParams ? (
-        <GameProviderHybrid gameId={gameParams.gameId} userId={gameParams.userId}>
+        <GameProviderHybridRobust gameId={gameParams.gameId} userId={gameParams.userId}>
           <SimpleMiningProvider gameId={gameParams.gameId} userId={gameParams.userId}>
+            <NetworkStatusBanner />
             <Stack.Navigator 
               initialRouteName="Game"
               screenOptions={{
@@ -61,7 +55,7 @@ const App = () => {
               <Stack.Screen name="GameResults" component={GameResultsScreen} />
             </Stack.Navigator>
           </SimpleMiningProvider>
-        </GameProviderHybrid>
+        </GameProviderHybridRobust>
       ) : (
         <Stack.Navigator 
           initialRouteName="Login"

@@ -110,6 +110,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 30,
+    color: '#1d3d39',
   },
   messageContainer: {
     width: '100%',
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
   blockTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#1d3d39',
     marginBottom: 5,
   },
   blockText: {

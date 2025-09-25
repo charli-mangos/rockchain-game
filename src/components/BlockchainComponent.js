@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useUserName } from '../hooks/useUserName';
 
 const BlockCard = ({ block, index, showReward, currentUserId }) => {
@@ -31,7 +31,7 @@ const BlockConnection = () => (
 );
 
 const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null, currentUserId }) => {
-  const { webSocketInventory, minedBlocks, round } = useGameContextHybrid();
+  const { webSocketInventory, minedBlocks, round } = useGameContextHybridRobust();
   const [blocks, setBlocks] = useState([]);
 
   useEffect(() => {

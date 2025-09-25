@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
 import BlockchainComponent from '../components/BlockchainComponent';
@@ -22,7 +22,7 @@ const EndOfRoundScreen = ({ route }) => {
     winningIndustry,
     isWebSocketConnected,
     webSocketService
-  } = useGameContextHybrid();
+  } = useGameContextHybridRobust();
   
   // Usar los datos completos de todos los jugadores
   const players = allPlayersData.sort((a, b) => {
@@ -88,16 +88,10 @@ const EndOfRoundScreen = ({ route }) => {
     // Si estamos usando WebSocket, simplificar la lógica
     if (isWebSocketConnected) {
       console.log('🔌 Usando sistema híbrido - datos ya disponibles desde WebSocket');
+      console.log('💰 Las recompensas se procesan automáticamente en el servidor cuando llega round_ended');
       
-      // Asignar recompensas usando WebSocket (con retraso para asegurar que los datos lleguen primero)
-      if (!rewardsProcessedRef.current) {
-        console.log('💰 Programando asignación de recompensas vía WebSocket en 1 segundo');
-        setTimeout(() => {
-          console.log('💰 Asignando recompensas vía WebSocket');
-          webSocketService.assignRoundRewards();
-          rewardsProcessedRef.current = true;
-        }, 1000);
-      }
+      // NO llamar assignRoundRewards desde el cliente - se procesa automáticamente en el servidor
+      rewardsProcessedRef.current = true;
       
       // Obtener industria seleccionada del usuario desde Firestore
       const userRef = doc(db, 'users', userId);
@@ -320,6 +314,7 @@ const EndOfRoundScreen = ({ route }) => {
           players={players} 
           title="Round Rankings" 
           currentUserId={userId}
+          roundRewards={null}
         />
 
         <View style={styles.industryContainer}>
@@ -340,6 +335,33 @@ const EndOfRoundScreen = ({ route }) => {
                 {userSelectedIndustry}
               </Text>
             </View>
+            
+            {/* Señalización visual para acertar industria */}
+            {userSelectedIndustry === winningIndustry && winningIndustry && (
+              <View style={styles.successBanner}>
+                <Text style={styles.successBannerIcon}>✓</Text>
+                <View style={styles.successBannerText}>
+                  <Text style={styles.successBannerTitle}>Industry guessed!</Text>
+                  <Text style={styles.successBannerSubtitle}>
+                    Your waste it's been reduced
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Señalización visual para no acertar */}
+            {userSelectedIndustry !== winningIndustry && userSelectedIndustry && winningIndustry && (
+              <View style={styles.failBanner}>
+                <Text style={styles.failBannerIcon}>✕</Text>
+                <View style={styles.failBannerText}>
+                  <Text style={styles.failBannerTitle}>Industry Missed</Text>
+                  <Text style={styles.failBannerSubtitle}>
+                    No waste reduction this round
+                  </Text>
+                </View>
+              </View>
+            )}
+            
             {rewardMessage && (
               <View style={styles.rewardContainer}>
                 <Text style={styles.rewardText}>{rewardMessage}</Text>

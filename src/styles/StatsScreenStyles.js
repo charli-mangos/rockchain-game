@@ -58,6 +58,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginVertical: 10,
+    color: '#1d3d39',
   },
   playersContainer: {
     flex: 1,
@@ -84,6 +85,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     padding: 20,
+    color: '#1d3d39',
   }
 });
 

@@ -151,7 +151,7 @@ const LoginScreen = ({ navigation, route }) => {
     <DismissKeyboardView style={styles.container}>
       <WelcomeHeader title="Welcome to RockChain" />
       {loading ? (
-        <RotatingCube size={80} color="#000" /> 
+        <RotatingCube size={80} color="#ba5d17" /> 
       ) : (
         <>
           {showUserName && (

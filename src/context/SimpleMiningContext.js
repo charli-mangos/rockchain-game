@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import webSocketService from '../services/WebSocketService';
+import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 export const SimpleMiningContext = createContext();
 
@@ -20,6 +20,7 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
       return;
     }
 
+    const webSocketService = getWebSocketService();
     if (!webSocketService.isConnected) {
       console.error('❌ WebSocket no está conectado');
       return;
@@ -59,6 +60,7 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
     };
 
     // Registrar listeners
+    const webSocketService = getWebSocketService();
     webSocketService.on('mining:pending-count:result', handlePendingCountResult);
     webSocketService.on('new_mining_problem', handleNewMiningProblem);
 
@@ -70,6 +72,7 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
     // Cleanup
     return () => {
       console.log(`[SIMPLE-MINING] Limpiando listeners para gameId=${gameId}, userId=${userId}`);
+      const webSocketService = getWebSocketService();
       webSocketService.off('mining:pending-count:result', handlePendingCountResult);
       webSocketService.off('new_mining_problem', handleNewMiningProblem);
     };
@@ -84,6 +87,7 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
       return;
     }
 
+    const webSocketService = getWebSocketService();
     if (!webSocketService.isConnected) {
       console.error('❌ WebSocket no está conectado');
       return;
@@ -118,6 +122,7 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
       }
     };
 
+    const webSocketService = getWebSocketService();
     webSocketService.on('mining:problem-open:ack', handleProblemOpenAck);
 
     // Listener para actualizaciones de bloque en tiempo real
@@ -129,6 +134,7 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
     webSocketService.on('mining:block-update', handleBlockUpdate);
 
     return () => {
+      const webSocketService = getWebSocketService();
       webSocketService.off('mining:problem-open:ack', handleProblemOpenAck);
       webSocketService.off('mining:block-update', handleBlockUpdate);
     };

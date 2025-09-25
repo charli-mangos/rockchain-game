@@ -8,13 +8,22 @@ import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/ProfileScreenStyles';
 import GameHeader from '../components/GameHeader';
 import ExpandableProduct from '../components/ExpandableProduct';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 
 const ProfileScreen = ({ navigation, route }) => {
-  const { userData, webSocketInventory, gameId, userId } = useGameContextHybrid();
-  const userProducts = webSocketInventory.products || []; 
+  const { userData, webSocketInventory, gameId, userId } = useGameContextHybridRobust();
+  const userProducts = webSocketInventory?.products || []; 
   const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
+  
+  // Proteger contra userData null
+  if (!userData) {
+    return (
+      <View style={styles.container}>
+        <Text>Cargando datos del usuario...</Text>
+      </View>
+    );
+  }
 
   // Función para seleccionar una imagen desde la galería
   const pickImage = async () => {

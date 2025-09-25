@@ -7,11 +7,10 @@ import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
-import { useGameContextHybrid } from '../context/GameContextHybrid';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const GameResultsScreen = ({ route }) => {
-  const { gameId, userId } = useGameContextHybrid();
-  const { allPlayersData } = useGameContextHybrid(); // Usar el contexto híbrido
+  const { gameId, userId, allPlayersData } = useGameContextHybridRobust();
   
   // Usar los datos completos de todos los jugadores
   const players = allPlayersData.sort((a, b) => {
@@ -123,6 +122,7 @@ const GameResultsScreen = ({ route }) => {
           players={players} 
           title="Final Rankings" 
           currentUserId={userId}
+          roundRewards={null}
         />
         
 

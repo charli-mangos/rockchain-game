@@ -1,8 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons'; // Asegúrate de tener @expo/vector-icons instalado
+import { Animated, StyleSheet, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-const RotatingCube = ({ size = 80, color = '#000' }) => {
+const RotatingCube = ({ 
+  size = 80, 
+  color = '#ba5d17', 
+  duration = 2000,
+  style = {},
+  containerStyle = {} 
+}) => {
   const spinValue = useRef(new Animated.Value(0)).current;
 
   // Animación de rotación
@@ -10,14 +16,14 @@ const RotatingCube = ({ size = 80, color = '#000' }) => {
     const spinAnimation = Animated.loop(
       Animated.timing(spinValue, {
         toValue: 1,
-        duration: 2000, // Duración del giro en milisegundos
+        duration: duration,
         useNativeDriver: true,
       })
     );
     spinAnimation.start();
 
     return () => spinAnimation.stop(); // Detiene la animación si el componente se desmonta
-  }, [spinValue]);
+  }, [spinValue, duration]);
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
@@ -25,9 +31,11 @@ const RotatingCube = ({ size = 80, color = '#000' }) => {
   });
 
   return (
-    <Animated.View style={{ transform: [{ rotate: spin }] }}>
-      <MaterialCommunityIcons name="cube" size={size} color={color} />
-    </Animated.View>
+    <View style={[styles.container, containerStyle]}>
+      <Animated.View style={[{ transform: [{ rotate: spin }] }, style]}>
+        <MaterialCommunityIcons name="cube" size={size} color={color} />
+      </Animated.View>
+    </View>
   );
 };
 
