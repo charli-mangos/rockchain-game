@@ -56,9 +56,6 @@ gcloud run deploy $SERVICE_NAME \
   --region $REGION \
   --allow-unauthenticated \
   --port 8080 \
-  --set-env-vars CORS_ORIGINS="$CORS_ORIGINS" \
-  --set-env-vars PING_INTERVAL=20000,PING_TIMEOUT=20000 \
-  --set-env-vars FIREBASE_PROJECT_ID=$PROJECT_ID \
   --memory 512Mi \
   --cpu 1 \
   --min-instances 0 \
