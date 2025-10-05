@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   miningBubble: {
-    backgroundColor: '#feda8c',
+    backgroundColor: '#ba5d17',
     borderRadius: 8,
     width: 120,
     height: 50,

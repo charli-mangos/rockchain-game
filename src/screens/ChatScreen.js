@@ -230,7 +230,7 @@ const ChatScreen = ({ navigation, route }) => {
       <View style={styles.headerCell}>
         <Image 
           source={require('../assets/RockCoinBlack.png')} 
-          style={[styles.rockCoinIcon, { tintColor: '#666' }]} 
+          style={[styles.rockCoinIcon, { tintColor: '#1d3d39' }]} 
           resizeMode="contain"
         />
       </View>

@@ -20,7 +20,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
   const getWebSocket = () => getWebSocketService();
   
   // Estados del juego
-  const [countdown, setCountdown] = useState(120);
+  const [countdown, setCountdown] = useState(30);
   const [roundTime, setRoundTime] = useState(null);
   const [round, setRound] = useState(0);
   const [gameStatus, setGameStatus] = useState('waiting');
@@ -415,6 +415,10 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       } else if (data.status === 'waitingForNextRound') {
         console.log('🎮 Navegando a EndOfRoundWaiting - estado waitingForNextRound');
         safeNavigate('EndOfRoundWaiting');
+      } else if (data.status === 'roundEnd') {
+        console.log('🎮 Estado roundEnd recibido - GameTabs se encargará de la navegación a EndOfRoundScreen');
+        // Cambiar isCalculatingRewards a false para permitir navegación
+        setIsCalculatingRewards(false);
       }
     });
 
@@ -735,7 +739,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
           console.log('🚀 Forzando start_round manualmente...');
           
           // Forzar start_round manualmente
-          const futureTime = new Date(Date.now() + 120000); // 2 minutos
+          const futureTime = new Date(Date.now() + 30000); // 30 segundos para pruebas
           setGameStatus('in_progress');
           setRoundTime(futureTime);
           setRound(1);
@@ -748,7 +752,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       console.log('📄 WebSocket desconectado, forzando directamente...');
       
       // Forzar inmediatamente si no hay WebSocket
-      const futureTime = new Date(Date.now() + 120000); // 2 minutos
+      const futureTime = new Date(Date.now() + 30000); // 30 segundos para pruebas
       setGameStatus('in_progress');
       setRoundTime(futureTime);
       setRound(1);
@@ -1098,8 +1102,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
     }
     
     if (!roundTime) {
-      console.log("⚠️ No hay roundTime, manteniendo countdown en 120");
-      setCountdown(120);
+      console.log("⚠️ No hay roundTime, manteniendo countdown en 30");
+      setCountdown(30);
       return;
     }
 
@@ -1136,8 +1140,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
         setCountdown(0);
       } else {
         // console.log("⏳ countdown tick (otros estados):", totalSecondsLeft, "- manteniendo en 120");
-        // En otros estados, mantener countdown en 120
-        setCountdown(120);
+        // En otros estados, mantener countdown en 30
+        setCountdown(30);
       }
     }, 1000);
 

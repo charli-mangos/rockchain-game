@@ -62,13 +62,15 @@ const ProfileScreen = ({ navigation, route }) => {
           userId={userId}
           onSettingsPress={() => console.log('Settings Pressed')}
         />
-        <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.userInfoContainer}>
-          <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={[styles.avatar, { tintColor: '#1d3d39' }]} />
-          <Text style={[styles.userName, { color: '#1d3d39' }]}>{userData.userName}</Text>
-        </TouchableOpacity>
+        {/* Contenedor horizontal para usuario e inventario */}
+        <View style={styles.horizontalContainer}>
+          <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.userInfoContainer}>
+            <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={[styles.avatar, { tintColor: '#1d3d39' }]} />
+            <Text style={[styles.userName, { color: '#1d3d39' }]}>{userData.userName}</Text>
+          </TouchableOpacity>
 
-        {/* Información del inventario */}
-        <View style={styles.inventoryInfo}>
+          {/* Información del inventario */}
+          <View style={styles.inventoryInfo}>
           <Text style={styles.inventoryTitle}>Inventory Status</Text>
           <View style={styles.inventoryStats}>
             <View style={styles.inventoryStatRow}>
@@ -88,6 +90,7 @@ const ProfileScreen = ({ navigation, route }) => {
               <Text style={styles.inventoryStat}>Products: {userProducts.length}</Text>
             </View>
           </View>
+        </View>
         </View>
 
         {/* Modal para editar el perfil */}

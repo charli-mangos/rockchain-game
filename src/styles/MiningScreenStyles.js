@@ -28,6 +28,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 6, // Reducido de 8 a 6
+    color: '#1d3d39',
   },
   transactionInfoText: {
     fontSize: 16,
@@ -36,7 +37,7 @@ const styles = StyleSheet.create({
   timerContainer: {
     marginTop: 10,
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fdf4e8',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
@@ -60,6 +61,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 12, // Reducido de 16 a 12
     textAlign: 'center',
+    color: '#1d3d39',
   },
   input: {
     width: '100%',
@@ -71,6 +73,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 18,
     textAlign: 'center',
+    color: '#1d3d39',
   },
   submitButton: {
     backgroundColor: '#ba5d17',
@@ -121,7 +124,7 @@ const styles = StyleSheet.create({
   congratsText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#27ae60',
+    color: '#2d5a56',
   },
   errorText: {
     fontSize: 18,
@@ -252,7 +255,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#ba5d17',
     borderRadius: 8, // Mismo borderRadius que el botón Submit
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fdf4e8',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 30, // Mismo padding que el botón Submit
@@ -267,7 +270,7 @@ const styles = StyleSheet.create({
   },
   answerDisplayActive: {
     borderColor: '#ba5d17',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#fdf4e8',
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 4,

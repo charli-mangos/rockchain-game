@@ -613,7 +613,7 @@ const MiningScreen = ({ route, navigation }) => {
                         activeOpacity={0.8}
                       >
                         <Text style={styles.answerText}>
-                          {response || '0'}
+                          {response || ''}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -652,7 +652,7 @@ const MiningScreen = ({ route, navigation }) => {
                   disabled={currentProblemIndex === 0}
                   style={[styles.navButton, currentProblemIndex === 0 && styles.navButtonDisabled]}
                 >
-                  <Ionicons name="chevron-back-circle-outline" size={50} color={currentProblemIndex === 0 ? 'gray' : '#1d3d39'} />
+                  <Ionicons name="chevron-back-circle-outline" size={50} color={currentProblemIndex === 0 ? '#ccc' : '#1d3d39'} />
                 </TouchableOpacity>
 
                 <View style={styles.miningButtonContainer}>
@@ -667,7 +667,7 @@ const MiningScreen = ({ route, navigation }) => {
                   disabled={!hasMoreProblems()}
                   style={[styles.navButton, !hasMoreProblems() && styles.navButtonDisabled]}
                 >
-                  <Ionicons name="chevron-forward-circle-outline" size={50} color={!hasMoreProblems() ? 'gray' : '#1d3d39'} />
+                  <Ionicons name="chevron-forward-circle-outline" size={50} color={!hasMoreProblems() ? '#ccc' : '#1d3d39'} />
                 </TouchableOpacity>
               </View>
             )}

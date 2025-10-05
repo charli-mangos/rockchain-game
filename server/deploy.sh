@@ -4,7 +4,7 @@ set -euo pipefail
 # Configuración
 SERVICE_NAME="rockchain-socket"
 REGION="europe-west1"
-PROJECT_ID="tu-proyecto-gcp"
+PROJECT_ID="rockchain-83a7f"
 CORS_ORIGINS="https://app.tudominio.com,https://staging.tudominio.com"
 
 echo "🚀 Desplegando RockChain Socket Server..."

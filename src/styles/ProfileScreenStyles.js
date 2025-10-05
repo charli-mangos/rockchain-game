@@ -10,10 +10,15 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#fff',
   },
-  userInfoContainer: {
-    alignItems: 'center',
+  horizontalContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
     marginVertical: 20,
-    marginHorizontal: '30%',
+    gap: 10,
+  },
+  userInfoContainer: {
+    flex: 1,
+    alignItems: 'center',
     padding: 10,
     backgroundColor: '#fdf4e8',
     borderRadius: 10,
@@ -31,8 +36,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   inventoryInfo: {
-    marginHorizontal: 20,
-    marginBottom: 20,
+    flex: 1,
     padding: 15,
     backgroundColor: '#fdf4e8',
     borderRadius: 10,

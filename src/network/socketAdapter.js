@@ -54,13 +54,13 @@ class SocketAdapter {
 
   async _doConnect() {
     try {
-      console.log('🔌 [SocketAdapter] Iniciando conexión a Cloud Run...');
-      
-      // Usar la misma lógica que WebSocketServiceUniversal para determinar URL
+      // Determinar si usar Cloud Run o servidor local
       const wsUrl = shouldUseAutodiscovery() 
-        ? 'http://localhost:3001' 
+        ? 'ws://localhost:3001' 
         : process.env.EXPO_PUBLIC_WEBSOCKET_URL || 'wss://your-socket-server.example.com';
       
+      const serverType = wsUrl.includes('localhost') ? 'Servidor Local' : 'Cloud Run';
+      console.log(`🔌 [SocketAdapter] Iniciando conexión a ${serverType}...`);
       console.log('🔌 [SocketAdapter] Conectando a:', wsUrl);
       
       // Crear socket
@@ -75,7 +75,7 @@ class SocketAdapter {
       // Esperar conexión
       await this._waitForConnection();
       
-      console.log('🔌 [SocketAdapter] Conectado exitosamente a Cloud Run');
+      console.log(`🔌 [SocketAdapter] Conectado exitosamente a ${serverType}`);
       return true;
       
     } catch (error) {
@@ -88,7 +88,9 @@ class SocketAdapter {
   // Configurar listeners de eventos Cloud Run
   _setupEventListeners() {
     this.socket.on('connect', () => {
-      console.log('🔌 [SocketAdapter] Conectado al servidor Cloud Run');
+      const wsUrl = this.socket.io.uri;
+      const serverType = wsUrl.includes('localhost') ? 'Servidor Local' : 'Cloud Run';
+      console.log(`🔌 [SocketAdapter] Conectado al ${serverType}`);
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this._emit('connection_success', { socketId: this.socket.id });

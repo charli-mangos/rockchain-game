@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   blockCard: {
-    backgroundColor: 'white',
+    backgroundColor: '#fdf4e8',
     borderWidth: 1,
     borderColor: '#1d3d39',
     borderRadius: 8,

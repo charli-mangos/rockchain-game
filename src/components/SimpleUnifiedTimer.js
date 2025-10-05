@@ -109,17 +109,17 @@ const styles = StyleSheet.create({
   timerContainer: {
     marginTop: 10,
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fdf4e8',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#ba5d17',
   },
   timerText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#ba5d17',
     fontFamily: 'monospace',
   },
 });
