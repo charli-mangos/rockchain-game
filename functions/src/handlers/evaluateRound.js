@@ -100,7 +100,7 @@ exports.evaluateRound = onCall({
         let finalWinningIndustry = currentGameData.winningIndustry;
         if (!finalWinningIndustry) {
           console.log(`⚠️ No hay winningIndustry, seleccionando uno por defecto`);
-          const industries = ['Construction', 'Technology', 'Healthcare', 'Finance', 'Energy'];
+          const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
           finalWinningIndustry = industries[Math.floor(Math.random() * industries.length)];
         }
 

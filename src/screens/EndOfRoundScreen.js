@@ -5,6 +5,7 @@ import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
+import RewardAnimation from '../components/RewardAnimation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db, functions } from '../../firebase';
 import { useNavigation } from '@react-navigation/native';
@@ -19,9 +20,13 @@ const EndOfRoundScreen = ({ route }) => {
     round, 
     isReadyForNextRound, 
     markPlayerReady, 
+    markRoundReady,
     winningIndustry,
     isWebSocketConnected,
-    webSocketService
+    webSocketService,
+    roundRewards,
+    setRoundRewards,
+    roundReadyError
   } = useGameContextHybridRobust();
   
   // Usar los datos completos de todos los jugadores
@@ -42,7 +47,6 @@ const EndOfRoundScreen = ({ route }) => {
   console.log('🎮 [EndOfRoundScreen] isWebSocketConnected:', isWebSocketConnected);
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
   const [rewardMessage, setRewardMessage] = useState(null);
-  const [roundRewards, setRoundRewards] = useState(null);
   const navigation = useNavigation();
 
   // Refs para controlar el estado de procesamiento
@@ -61,7 +65,7 @@ const EndOfRoundScreen = ({ route }) => {
       effectRunRef.current = false;
       isNavigatingRef.current = false; // Resetear estado de navegación
       setRewardMessage(null);
-      setRoundRewards(null);
+      // NO limpiar roundRewards aquí - viene del contexto global
       
       // Limpiar cualquier suscripción anterior
       if (unsubscribeRef.current) {
@@ -129,6 +133,7 @@ const EndOfRoundScreen = ({ route }) => {
               message += `\nTotal: +${totalRewards} RockCoins`;
               console.log(`🎁 Mostrando mensaje de recompensas para ronda ${round}: ${message}`);
               setRewardMessage(message);
+              
             }
           }
         }
@@ -223,13 +228,14 @@ const EndOfRoundScreen = ({ route }) => {
             message += `\nTotal: +${totalRewards} RockCoins`;
             console.log(`🎁 Mostrando mensaje de recompensas para ronda ${round}: ${message}`);
             setRewardMessage(message);
+            
           }
         }
       } else if (gameData.roundRewards && gameData.round !== round) {
         // Si hay recompensas pero son de una ronda diferente, limpiarlas
         console.log(`🧹 Limpiando recompensas de ronda anterior: ${gameData.round} vs ${round}`);
         setRewardMessage(null);
-        setRoundRewards(null);
+        // NO limpiar roundRewards aquí - viene del contexto global
       }
     });
 
@@ -260,13 +266,18 @@ const EndOfRoundScreen = ({ route }) => {
       console.log('🚀 Usuario presionó Next Round');
       console.log(`🔌 WebSocket conectado: ${isWebSocketConnected}`);
       
+      // Limpiar error anterior si existe
+      if (roundReadyError) {
+        console.log('🧹 Limpiando error anterior:', roundReadyError);
+      }
+      
       // ACTIVAR PROTECCIÓN DE NAVEGACIÓN
       isNavigatingRef.current = true;
       console.log('🔒 Activando protección de navegación');
       
       // Resetear estados solo cuando el usuario presiona Next Round
       setRewardMessage(null);
-      setRoundRewards(null);
+      // NO limpiar roundRewards aquí - viene del contexto global
       rewardsProcessedRef.current = false;
       effectRunRef.current = false;
       
@@ -278,15 +289,20 @@ const EndOfRoundScreen = ({ route }) => {
           routes: [{ name: 'GameResults', params: { gameId, userId } }],
         });
       } else {
-        // Para rondas 1 y 2, usar el sistema híbrido
+        // Para rondas 1 y 2, usar el NUEVO sistema de round:ready
         if (isWebSocketConnected) {
-          console.log(`🔄 Marcando como listo para ronda ${round + 1} vía WebSocket`);
-          await markPlayerReady();
+          console.log(`🔄 [ROUND:READY] Marcando como listo para ronda ${round} vía WebSocket`);
+          await markRoundReady();
+          
+          // Navegar a pantalla de espera después de emitir round:ready
+          console.log('🎮 Navegando a WaitingRoom para espera de final de ronda');
+          navigation.navigate('WaitingRoom', { gameId, userId, round });
         } else {
-          console.log(`🔄 Marcando como listo para ronda ${round + 1} vía Firestore (fallback)`);
+          console.log(`🔄 [ROUND:READY] Marcando como listo para ronda ${round} vía Firestore (fallback)`);
           await markPlayerReady();
+          // Para fallback, usar WaitingRoom
+          navigation.navigate('WaitingRoom', { gameId, userId });
         }
-        // markPlayerReady() ya maneja la navegación a WaitingRoom
       }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
@@ -314,7 +330,7 @@ const EndOfRoundScreen = ({ route }) => {
           players={players} 
           title="Round Rankings" 
           currentUserId={userId}
-          roundRewards={null}
+          roundRewards={roundRewards}
         />
 
         <View style={styles.industryContainer}>
@@ -329,7 +345,7 @@ const EndOfRoundScreen = ({ route }) => {
             <View style={styles.industryRow}>
               <Text style={styles.industryLabel}>Your Selection:</Text>
               <Text style={[
-                styles.industryValue,
+                styles.yourSelectionValue,
                 userSelectedIndustry === winningIndustry ? styles.correctSelection : styles.incorrectSelection
               ]}>
                 {userSelectedIndustry}
@@ -378,6 +394,18 @@ const EndOfRoundScreen = ({ route }) => {
           currentUserId={userId}
         />
       </ScrollView>
+
+        {/* Mostrar error si existe */}
+        {roundReadyError && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>
+              ❌ Error: {roundReadyError}
+            </Text>
+            <Text style={styles.errorSubtext}>
+              Inténtalo de nuevo en unos segundos
+            </Text>
+          </View>
+        )}
 
         <TouchableOpacity 
           style={styles.readyButton}

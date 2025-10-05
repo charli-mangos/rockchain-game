@@ -209,7 +209,7 @@ exports.submitMiningSolution = onCall({
                 if (!winningIndustry) {
                   console.log(`⚠️ No hay winningIndustry, seleccionando uno por defecto`);
                   // Seleccionar industria por defecto si no hay una
-                  const industries = ['Construction', 'Technology', 'Healthcare', 'Finance', 'Energy'];
+                  const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
                   winningIndustry = industries[Math.floor(Math.random() * industries.length)];
                 }
                 

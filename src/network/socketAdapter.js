@@ -225,6 +225,37 @@ class SocketAdapter {
       console.log('🔌 [SocketAdapter] mining_response_update Cloud Run -> legacy:', data);
       this._emit('mining_response_update', data);
     });
+
+    // NUEVOS EVENTOS PARA FINAL DE RONDA
+    // round:ready:progress (Cloud Run) -> round:ready:progress (legacy)
+    this.socket.on('round:ready:progress', (data) => {
+      console.log('🔌 [SocketAdapter] round:ready:progress Cloud Run -> legacy:', data);
+      this._emit('round:ready:progress', data);
+    });
+
+    // round:ready:error (Cloud Run) -> round:ready:error (legacy)
+    this.socket.on('round:ready:error', (data) => {
+      console.log('🔌 [SocketAdapter] round:ready:error Cloud Run -> legacy:', data);
+      this._emit('round:ready:error', data);
+    });
+
+    // economy:state (Cloud Run) -> economy:state (legacy)
+    this.socket.on('economy:state', (data) => {
+      console.log('🔌 [SocketAdapter] economy:state Cloud Run -> legacy:', data);
+      this._emit('economy:state', data);
+    });
+
+    // game_status (Cloud Run) -> game_status (legacy) - NUEVO PARA FINAL DE RONDA
+    this.socket.on('game_status', (data) => {
+      console.log('🔌 [SocketAdapter] game_status Cloud Run -> legacy:', data);
+      this._emit('game_status', data);
+    });
+
+    // round_ended (Cloud Run) -> round_ended (legacy) - NUEVO PARA FINAL DE RONDA
+    this.socket.on('round_ended', (data) => {
+      console.log('🔌 [SocketAdapter] round_ended Cloud Run -> legacy:', data);
+      this._emit('round_ended', data);
+    });
   }
 
   // Esperar conexión
@@ -389,6 +420,12 @@ class SocketAdapter {
   readyForNextRound() {
     console.log('🔌 [SocketAdapter] readyForNextRound llamado');
     return this.emit('ready_for_next_round', { gameId: this.currentGameId, userId: this.currentUserId });
+  }
+
+  // NUEVO: Emitir round:ready para transición entre rondas
+  roundReady(gameId, userId, round) {
+    console.log('🔌 [SocketAdapter] roundReady llamado:', { gameId, userId, round });
+    return this.emit('round:ready', { gameId, userId, round });
   }
 
   authenticate(userId, userName) {

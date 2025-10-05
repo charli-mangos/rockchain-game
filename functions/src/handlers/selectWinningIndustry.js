@@ -56,7 +56,7 @@ exports.selectWinningIndustry = async ({ gameId }) => {
     }
 
     // Seleccionar una industria aleatoria (mismas que en el frontend)
-    const industries = ['Pharmaceutical', 'Construction', 'Additive Manufacturing'];
+    const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
     const winningIndustry = industries[Math.floor(Math.random() * industries.length)];
     console.log(`🎯 Industria ganadora seleccionada: ${winningIndustry}`);
 

@@ -51,7 +51,9 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
   const [miningStartTime, setMiningStartTime] = useState(null); // Timestamp cuando se abre el minado
   const [showMiningBubble, setShowMiningBubble] = useState(true);
   const [isCalculatingRewards, setIsCalculatingRewards] = useState(false);
+  const [roundRewards, setRoundRewards] = useState(null);
   const [isWaiting, setIsWaiting] = useState(false);
+  const [roundReadyError, setRoundReadyError] = useState(null);
   const [results, setResults] = useState(null);
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [currentBlockId, setCurrentBlockId] = useState(null);
@@ -285,6 +287,32 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       setWinningIndustry(data.winningIndustry);
       setIsCalculatingRewards(false);
       
+      // Procesar datos de recompensas para crear roundRewards
+      const roundRewards = {};
+      
+      // Procesar recompensas de minado
+      if (data.mining && data.mining.length > 0) {
+        data.mining.forEach(miningReward => {
+          if (!roundRewards[miningReward.winnerUserId]) {
+            roundRewards[miningReward.winnerUserId] = {};
+          }
+          roundRewards[miningReward.winnerUserId].miningReward = miningReward.rewardApplied || 50;
+        });
+      }
+      
+      // Procesar recompensas de waste
+      if (data.waste && data.waste.winners && data.waste.winners.length > 0) {
+        data.waste.winners.forEach(winnerId => {
+          if (!roundRewards[winnerId]) {
+            roundRewards[winnerId] = {};
+          }
+          roundRewards[winnerId].wasteRemoved = data.waste.rewardAppliedPerUser || 0;
+        });
+      }
+      
+      console.log('💰 [ROUND_END] roundRewards procesados:', roundRewards);
+      setRoundRewards(roundRewards);
+      
       // Actualizar inventarios con balances finales
       if (data.balances && data.balances[userId]) {
         const finalBalance = data.balances[userId];
@@ -333,6 +361,69 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
     getWebSocket().on('rewards_assigned', (data) => {
       console.log('💰 Recompensas asignadas recibidas:', data);
       // Las recompensas se manejan en EndOfRoundScreen
+    });
+
+    // NUEVOS LISTENERS PARA FINAL DE RONDA
+    // Listener para progreso de ready
+    getWebSocket().on('round:ready:progress', (data) => {
+      console.log('⏭️ [ROUND:READY] Progreso de jugadores listos:', data);
+      // TODO: Mostrar progreso en la UI si es necesario
+    });
+
+    // Listener para errores de ready
+    getWebSocket().on('round:ready:error', (data) => {
+      console.error('❌ [ROUND:READY] Error:', data);
+      console.error('❌ [ROUND:READY] Detalles del error:', {
+        message: data.message,
+        currentStatus: data.currentStatus,
+        expectedStatus: data.expectedStatus
+      });
+      
+      // Resetear estado de ready
+      setIsReadyForNextRound(false);
+      
+      // Mostrar error en la UI
+      setRoundReadyError(data.message);
+      
+      // Limpiar error después de 5 segundos
+      setTimeout(() => {
+        setRoundReadyError(null);
+      }, 5000);
+      
+      console.error('❌ [ROUND:READY] Estado resetado, el usuario puede intentar de nuevo');
+    });
+
+    // Listener para nuevo estado de economía
+    getWebSocket().on('economy:state', (data) => {
+      console.log('🏪 [ECONOMY] Nuevo estado de economía recibido:', data);
+      if (data.market) {
+        setProductList(data.market.products || []);
+        console.log(`🏪 [ECONOMY] Productos actualizados: ${data.market.products?.length || 0} productos`);
+      }
+    });
+
+    // Listener para transición a pantalla de espera
+    getWebSocket().on('game_status', (data) => {
+      console.log('🔌 Recibiendo game_status - Estado actual:', gameStatus, 'Nuevo estado:', data.status);
+      setGameStatus(data.status);
+      setRound(data.round || 1);
+      
+      // Navegación basada en estado
+      if (data.status === 'starting') {
+        console.log('🎮 Navegando a WaitingRoom - estado starting');
+        safeNavigate('WaitingRoom');
+      } else if (data.status === 'waitingForNextRound') {
+        console.log('🎮 Navegando a EndOfRoundWaiting - estado waitingForNextRound');
+        safeNavigate('EndOfRoundWaiting');
+      }
+    });
+
+    // Listener para round_ended informativo
+    getWebSocket().on('round_ended', (data) => {
+      console.log('🏁 [ROUND_ENDED] Ronda terminada:', data);
+      if (data.persisted) {
+        console.log('✅ [ROUND_ENDED] Datos de ronda persistidos exitosamente');
+      }
     });
 
     // Nuevo problema de minado - Separando cola global y local
@@ -709,6 +800,27 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
     } else {
       // Fallback a Firestore
       console.log('⏭️ Marcando como listo vía Firestore (fallback)...');
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        [`games.${gameId}.readyForNextRound`]: true
+      });
+      setIsReadyForNextRound(true);
+      safeNavigate('WaitingRoom');
+    }
+  };
+
+  // NUEVA FUNCIÓN: Marcar como listo para la siguiente ronda (nuevo sistema)
+  const markRoundReady = async () => {
+    if (isWebSocketConnected) {
+      console.log(`⏭️ [ROUND:READY] Marcando como listo para ronda ${round} vía WebSocket...`);
+      console.log(`⏭️ [ROUND:READY] gameId: ${gameId}, userId: ${userId}, round: ${round}`);
+      console.log(`⏭️ [ROUND:READY] WebSocket conectado: ${isWebSocketConnected}`);
+      console.log(`⏭️ [ROUND:READY] WebSocket service:`, getWebSocket());
+      setIsReadyForNextRound(true);
+      getWebSocket().roundReady(gameId, userId, round);
+    } else {
+      // Fallback a Firestore
+      console.log(`⏭️ [ROUND:READY] Marcando como listo vía Firestore (fallback)...`);
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         [`games.${gameId}.readyForNextRound`]: true
@@ -1245,11 +1357,15 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
         getMinedBlocksFromWebSocket,
         getPlayerRankingsFromWebSocket,
         isCalculatingRewards,
+        roundRewards,
+        setRoundRewards,
+        roundReadyError,
       
       // Funciones del juego
       startGame,
       readyToPlay,
       endRound,
+      markRoundReady,
       
       // WebSocket
       isWebSocketConnected,

@@ -50,6 +50,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1d3d39',
   },
+  yourSelectionValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1d3d39',
+    textShadowColor: '#feda8c',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 0,
+    textStrokeWidth: 3,
+    textStrokeColor: '#feda8c',
+  },
   correctSelection: {
     color: '#2d5a56',
   },
@@ -106,6 +116,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     marginTop: 10,
+    borderWidth: 2,
+    borderColor: '#feda8c',
     shadowColor: '#2d5a56',
     shadowOffset: {
       width: 0,
@@ -118,7 +130,7 @@ const styles = StyleSheet.create({
   successBannerIcon: {
     fontSize: 28,
     marginRight: 12,
-    color: '#1d3d39',
+    color: '#feda8c',
   },
   successBannerText: {
     flex: 1,
@@ -126,12 +138,12 @@ const styles = StyleSheet.create({
   successBannerTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1d3d39',
+    color: '#feda8c',
     marginBottom: 2,
   },
   successBannerSubtitle: {
     fontSize: 13,
-    color: '#1d3d39',
+    color: '#feda8c',
     opacity: 0.9,
     lineHeight: 18,
   },
@@ -143,6 +155,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#1d3d39',
     shadowColor: '#fdf4e8',
     shadowOffset: {
       width: 0,
@@ -171,6 +185,32 @@ const styles = StyleSheet.create({
     color: '#1d3d39',
     opacity: 0.9,
     lineHeight: 18,
+  },
+  // Estilos para mostrar errores
+  errorContainer: {
+    backgroundColor: '#ffebee',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#f44336',
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#d32f2f',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  errorSubtext: {
+    fontSize: 12,
+    color: '#d32f2f',
+    textAlign: 'center',
+    opacity: 0.8,
   },
 });
 
