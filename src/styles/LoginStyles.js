@@ -10,7 +10,7 @@ const styles = StyleSheet.create({
   input: {
     width: '80%',
     height: 45,
-    borderColor: 'gray',
+    borderColor: '#1d3d39',
     borderWidth: 1,
     marginBottom: 20,
     paddingLeft: 10,
@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '80%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#ba5d17',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 12,
@@ -32,15 +32,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   link: {
-    color: '#3b82f6',
+    color: '#ba5d17',
     marginTop: 10,
   },
   linkRegister: {
-    color: '#3b82f6',
+    color: '#ba5d17',
     marginBottom: 15,
   },
   errorText: {
-    color: 'red',
+    color: '#ba5d17',
     marginBottom: 20,
   },
 });

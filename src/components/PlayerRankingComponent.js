@@ -82,18 +82,18 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
       <View style={styles.headerCell}>
         <Image 
           source={require('../assets/RockCoinBlack.png')} 
-          style={[styles.rockCoinIcon, { tintColor: '#666' }]} 
+          style={[styles.rockCoinIcon, { tintColor: '#1d3d39' }]} 
           resizeMode="contain"
         />
       </View>
       <View style={styles.headerCell}>
-        <Ionicons name="trash" size={20} color="#666" />
+        <Ionicons name="trash" size={20} color="#1d3d39" />
       </View>
       <View style={styles.headerCell}>
-        <Ionicons name="cube" size={20} color="#666" />
+        <Ionicons name="cube" size={20} color="#1d3d39" />
       </View>
       <View style={styles.headerCell}>
-        <Ionicons name="trending-up" size={20} color="#666" />
+        <Ionicons name="trending-up" size={20} color="#1d3d39" />
       </View>
     </View>
   ), []);
@@ -101,7 +101,7 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
   // Memoizar el renderizado de cada item
   const renderPlayerItem = useMemo(() => ({ item, index }) => {
     const balance = item.rockCoins - item.waste;
-    const balanceColor = balance > 0 ? '#2ecc71' : '#e74c3c';
+    const balanceColor = balance > 0 ? '#2d5a56' : '#ba5d17';
     const isCurrentUser = currentUserId && item.userId === currentUserId;
     
     // Obtener animaciones para este jugador
@@ -175,12 +175,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 16,
+    color: '#1d3d39',
   },
   headerRow: {
     flexDirection: 'row',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#1d3d39',
     backgroundColor: '#f8f8f8',
   },
   row: {
@@ -204,33 +205,33 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
     fontWeight: '600',
   },
   rankText: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
   },
   nameText: {
     fontSize: 16,
-    color: '#000',
+    color: '#1d3d39',
   },
   valueText: {
     fontSize: 16,
-    color: '#000',
+    color: '#1d3d39',
   },
   rockCoinIcon: {
     width: 20,
     height: 20,
   },
   currentUserRow: {
-    backgroundColor: '#e3f2fd',
+    backgroundColor: '#fdf4e8',
     borderLeftWidth: 4,
-    borderLeftColor: '#2196f3',
+    borderLeftColor: '#ba5d17',
   },
   currentUserText: {
     fontWeight: 'bold',
-    color: '#1976d2',
+    color: '#ba5d17',
   },
 });
 

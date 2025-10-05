@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
     fontSize: 15,
-    color: '#888',
+    color: '#2d4a47',
   },
   icon: {
     flex: 0.5,
@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
   },
   name: {
     flex: 1,
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#f0f0f0',
     borderTopWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
   },
   blockText: {
     fontSize: 16,
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   noBlocksText: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#888',
+    color: '#2d4a47',
   },
   rockTitle: {
     fontSize: 20,

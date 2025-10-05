@@ -8,7 +8,7 @@ const NavigationBar = ({ navigation }) => {
   const route = useRoute();  // Hook para obtener la ruta activa
 
   const getColor = (routeName) => {
-    return route.name === routeName ? '#3b82f6' : 'black';  // Compara la ruta actual y ajusta el color
+    return route.name === routeName ? '#ba5d17' : '#1d3d39';  // Compara la ruta actual y ajusta el color
   };
 
   return (

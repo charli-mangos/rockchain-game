@@ -15,10 +15,10 @@ const styles = StyleSheet.create({
     marginVertical: 20,
     marginHorizontal: '30%',
     padding: 10,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#fdf4e8',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
   },
   avatar: {
     width: 130,
@@ -34,10 +34,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 20,
     padding: 15,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#fdf4e8',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#87ceeb',
+    borderColor: '#1d3d39',
   },
   inventoryTitle: {
     fontSize: 16,
@@ -58,12 +58,13 @@ const styles = StyleSheet.create({
   inventoryIcon: {
     width: 20,
     height: 20,
-    marginRight: 8,
+    marginRight: 10,
+    marginLeft: 0,
   },
   inventoryStat: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4682b4',
+    color: '#1d3d39',
   },
   productsTitle: {
     fontSize: 16,
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   input: {
     width: '100%',
     height: 40,
-    borderColor: '#ccc',
+    borderColor: '#1d3d39',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 10,
@@ -122,7 +123,7 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
     paddingVertical: 10,
   },
   icon: {

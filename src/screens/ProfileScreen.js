@@ -63,8 +63,8 @@ const ProfileScreen = ({ navigation, route }) => {
           onSettingsPress={() => console.log('Settings Pressed')}
         />
         <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.userInfoContainer}>
-          <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
-          <Text style={styles.userName}>{userData.userName}</Text>
+          <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={[styles.avatar, { tintColor: '#1d3d39' }]} />
+          <Text style={[styles.userName, { color: '#1d3d39' }]}>{userData.userName}</Text>
         </TouchableOpacity>
 
         {/* Información del inventario */}
@@ -75,15 +75,16 @@ const ProfileScreen = ({ navigation, route }) => {
               <Image 
                 source={require('../assets/RockCoinBlack.png')} 
                 style={styles.inventoryIcon} 
+                tintColor='#1d3d39'
               />
-              <Text style={styles.inventoryStat}>RockCoins: {webSocketInventory.rockCoins || 600}</Text>
+              <Text style={[styles.inventoryStat, { color: '#1d3d39' }]}>RockCoins: {webSocketInventory.rockCoins || 600}</Text>
             </View>
             <View style={styles.inventoryStatRow}>
-              <Ionicons name="trash" size={20} color="#000" />
+              <Ionicons name="trash" size={20} color="#1d3d39" style={styles.inventoryIcon} />
               <Text style={styles.inventoryStat}>Waste: {webSocketInventory.waste || 0}</Text>
             </View>
             <View style={styles.inventoryStatRow}>
-              <Ionicons name="cube" size={20} color="#000" />
+              <Ionicons name="cube" size={20} color="#1d3d39" style={styles.inventoryIcon} />
               <Text style={styles.inventoryStat}>Products: {userProducts.length}</Text>
             </View>
           </View>
@@ -96,13 +97,13 @@ const ProfileScreen = ({ navigation, route }) => {
               <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
                 <View style={styles.modalContent}>
                   <TouchableOpacity style={styles.closeButton} onPress={() => setIsEditing(false)}>
-                    <Ionicons name="close" size={24} color="black" />
+                    <Ionicons name="close" size={24} color="#1d3d39" />
                   </TouchableOpacity>
                   <Text style={styles.modalTitle}>Edit Profile</Text>
 
                   {/* Imagen seleccionable */}
                   <TouchableOpacity onPress={pickImage}>
-                    <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={styles.avatar} />
+                    <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={[styles.avatar, { tintColor: '#1d3d39' }]} />
                   </TouchableOpacity>
 
                   <TextInput
@@ -110,7 +111,7 @@ const ProfileScreen = ({ navigation, route }) => {
                     onChangeText={(text) => setUserData({ ...userData, name: text })}
                     style={styles.input}
                     placeholder="Enter your name"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="#1d3d39"
                   />
                 </View>
               </TouchableWithoutFeedback>

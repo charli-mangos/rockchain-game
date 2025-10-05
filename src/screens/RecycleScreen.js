@@ -25,7 +25,7 @@ const RecycleScreen = ({ navigation, route }) => {
     'Healthcare': {
       icon: 'medical',
       description: 'Medical & Pharmaceutical',
-      color: '#4CAF50'
+      color: '#1d3d39'
     },
     'Energy': {
       icon: 'flash',
@@ -64,7 +64,7 @@ const RecycleScreen = ({ navigation, route }) => {
         onPress={() => handleSelect(item)}
       >
         <View style={styles.optionContent}>
-          <View style={[styles.iconContainer, { backgroundColor: isSelected ? industry.color : '#f0f0f0' }]}>
+          <View style={[styles.iconContainer, { backgroundColor: isSelected ? '#1d3d39' : '#f0f0f0' }]}>
             <Ionicons 
               name={industry.icon} 
               size={24} 
@@ -75,7 +75,7 @@ const RecycleScreen = ({ navigation, route }) => {
             <Text
               style={[
                 styles.optionText,
-                isSelected ? { color: '#fff' } : { color: '#000' },
+                isSelected ? { color: '#1d3d39' } : { color: '#1d3d39' },
               ]}
             >
               {item}
@@ -83,7 +83,7 @@ const RecycleScreen = ({ navigation, route }) => {
             <Text
               style={[
                 styles.optionDescription,
-                isSelected ? { color: '#fff' } : { color: '#666' },
+                isSelected ? { color: '#1d3d39' } : { color: '#1d3d39' },
               ]}
             >
               {industry.description}
@@ -93,7 +93,7 @@ const RecycleScreen = ({ navigation, route }) => {
             <Ionicons 
               name="checkmark-circle" 
               size={24} 
-              color="#4CAF50" 
+              color="#1d3d39" 
               style={styles.checkIcon}
             />
           )}

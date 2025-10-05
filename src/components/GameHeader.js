@@ -16,8 +16,8 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
   const wasteAnim = useRef(new Animated.Value(1)).current;
   const [prevRockCoins, setPrevRockCoins] = useState(0);
   const [prevWaste, setPrevWaste] = useState(0);
-  const [rockCoinsColor, setRockCoinsColor] = useState("#000");
-  const [wasteColor, setWasteColor] = useState("#000");
+  const [rockCoinsColor, setRockCoinsColor] = useState("#1d3d39");
+  const [wasteColor, setWasteColor] = useState("#1d3d39");
   const navigation = useNavigation();
   const [showExitModal, setShowExitModal] = useState(false);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
@@ -27,7 +27,7 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
 
   useEffect(() => {
     if (rockCoins !== prevRockCoins) {
-      const color = rockCoins > prevRockCoins ? "#00C853" : "#D32F2F";
+      const color = rockCoins > prevRockCoins ? "#2d5a56" : "#ba5d17";
       setRockCoinsColor(color);
       
       // Usar requestAnimationFrame para evitar problemas de renderizado
@@ -46,7 +46,7 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
           }),
         ]).start(() => {
           // Usar setTimeout para evitar setState durante render
-          setTimeout(() => setRockCoinsColor("#000"), 0);
+          setTimeout(() => setRockCoinsColor("#1d3d39"), 0);
         });
       });
   
@@ -56,7 +56,7 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
   
   useEffect(() => {
     if (waste !== prevWaste) {
-      const color = waste > prevWaste ? "#D32F2F" : "#00C853";
+      const color = waste > prevWaste ? "#ba5d17" : "#1d3d39";
       setWasteColor(color);
       
       // Usar requestAnimationFrame para evitar problemas de renderizado
@@ -75,7 +75,7 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
           }),
         ]).start(() => {
           // Usar setTimeout para evitar setState durante render
-          setTimeout(() => setWasteColor("#000"), 0);
+          setTimeout(() => setWasteColor("#1d3d39"), 0);
         });
       });
   
@@ -138,7 +138,7 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
           <Ionicons 
             name={currentScreen === 'RockMining' ? "arrow-back" : "close"} 
             size={24} 
-            color="#000" 
+            color="#1d3d39" 
           />
         </TouchableOpacity>
         <View style={styles.resourcesContainer}>
@@ -149,13 +149,14 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
             <Image 
               source={require('../assets/RockCoinBlack.png')} 
               style={styles.rockCoinIcon} 
+              tintColor='#1d3d39'
             />
           </View>
           <View style={styles.trashContainer}>
             <Animated.Text style={[styles.resources, { transform: [{ scale: wasteAnim }], color: wasteColor }]}>
               {waste}
             </Animated.Text>
-            <Ionicons name="trash" size={24} color="#000" />
+            <Ionicons name="trash" size={24} color="#1d3d39" />
           </View>
         </View>
       </View>
@@ -183,7 +184,7 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
               style={styles.closeButton} 
               onPress={handleCancelExit}
             >
-              <Ionicons name="close" size={24} color="#000" />
+              <Ionicons name="close" size={24} color="#1d3d39" />
             </TouchableOpacity>
             
             <Text style={styles.modalTitle}>¿Quieres salir de la partida?</Text>
@@ -258,6 +259,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: 'bold',
+    color: '#1d3d39',
   },
   roundTimerContainer: {
     flexDirection: 'row',
@@ -266,24 +268,27 @@ const styles = StyleSheet.create({
   round: {
     fontSize: 20,
     marginRight: 10,
+    color: '#1d3d39',
   },
   timerContainer: {
     height: 42,
     width: 65,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#000',
+    borderColor: '#1d3d39',
     padding: 8,
     borderRadius: 5,
+    backgroundColor: '#fdf4e8',
   },
   timer: {
     fontSize: 20,
     fontWeight: 'bold',
+    color: '#1d3d39',
   },
   timerRed: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'red',
+    color: '#ba5d17',
   },
   modalOverlay: {
     flex: 1,
@@ -324,10 +329,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#4a6b68',
   },
   confirmButton: {
-    backgroundColor: '#ff4444',
+    backgroundColor: '#ba5d17',
   },
   disabledButton: {
     backgroundColor: '#cccccc',

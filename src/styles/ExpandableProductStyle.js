@@ -11,7 +11,7 @@ const styles = StyleSheet.create({
       marginVertical: 10,
       marginHorizontal: '5%',
       borderWidth: 1,
-      borderColor: '#ddd',
+      borderColor: '#1d3d39',
       borderRadius: 8,
       alignItems: 'center',
       justifyContent: 'center',
@@ -25,11 +25,12 @@ const styles = StyleSheet.create({
       fontSize: 16,
       textAlign: 'center',
       fontWeight: 'bold',
+      color: '#1d3d39',
     },
     productPrice: {
       fontSize: 14,
       textAlign: 'center',
-      color: '#888',
+      color: '#1d3d39',
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -37,7 +38,7 @@ const styles = StyleSheet.create({
     rockCoinIcon: {
       width: 16,
       height: 16,
-      color: '#888',
+      color: '#1d3d39',
       marginLeft: 4,
     },
     rockCoinIconAlign: {
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
       padding: 20,
       backgroundColor: '#fff',
       borderRadius: 10,
-      borderColor: '#ddd',
+      borderColor: '#1d3d39',
       borderWidth: 1,
       zIndex: 1000,
     },
@@ -73,6 +74,7 @@ const styles = StyleSheet.create({
     title: {
       fontSize: 24,
       fontWeight: 'bold',
+      color: '#1d3d39',
     },
     closeButton: {
       position: 'absolute',
@@ -88,12 +90,13 @@ const styles = StyleSheet.create({
     detailText: {
       fontSize: 16,
       marginBottom: 2,
+      color: '#1d3d39',
     },
     buttonsContainer: {
       marginTop: 20,
     },
     button: {
-      backgroundColor: '#3366ff',
+      backgroundColor: '#ba5d17',
       padding: 10,
       borderRadius: 5,
       marginBottom: 10,
@@ -103,14 +106,16 @@ const styles = StyleSheet.create({
       backgroundColor: '#fff',
       borderRadius: 5,
       borderWidth: 1,
-      borderColor: '#ddd',
+      borderColor: '#1d3d39',
     },
     summaryText: {
       fontSize: 16,
       marginBottom: 10,
+      color: '#1d3d39',
     },
     negativeText: {
       fontWeight: 'bold',
+      color: '#1d3d39',
     },
     confirmationButtons: {
       flexDirection: 'row',
@@ -118,14 +123,14 @@ const styles = StyleSheet.create({
     },
     confirmButton: {
       width: '50%',
-      backgroundColor: '#28a745',
+      backgroundColor: '#2d5a56',
       padding: 10,
       borderRadius: 5,
       marginRight: 5,
     },
     cancelButton: {
       width: '50%',
-      backgroundColor: '#dc3545',
+      backgroundColor: '#ba5d17',
       padding: 10,
       borderRadius: 5,
     },
@@ -177,6 +182,7 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      color: '#1d3d39',
     },
   });
   

@@ -13,7 +13,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
+    borderBottomColor: '#1d3d39',
     backgroundColor: '#f8f8f8',
   },
   row: {
@@ -21,7 +21,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#1d3d39',
   },
   headerCell: {
     flex: 1,
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
     fontWeight: '600',
   },
   nameText: {
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   },
   valueText: {
     fontSize: 16,
-    color: '#000',
+    color: '#1d3d39',
   },
   rockCoinIcon: {
     width: 20,

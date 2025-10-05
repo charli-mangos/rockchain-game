@@ -22,7 +22,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     marginHorizontal: '5%',  // Márgenes laterales de 5% para centrar los productos
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',

@@ -258,7 +258,7 @@ const GameScreen = ({ route }) => {
         ) : (
           <View style={styles.inputContainer}>
             {/* Sección para el jugador para empezar su propia partida */}
-            <Text style={styles.label}>Your Game Code: <Text style={styles.bold}>{gameCode}</Text></Text>
+            <Text style={styles.label}>Your Game Code: <Text style={[styles.bold, { color: '#1d3d39' }]}>{gameCode}</Text></Text>
             <Text style={styles.label}>Number of players: {playerCount}/10</Text>
             
             {/* Mostrar botón START GAME solo si es el host y el juego está en waiting */}

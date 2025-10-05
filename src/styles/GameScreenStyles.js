@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
   input: {
     width: '100%',
     height: 45,
-    borderColor: 'gray',
+    borderColor: '#1d3d39',
     borderWidth: 1,
     marginBottom: 20,
     paddingLeft: 10,
@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#ba5d17',
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 12,
@@ -57,19 +57,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 20,
     textAlign: 'center',
-    color: '#666',
+    color: '#1d3d39',
   },
   divider: {
     fontSize: 16,
     textAlign: 'center',
     marginVertical: 20,
-    color: '#666',
+    color: '#1d3d39',
     fontWeight: 'bold',
   },
   waitingText: {
     fontSize: 16,
     textAlign: 'center',
-    color: '#666',
+    color: '#1d3d39',
     fontStyle: 'italic',
   },
 });

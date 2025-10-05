@@ -163,12 +163,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#1d3d39',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 18,
-    color: '#666',
+    color: '#1d3d39',
   },
   content: {
     flex: 1,
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   messageContainer: {
-    backgroundColor: '#2ecc71',
+    backgroundColor: '#1d3d39',
     padding: 20,
     borderRadius: 12,
     marginBottom: 24,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   newGameButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#1d3d39',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 8,
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   },
   debugText: {
     fontSize: 16,
-    color: '#333',
+    color: '#1d3d39',
   },
 });
 

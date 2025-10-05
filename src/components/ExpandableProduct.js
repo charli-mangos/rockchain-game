@@ -339,9 +339,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       <TouchableOpacity style={styles.productContainer} onPress={toggleExpand}>
         <View style={[
           styles.qualityContainer,
-          product.quality === 'A' && { backgroundColor: '#2ecc71' },
-          product.quality === 'B' && { backgroundColor: '#f1c40f' },
-          product.quality === 'C' && { backgroundColor: '#e74c3c' }
+          product.quality === 'A' && { backgroundColor: '#2d5a56' },
+          product.quality === 'B' && { backgroundColor: '#feda8c' },
+          product.quality === 'C' && { backgroundColor: '#ba5d17' }
         ]}>
           <Text style={styles.qualityText}>{product.quality}</Text>
         </View>
@@ -353,7 +353,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
             source={require('../assets/RockCoinBlack.png')} 
             style={[styles.rockCoinIcon, styles.rockCoinIconAlign]}
             resizeMode="contain"
-            tintColor="#888"
+            tintColor="#1d3d39"
           />
         </View>
       </TouchableOpacity>
@@ -372,7 +372,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
                 <View style={styles.header}>
                   <Text style={styles.title}>{product.marbleType + ' ' + product.type}</Text>
                   <TouchableOpacity onPress={toggleExpand} style={styles.closeButton}>
-                    <Ionicons name="close-outline" size={24} color="#000" />
+                    <Ionicons name="close-outline" size={24} color="#1d3d39" />
                   </TouchableOpacity>
                 </View>
                 <Image style={styles.expandedProductIcon} source={images[product.marbleType][product.type]} />
@@ -380,9 +380,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
                   <Text style={styles.detailText}>Quality: </Text>
                   <View style={[
                     styles.qualityBadge,
-                    product.quality === 'A' && { backgroundColor: '#2ecc71' },
-                    product.quality === 'B' && { backgroundColor: '#f1c40f' },
-                    product.quality === 'C' && { backgroundColor: '#e74c3c' }
+                    product.quality === 'A' && { backgroundColor: '#2d5a56' },
+                    product.quality === 'B' && { backgroundColor: '#feda8c' },
+                    product.quality === 'C' && { backgroundColor: '#ba5d17' }
                   ]}>
                     <Text style={styles.qualityText}>{product.quality}</Text>
                   </View>
@@ -393,6 +393,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
                     source={require('../assets/RockCoinBlack.png')} 
                     style={styles.rockCoinIconDetail} 
                     resizeMode="contain"
+                    tintColor='#1d3d39'
                   />
                 </View>
                 <Text style={styles.detailText}>

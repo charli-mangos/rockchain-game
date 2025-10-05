@@ -54,7 +54,7 @@ const CustomNumericKeyboard = ({ value = '', onChange, style }) => {
       activeOpacity={0.6}
     >
       {key === 'backspace' ? (
-        <Ionicons name="backspace-outline" size={28} color="#e74c3c" />
+        <Ionicons name="backspace-outline" size={28} color="#ba5d17" />
       ) : (
         <Text style={[styles.keyText, isSpecial && styles.specialKeyText]}>
           {label}
@@ -164,13 +164,13 @@ const styles = StyleSheet.create({
   keyText: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#2c3e50',
+    color: '#1d3d39',
     textAlign: 'center',
   },
   specialKeyText: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#34495e',
+    color: '#1d3d39',
   },
 });
 

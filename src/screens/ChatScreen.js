@@ -235,10 +235,10 @@ const ChatScreen = ({ navigation, route }) => {
         />
       </View>
       <View style={styles.headerCell}>
-        <Ionicons name="trash" size={20} color="#666" />
+        <Ionicons name="trash" size={20} color="#1d3d39" />
       </View>
       <View style={styles.headerCell}>
-        <Ionicons name="trending-up" size={20} color="#666" />
+        <Ionicons name="trending-up" size={20} color="#1d3d39" />
       </View>
     </View>
   ), []);
@@ -258,7 +258,7 @@ const ChatScreen = ({ navigation, route }) => {
         <Text style={styles.valueText}>{item.waste}</Text>
       </View>
       <View style={styles.cell}>
-        <Text style={[styles.valueText, { color: item.balance > 0 ? '#2ecc71' : '#e74c3c' }]}>
+        <Text style={[styles.valueText, { color: item.balance > 0 ? '#2d5a56' : '#ba5d17' }]}>
           {item.balance}
         </Text>
       </View>
@@ -289,7 +289,10 @@ const ChatScreen = ({ navigation, route }) => {
           setOpen={setOpenType}
           setValue={setSelectedType}
           placeholder="Select Type"
-          style={{ marginBottom: 5 }}
+          style={{ marginBottom: 5, backgroundColor: '#fdf4e8', borderColor: '#1d3d39', borderWidth: 1 }}
+          textStyle={{ color: '#1d3d39' }}
+          dropDownContainerStyle={{ backgroundColor: '#fdf4e8' }}
+          listItemLabelStyle={{ color: '#1d3d39' }}
           containerStyle={{ width: '35%' }}
         />
         <DropDownPicker
@@ -303,7 +306,10 @@ const ChatScreen = ({ navigation, route }) => {
           setOpen={setOpenQuality}
           setValue={setSelectedQuality}
           placeholder="Select Quality"
-          style={{ marginBottom: 5 }}
+          style={{ marginBottom: 5, backgroundColor: '#fdf4e8', borderColor: '#1d3d39', borderWidth: 1 }}
+          textStyle={{ color: '#1d3d39' }}
+          dropDownContainerStyle={{ backgroundColor: '#fdf4e8' }}
+          listItemLabelStyle={{ color: '#1d3d39' }}
           containerStyle={{ width: '35%' }}
         />
       </View>
@@ -332,6 +338,10 @@ const ChatScreen = ({ navigation, route }) => {
         ]}
         setOpen={setOpenMetric}
         setValue={setSelectedMetric}
+        style={{ backgroundColor: '#fdf4e8', borderColor: '#1d3d39', borderWidth: 1 }}
+        textStyle={{ color: '#1d3d39' }}
+        dropDownContainerStyle={{ backgroundColor: '#fdf4e8' }}
+        listItemLabelStyle={{ color: '#1d3d39' }}
         containerStyle={{ 
           width: '35%', 
           height: 50, 

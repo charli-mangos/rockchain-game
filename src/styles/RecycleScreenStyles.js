@@ -23,13 +23,13 @@ const styles = StyleSheet.create({
         marginBottom: 10,
         fontSize: 16,
         lineHeight: 22,
-        color: '#333',
+        color: '#1d3d39',
     },
     subText: {
         marginTop: 5,
         marginBottom: 20,
         fontSize: 14,
-        color: '#666',
+        color: '#1d3d39',
         fontStyle: 'italic',
     },
     optionButton: {
@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
       marginVertical: 6,
       borderColor: '#e0e0e0',
       backgroundColor: '#fff',
-      shadowColor: '#000',
+      shadowColor: '#1d3d39',
       shadowOffset: {
         width: 0,
         height: 2,
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
       elevation: 3,
     },
     selectedOption: {
-      backgroundColor: '#424242',
+      backgroundColor: '#fdf4e8',
       borderWidth: 2,
     },
     optionContent: {
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
         width: '100%',
         justifyContent: 'space-around',
         borderTopWidth: 1,
-        borderColor: '#ddd',
+        borderColor: '#1d3d39',
         paddingVertical: 10,
         paddingBottom: 20,  // Añadir padding inferior para evitar que la barra se superponga
     },

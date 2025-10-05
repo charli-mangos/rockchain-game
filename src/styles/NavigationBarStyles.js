@@ -7,7 +7,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', // Centrar los botones en lugar de space-around
     alignItems: 'center', // Centrar verticalmente
     borderTopWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
     paddingVertical: 10, // Reducido de 15 a 10 para barra más compacta
     paddingBottom: 0, // Eliminar padding inferior para pegar al bottom
     backgroundColor: '#fff', // Asegurar fondo blanco

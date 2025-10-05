@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
   },
   transactionInfoText: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
   },
   timerContainer: {
     marginTop: 10,
@@ -41,12 +41,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#ba5d17',
   },
   timerText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#ba5d17',
     fontFamily: 'monospace', // Fuente monoespaciada para mejor legibilidad del tiempo
   },
   mathContainer: {
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#1d3d39',
     borderRadius: 8,
     paddingHorizontal: 15,
     marginBottom: 20,
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   submitButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ba5d17',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 8,
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   waitingText: {
     fontSize: 20,
     marginTop: 20,
-    color: '#34495e',
+    color: '#1d3d39',
     textAlign: 'center',
   },
   resultsContainer: {
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#e74c3c',
+    color: '#ba5d17',
   },
   resultItem: {
     flexDirection: 'row',
@@ -138,10 +138,10 @@ const styles = StyleSheet.create({
   },
   resultText: {
     fontSize: 18,
-    color: '#2c3e50',
+    color: '#1d3d39',
   },
   wrongText: {
-    color: '#e74c3c',
+    color: '#ba5d17',
     fontWeight: 'bold',
   },
   blockContainer: {
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   },
   blockText: {
     fontSize: 16,
-    color: '#2c3e50',
+    color: '#1d3d39',
     textAlign: 'center',
   },
   navigationButtons: {
@@ -192,10 +192,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderWidth: 1,
-    borderColor: '#000',
+    borderColor: '#1d3d39',
   },
   miningButtonText: {
-    color: '#000',
+    color: '#1d3d39',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', // Centrar los botones
     alignItems: 'center', // Centrar verticalmente
     borderTopWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#1d3d39',
     paddingVertical: 10, // Reducido de 15 a 10 para barra más compacta
     paddingBottom: 0, // Eliminar padding inferior para pegar al bottom
     backgroundColor: '#fff', // Asegurar fondo blanco
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5, // Reducido de 8 a 5 para barra más compacta
   },
   nextBlockButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ba5d17',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 8,
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   answerLabel: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#34495e',
+    color: '#1d3d39',
     marginBottom: 4, // Reducido de 8 a 4
     textAlign: 'center',
   },
@@ -250,13 +250,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 55, // Reducido de 70 a 55
     borderWidth: 3,
-    borderColor: '#007AFF',
+    borderColor: '#ba5d17',
     borderRadius: 8, // Mismo borderRadius que el botón Submit
     backgroundColor: '#f8f9fa',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 30, // Mismo padding que el botón Submit
-    shadowColor: '#007AFF',
+    shadowColor: '#ba5d17',
     shadowOffset: {
       width: 0,
       height: 2,
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   answerDisplayActive: {
-    borderColor: '#0056b3',
+    borderColor: '#ba5d17',
     backgroundColor: '#ffffff',
     shadowOpacity: 0.2,
     shadowRadius: 6,
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   answerText: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#1d3d39',
     textAlign: 'center',
   },
   // Estilos para el teclado personalizado
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     // Añadir sombra sutil para separación visual
-    shadowColor: '#000',
+    shadowColor: '#1d3d39',
     shadowOffset: {
       width: 0,
       height: -2,

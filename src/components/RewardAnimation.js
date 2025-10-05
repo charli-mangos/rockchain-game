@@ -57,11 +57,11 @@ const RewardAnimation = ({
 
   const getRewardColor = () => {
     if (type === 'rockCoins') {
-      return '#4CAF50'; // Verde para RockCoins
+      return '#2d5a56'; // Verde para RockCoins
     } else if (type === 'waste') {
-      return '#4CAF50'; // Verde para reducción de waste
+      return '#2d5a56'; // Verde para reducción de waste
     }
-    return '#4CAF50';
+    return '#2d5a56';
   };
 
   return (

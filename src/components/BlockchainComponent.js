@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   blockCard: {
     backgroundColor: 'white',
     borderWidth: 1,
-    borderColor: 'black',
+    borderColor: '#1d3d39',
     borderRadius: 8,
     padding: 15,
     minWidth: 150,
@@ -124,12 +124,12 @@ const styles = StyleSheet.create({
   },
   blockId: {
     fontSize: 10,
-    color: '#999',
+    color: '#2d4a47',
     marginBottom: 8,
   },
   minedByLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#1d3d39',
     marginTop: 4,
   },
   minedByName: {
@@ -139,12 +139,12 @@ const styles = StyleSheet.create({
   },
   blockDetails: {
     fontSize: 14,
-    color: '#666',
+    color: '#1d3d39',
   },
   blockConnection: {
     width: 30,
     height: 2,
-    backgroundColor: 'black',
+    backgroundColor: '#1d3d39',
     alignSelf: 'center',
     marginHorizontal: -1,
   },
@@ -152,18 +152,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 16,
-    color: '#000',
+    color: '#1d3d39',
   },
   waitingText: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
     marginTop: 8,
   },
   rewardContainer: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: '#2ecc71',
+    backgroundColor: '#2d5a56',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,

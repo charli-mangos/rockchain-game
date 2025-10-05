@@ -577,7 +577,7 @@ const MiningScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity 
-                      style={[styles.nextBlockButton, { backgroundColor: '#e74c3c' }]}
+                      style={[styles.nextBlockButton, { backgroundColor: '#ba5d17' }]}
                       onPress={handleExitMining}
                     >
                       <Text style={styles.nextBlockButtonText}>Exit Mining</Text>
@@ -652,13 +652,13 @@ const MiningScreen = ({ route, navigation }) => {
                   disabled={currentProblemIndex === 0}
                   style={[styles.navButton, currentProblemIndex === 0 && styles.navButtonDisabled]}
                 >
-                  <Ionicons name="chevron-back-circle-outline" size={50} color={currentProblemIndex === 0 ? 'gray' : 'black'} />
+                  <Ionicons name="chevron-back-circle-outline" size={50} color={currentProblemIndex === 0 ? 'gray' : '#1d3d39'} />
                 </TouchableOpacity>
 
                 <View style={styles.miningButtonContainer}>
                   <View style={styles.miningButton}>
                     <Text style={styles.miningButtonText}>{miningQueue}</Text>
-                    <Ionicons name="hammer-outline" size={24} color="#000" />
+                    <Ionicons name="hammer-outline" size={24} color="#1d3d39" />
                   </View>
                 </View>
 
@@ -667,7 +667,7 @@ const MiningScreen = ({ route, navigation }) => {
                   disabled={!hasMoreProblems()}
                   style={[styles.navButton, !hasMoreProblems() && styles.navButtonDisabled]}
                 >
-                  <Ionicons name="chevron-forward-circle-outline" size={50} color={!hasMoreProblems() ? 'gray' : 'black'} />
+                  <Ionicons name="chevron-forward-circle-outline" size={50} color={!hasMoreProblems() ? 'gray' : '#1d3d39'} />
                 </TouchableOpacity>
               </View>
             )}

@@ -43,20 +43,21 @@ const styles = StyleSheet.create({
   },
   industryLabel: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
   },
   industryValue: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#1d3d39',
   },
   correctSelection: {
-    color: '#2ecc71',
+    color: '#2d5a56',
   },
   incorrectSelection: {
-    color: '#e74c3c',
+    color: '#ba5d17',
   },
   readyButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#ba5d17',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 8,
@@ -80,19 +81,19 @@ const styles = StyleSheet.create({
   },
   waitingText: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
     marginTop: 16,
   },
   rewardContainer: {
     padding: 15,
-    backgroundColor: '#2ecc71',
+    backgroundColor: '#2d5a56',
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
   },
   rewardText: {
     fontSize: 16,
-    color: '#fff',
+    color: '#1d3d39',
     fontWeight: 'bold',
     textAlign: 'center',
     lineHeight: 22,
@@ -101,11 +102,11 @@ const styles = StyleSheet.create({
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2ecc71',
+    backgroundColor: '#2d5a56',
     padding: 12,
     borderRadius: 10,
     marginTop: 10,
-    shadowColor: '#2ecc71',
+    shadowColor: '#2d5a56',
     shadowOffset: {
       width: 0,
       height: 3,
@@ -117,7 +118,7 @@ const styles = StyleSheet.create({
   successBannerIcon: {
     fontSize: 28,
     marginRight: 12,
-    color: '#fff',
+    color: '#1d3d39',
   },
   successBannerText: {
     flex: 1,
@@ -125,12 +126,12 @@ const styles = StyleSheet.create({
   successBannerTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#1d3d39',
     marginBottom: 2,
   },
   successBannerSubtitle: {
     fontSize: 13,
-    color: '#fff',
+    color: '#1d3d39',
     opacity: 0.9,
     lineHeight: 18,
   },
@@ -138,11 +139,11 @@ const styles = StyleSheet.create({
   failBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e74c3c',
+    backgroundColor: '#fdf4e8',
     padding: 12,
     borderRadius: 10,
     marginTop: 10,
-    shadowColor: '#e74c3c',
+    shadowColor: '#fdf4e8',
     shadowOffset: {
       width: 0,
       height: 3,
@@ -154,7 +155,7 @@ const styles = StyleSheet.create({
   failBannerIcon: {
     fontSize: 28,
     marginRight: 12,
-    color: '#fff',
+    color: '#1d3d39',
   },
   failBannerText: {
     flex: 1,
@@ -162,12 +163,12 @@ const styles = StyleSheet.create({
   failBannerTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#1d3d39',
     marginBottom: 2,
   },
   failBannerSubtitle: {
     fontSize: 13,
-    color: '#fff',
+    color: '#1d3d39',
     opacity: 0.9,
     lineHeight: 18,
   },

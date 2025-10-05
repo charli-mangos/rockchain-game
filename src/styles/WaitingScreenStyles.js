@@ -20,13 +20,13 @@ export default StyleSheet.create({
   },
   playerCountLabel: {
     fontSize: 16,
-    color: '#666',
+    color: '#1d3d39',
     marginBottom: 20,
     textAlign: 'center',
   },
   subText: {
     fontSize: 18,
-    color: '#666',
+    color: '#1d3d39',
     marginTop: 10,
     textAlign: 'center',
   },
@@ -41,7 +41,7 @@ export default StyleSheet.create({
   countdownText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#1d3d39',
     textAlign: 'center',
   },
   waitingContainer: {
@@ -50,13 +50,13 @@ export default StyleSheet.create({
     padding: 20,
   },
   startButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ba5d17',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
     marginTop: 30,
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: '#1d3d39',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,

@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   miningBubble: {
-    backgroundColor: '#FF5733',
+    backgroundColor: '#feda8c',
     borderRadius: 8,
     width: 120,
     height: 50,
@@ -188,13 +188,13 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1d3d39',
     marginTop: 15,
     textAlign: 'center',
   },
   loadingSubtext: {
     fontSize: 14,
-    color: '#666',
+    color: '#1d3d39',
     marginTop: 5,
     textAlign: 'center',
   },
