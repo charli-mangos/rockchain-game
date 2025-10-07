@@ -49,14 +49,12 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
     // Usar bloques minados directamente del WebSocket
     const blocksToShow = minedBlocks
       .filter(block => {
-        // Si se especifica un filtro de ronda, aplicar el filtro
+        // FIX: Los bloques tienen round: 0 pero corresponden a la ronda actual
         if (filterByRound !== null) {
-          // TEMPORAL: Mostrar bloques de la ronda actual y la anterior para debugging
-          // TODO: Corregir la lógica del servidor para guardar la ronda correcta
-          const currentRound = round || 0;
-          const previousRound = currentRound - 1;
-          console.log(`🔍 [BLOCKCHAIN] Filtrando bloques: block.round=${block.round}, filterByRound=${filterByRound}, currentRound=${currentRound}, previousRound=${previousRound}`);
-          return block.round === filterByRound || block.round === previousRound;
+          // Si filterByRound es 1, mostrar bloques con round: 0 (primera ronda)
+          const shouldShow = filterByRound === 1 ? block.round === 0 : block.round === filterByRound;
+          console.log(`🔍 [BLOCKCHAIN] Filtrando bloques: block.round=${block.round}, filterByRound=${filterByRound}, shouldShow=${shouldShow}`);
+          return shouldShow;
         }
         return true; // Mostrar todos los bloques si no hay filtro
       })
@@ -121,10 +119,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
+    color: '#1d3d39',
   },
   blockId: {
     fontSize: 10,
-    color: '#2d4a47',
+    color: '#1d3d39',
     marginBottom: 8,
   },
   minedByLabel: {
@@ -136,6 +135,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 4,
+    color: '#1d3d39',
   },
   blockDetails: {
     fontSize: 14,

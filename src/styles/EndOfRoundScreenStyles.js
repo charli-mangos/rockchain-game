@@ -186,31 +186,63 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     lineHeight: 18,
   },
-  // Estilos para mostrar errores
-  errorContainer: {
-    backgroundColor: '#ffebee',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#f44336',
+  // Estilos para el overlay de calculating
+  calculatingOverlay: {
     position: 'absolute',
-    bottom: 100,
-    left: 20,
-    right: 20,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
-  errorText: {
+  calculatingContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  calculatingTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1d3d39',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  calculatingSubtitle: {
     fontSize: 14,
-    color: '#d32f2f',
-    fontWeight: 'bold',
+    color: '#1d3d39',
+    opacity: 0.7,
+    marginTop: 8,
     textAlign: 'center',
-    marginBottom: 4,
   },
-  errorSubtext: {
-    fontSize: 12,
-    color: '#d32f2f',
-    textAlign: 'center',
-    opacity: 0.8,
+  calculatingProgress: {
+    marginTop: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  progressBar: {
+    width: '80%',
+    height: 4,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#2d5a56',
+    borderRadius: 2,
+    width: '0%', // Inicialmente vacío, se llena con animación
   },
 });
 

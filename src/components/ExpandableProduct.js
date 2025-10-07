@@ -62,8 +62,8 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
 
       // Enviar transacción directamente al WebSocket
       const webSocketService = getWebSocketService();
-      if (webSocketService.isConnected && webSocketService.socket) {
-        webSocketService.socket.emit('product_transaction', {
+      if (webSocketService.isConnected) {
+        webSocketService.emit('product_transaction', {
           gameId,
           userId,
           product,
@@ -191,9 +191,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
   
       // Procesar compra vía WebSocket (como en el contexto original)
       const webSocketService = getWebSocketService();
-      if (webSocketService.isConnected && webSocketService.socket) {
+      if (webSocketService.isConnected) {
         console.log('🛒 Procesando compra vía WebSocket');
-        webSocketService.socket.emit('product_transaction', {
+        webSocketService.emit('product_transaction', {
           gameId,
           userId,
           product: productToRemove,
@@ -237,9 +237,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
 
       // Procesar venta vía WebSocket (como en el contexto original)
       const webSocketService = getWebSocketService();
-      if (webSocketService.isConnected && webSocketService.socket) {
+      if (webSocketService.isConnected) {
         console.log('🛒 Procesando venta vía WebSocket');
-        webSocketService.socket.emit('product_transaction', {
+        webSocketService.emit('product_transaction', {
           gameId,
           userId,
           product: productToSell,
@@ -297,9 +297,10 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       };
   
       // Procesar transformación vía WebSocket
+      const webSocketService = getWebSocketService();
       if (webSocketService.isConnected) {
         console.log('🔄 Procesando transformación vía WebSocket');
-        webSocketService.socket.emit('product_transaction', {
+        webSocketService.emit('product_transaction', {
           gameId,
           userId,
           product: productToTransform,

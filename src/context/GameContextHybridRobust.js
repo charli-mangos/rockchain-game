@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { doc, onSnapshot, collection, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { db, functions, auth } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -7,7 +8,7 @@ import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 export const GameContextHybridRobust = createContext();
 
-export const GameProviderHybridRobust = ({ children, gameId, userId, navigation }) => {
+export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   
   // Validar que gameId y userId son válidos
   if (!gameId || !userId) {
@@ -16,11 +17,14 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
     return null;
   }
 
+  // Obtener navigation usando el hook
+  const navigation = useNavigation();
+
   // Helper para obtener la instancia del WebSocketService
   const getWebSocket = () => getWebSocketService();
   
   // Estados del juego
-  const [countdown, setCountdown] = useState(30);
+  const [countdown, setCountdown] = useState(120);
   const [roundTime, setRoundTime] = useState(null);
   const [round, setRound] = useState(0);
   const [gameStatus, setGameStatus] = useState('waiting');
@@ -52,8 +56,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
   const [showMiningBubble, setShowMiningBubble] = useState(true);
   const [isCalculatingRewards, setIsCalculatingRewards] = useState(false);
   const [roundRewards, setRoundRewards] = useState(null);
+  const [roundMeta, setRoundMeta] = useState(null); // { round, winningIndustry, wasteRewardApplied, roundSeed }
   const [isWaiting, setIsWaiting] = useState(false);
-  const [roundReadyError, setRoundReadyError] = useState(null);
   const [results, setResults] = useState(null);
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [currentBlockId, setCurrentBlockId] = useState(null);
@@ -77,10 +81,21 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
 
   // FUNCIONES DE NAVEGACIÓN
   const safeNavigate = (screen, params = {}) => {
+    console.log('🧭 [safeNavigate] Intentando navegar a:', screen);
+    console.log('🧭 [safeNavigate] navigationRef.current:', !!navigationRef.current);
+    console.log('🧭 [safeNavigate] currentScreenRef.current:', currentScreenRef.current);
+    
     if (navigationRef.current && typeof navigationRef.current.navigate === 'function') {
-      if (currentScreenRef.current === screen) return;
+      if (currentScreenRef.current === screen) {
+        console.log('🧭 [safeNavigate] Ya estamos en', screen, '- evitando navegación duplicada');
+        return;
+      }
+      console.log('🧭 [safeNavigate] Navegando de', currentScreenRef.current, 'a', screen);
       currentScreenRef.current = screen;
       navigationRef.current.navigate(screen, { ...params, gameId, userId });
+      console.log('🧭 [safeNavigate] Navegación ejecutada');
+    } else {
+      console.error('❌ [safeNavigate] navigationRef.current no disponible o navigate no es función');
     }
   };
 
@@ -217,6 +232,12 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       setIsWebSocketConnected(true);
       console.log('🔌 Estado isWebSocketConnected DESPUÉS: true');
       console.log('🔌 Estado completo del servicio:', getWebSocket().getConnectionStatus());
+      
+      // REHIDRATACIÓN: Si estamos en roundEnd y no tenemos roundRewards, solicitar rehidratación
+      if (gameStatus === 'roundEnd' && !roundRewards) {
+        console.log('🔄 [REHYDRATE] Conexión restablecida en roundEnd sin roundRewards, solicitando rehidratación');
+        getWebSocket().emit('rehydrate_end_of_round', { gameId });
+      }
     });
 
     getWebSocket().on('connection_lost', (data) => {
@@ -278,78 +299,122 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       console.log('🔄 [UI][ROUND] CALCULATING round=', data.round);
       setGameStatus('calculating');
       setIsCalculatingRewards(true);
+      
+      // Timeout de seguridad para evitar que se quede calculando para siempre
+      setTimeout(() => {
+        console.log('⏰ [UI][ROUND] Timeout de calculating - forzando fin');
+        setIsCalculatingRewards(false);
+        setGameStatus('roundEnd');
+        
+        // Calcular recompensas desde blockchain como fallback
+        console.log('⏰ [REWARDS] Timeout alcanzado, calculando desde blockchain');
+        calculateRewardsFromBlockchain();
+      }, 4000); // 4 segundos máximo
     });
 
-    // NUEVO: Listener para ROUND_END con payload completo
-    getWebSocket().on('ROUND_END', (data) => {
-      console.log('🏁 [UI][ROUND] END round=', data.round, 'winners=', data.mining.length, 'winningIndustry=', data.winningIndustry);
-      setGameStatus('roundEnd');
-      setWinningIndustry(data.winningIndustry);
-      setIsCalculatingRewards(false);
-      
-      // Procesar datos de recompensas para crear roundRewards
+    // FALLBACK: Calcular recompensas automáticamente si no llega ROUND_END del servidor
+    const calculateRewardsFromBlockchain = () => {
+      console.log('⛏️ [REWARDS] Calculando recompensas desde blockchain local');
       const roundRewards = {};
       
-      // Procesar recompensas de minado
-      if (data.mining && data.mining.length > 0) {
-        data.mining.forEach(miningReward => {
-          if (!roundRewards[miningReward.winnerUserId]) {
-            roundRewards[miningReward.winnerUserId] = {};
-          }
-          roundRewards[miningReward.winnerUserId].miningReward = miningReward.rewardApplied || 50;
-        });
-      }
+      // Obtener bloques de la ronda anterior (round: 0 para ronda 1)
+      const currentRoundBlocks = minedBlocks.filter(block => block.round === 0);
+      console.log(`⛏️ [REWARDS] Bloques de la ronda 0 (ronda actual):`, currentRoundBlocks);
       
-      // Procesar recompensas de waste
-      if (data.waste && data.waste.winners && data.waste.winners.length > 0) {
-        data.waste.winners.forEach(winnerId => {
+      currentRoundBlocks.forEach(block => {
+        if (block.winner && block.winner.isCorrect) {
+          const winnerId = block.winner.userId;
           if (!roundRewards[winnerId]) {
             roundRewards[winnerId] = {};
           }
-          roundRewards[winnerId].wasteRemoved = data.waste.rewardAppliedPerUser || 0;
+          roundRewards[winnerId].miningReward = (roundRewards[winnerId].miningReward || 0) + 50;
+          console.log(`💰 [REWARDS] ${block.winner.userName || winnerId}: +50 RockCoins (minado desde blockchain)`);
+        }
+      });
+      
+      if (Object.keys(roundRewards).length > 0) {
+        console.log('🎁 [REWARDS] Recompensas calculadas desde blockchain:', roundRewards);
+        setRoundRewards(roundRewards);
+      } else {
+        console.log('⚠️ [REWARDS] No se encontraron bloques minados correctamente');
+      }
+    };
+
+    // Listener para ROUND_END - reconciliación autoritativa
+    getWebSocket().off('ROUND_END');
+    getWebSocket().on('ROUND_END', (data) => {
+      console.log('🏁 [ROUND_END] payload:', data);
+
+      // 1) Estado base
+      setGameStatus('roundEnd');
+      setIsCalculatingRewards(false);
+      if (data.winningIndustry) setWinningIndustry(data.winningIndustry);
+
+      // 2) Actualizar roundMeta con datos autoritativos del servidor
+      if (data.winningIndustry && data.waste?.rewardAppliedPerUser) {
+        setRoundMeta({
+          round: data.round || round,
+          winningIndustry: data.winningIndustry,
+          wasteRewardApplied: data.waste.rewardAppliedPerUser,
+          roundSeed: `${gameId}:${data.round || round}:${Date.now()}`
         });
       }
-      
-      console.log('💰 [ROUND_END] roundRewards procesados:', roundRewards);
-      setRoundRewards(roundRewards);
-      
-      // Actualizar inventarios con balances finales
-      if (data.balances && data.balances[userId]) {
-        const finalBalance = data.balances[userId];
-        setWebSocketInventory(prev => ({
-          ...prev,
-          rockCoins: finalBalance.rockCoins,
-          waste: finalBalance.waste
-        }));
+
+      // 3) Cartelitos desde server (si vienen): mining[], waste{}
+      const rewards = {};
+      if (Array.isArray(data.mining)) {
+        data.mining.forEach(m => {
+          // server: { userId, userName, rockCoins, blockId }
+          if (!rewards[m.userId]) rewards[m.userId] = {};
+          rewards[m.userId].miningReward = m.rockCoins ?? 50;
+        });
       }
-      
-      // Actualizar datos de jugadores con balances finales
-      if (data.balances) {
-        const updatedPlayers = allPlayersData.map(player => {
-          const finalBalance = data.balances[player.userId];
-          if (finalBalance) {
-            return {
-              ...player,
-              rockCoins: finalBalance.rockCoins,
-              waste: finalBalance.waste
-            };
-          }
-          return player;
+      if (data.waste?.winners?.length) {
+        data.waste.winners.forEach(winnerId => {
+          if (!rewards[winnerId]) rewards[winnerId] = {};
+          rewards[winnerId].wasteRemoved = data.waste.rewardAppliedPerUser ?? 0;
+        });
+      }
+      setRoundRewards(rewards);
+
+      // 4) Balances finales → inventario y ranking global
+      if (data.balances && data.balances[userId]) {
+        const finalMe = data.balances[userId];
+        setWebSocketInventory(prev => ({ ...prev, rockCoins: finalMe.rockCoins, waste: finalMe.waste }));
+      }
+      if (data.balances && Array.isArray(allPlayersData) && allPlayersData.length) {
+        const updatedPlayers = allPlayersData.map(p => {
+          const fb = data.balances[p.userId];
+          return fb ? { ...p, rockCoins: fb.rockCoins, waste: fb.waste } : p;
         });
         setAllPlayersData(updatedPlayers);
       }
     });
 
-    // LEGACY: Mantener listener original para compatibilidad
-    getWebSocket().on('round_ended', (data) => {
-      console.log('🏁 Fin de ronda (WebSocket):', data);
-      setGameStatus(data.status || 'roundEnd');
-      setWinningIndustry(data.winningIndustry);
-      console.log('🎮 Estado actualizado a roundEnd - GameTabs se encargará de la navegación');
-      
-      // Resetear flags
-      hasNavigatedRef.current = false;
-      endRoundCalledRef.current = false;
+    // Listener para round_meta (meta global de ronda)
+    getWebSocket().off('round_meta');
+    getWebSocket().on('round_meta', (data) => {
+      console.log('🎯 [ROUND_META] Meta de ronda recibida:', data);
+      setRoundMeta(data);
+      if (data.winningIndustry) {
+        setWinningIndustry(data.winningIndustry);
+      }
+    });
+
+    // Safety net en game_status
+    getWebSocket().off('game_status');
+    getWebSocket().on('game_status', (data) => {
+      if (data.status === 'roundEnd') {
+        setRound(data.round || 1);
+        setTimeout(() => {
+          if (!roundRewards) {
+            console.log('🛟 [SAFETY] No llegó ROUND_END aún → rehydrate_end_of_round');
+            getWebSocket().emit('rehydrate_end_of_round', { gameId });
+          }
+        }, 2000);
+        return;
+      }
+      // ...otros estados
     });
 
     getWebSocket().on('game_completed', (data) => {
@@ -357,11 +422,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       safeNavigate('GameResults');
     });
 
-    // Listener para recompensas asignadas
-    getWebSocket().on('rewards_assigned', (data) => {
-      console.log('💰 Recompensas asignadas recibidas:', data);
-      // Las recompensas se manejan en EndOfRoundScreen
-    });
+    // ELIMINADO: Listener legacy rewards_assigned - solo usar ROUND_END
 
     // NUEVOS LISTENERS PARA FINAL DE RONDA
     // Listener para progreso de ready
@@ -373,24 +434,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
     // Listener para errores de ready
     getWebSocket().on('round:ready:error', (data) => {
       console.error('❌ [ROUND:READY] Error:', data);
-      console.error('❌ [ROUND:READY] Detalles del error:', {
-        message: data.message,
-        currentStatus: data.currentStatus,
-        expectedStatus: data.expectedStatus
-      });
-      
-      // Resetear estado de ready
-      setIsReadyForNextRound(false);
-      
-      // Mostrar error en la UI
-      setRoundReadyError(data.message);
-      
-      // Limpiar error después de 5 segundos
-      setTimeout(() => {
-        setRoundReadyError(null);
-      }, 5000);
-      
-      console.error('❌ [ROUND:READY] Estado resetado, el usuario puede intentar de nuevo');
+      // TODO: Mostrar error en la UI
     });
 
     // Listener para nuevo estado de economía
@@ -404,31 +448,37 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
 
     // Listener para transición a pantalla de espera
     getWebSocket().on('game_status', (data) => {
-      console.log('🔌 Recibiendo game_status - Estado actual:', gameStatus, 'Nuevo estado:', data.status);
+      console.log('🔌 [GAME_STATUS] Recibiendo game_status - Estado actual:', gameStatus, 'Nuevo estado:', data.status);
+      
+      // NO cambiar gameStatus si es roundEnd - se maneja en ROUND_END
+      if (data.status === 'roundEnd') {
+        console.log('🎮 [GAME_STATUS] Estado roundEnd recibido - esperando ROUND_END para cambiar status');
+        setRound(data.round || 1);
+        return;
+      }
+      
+      console.log('🎮 [GAME_STATUS] Cambiando gameStatus de', gameStatus, 'a', data.status);
       setGameStatus(data.status);
       setRound(data.round || 1);
       
       // Navegación basada en estado
       if (data.status === 'starting') {
-        console.log('🎮 Navegando a WaitingRoom - estado starting');
+        console.log('🎮 [GAME_STATUS] Navegando a WaitingRoom - estado starting');
         safeNavigate('WaitingRoom');
       } else if (data.status === 'waitingForNextRound') {
-        console.log('🎮 Navegando a EndOfRoundWaiting - estado waitingForNextRound');
+        console.log('🎮 [GAME_STATUS] Navegando a EndOfRoundWaiting - estado waitingForNextRound');
         safeNavigate('EndOfRoundWaiting');
-      } else if (data.status === 'roundEnd') {
-        console.log('🎮 Estado roundEnd recibido - GameTabs se encargará de la navegación a EndOfRoundScreen');
-        // Cambiar isCalculatingRewards a false para permitir navegación
-        setIsCalculatingRewards(false);
       }
     });
 
-    // Listener para round_ended informativo
-    getWebSocket().on('round_ended', (data) => {
-      console.log('🏁 [ROUND_ENDED] Ronda terminada:', data);
-      if (data.persisted) {
-        console.log('✅ [ROUND_ENDED] Datos de ronda persistidos exitosamente');
-      }
+    // SISTEMA ORIGINAL DE CALCULATING REWARDS (como funcionaba ayer)
+    getWebSocket().on('ROUND_CALCULATING', (data) => {
+      console.log('🔄 [ROUND_CALCULATING] Calculando recompensas...', data);
+      setIsCalculatingRewards(true);
+      // NO navegar automáticamente - EndOfRound manejará su propio calculating state
     });
+
+    // ELIMINADO: Listener duplicado de ROUND_END - solo mantener el primero
 
     // Nuevo problema de minado - Separando cola global y local
     getWebSocket().on('new_mining_problem', (data) => {
@@ -540,7 +590,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       console.log('🏆 [CLIENTE] data.playerData:', data.playerData);
       console.log('🏆 [CLIENTE] Array.isArray(data.playerData):', Array.isArray(data.playerData));
       
-      if (data.playerData && Array.isArray(data.playerData)) {
+      // PROTECCIÓN: No actualizar si el array está vacío y ya tenemos datos
+      if (data.playerData && Array.isArray(data.playerData) && data.playerData.length > 0) {
         // Ordenar por balance (mayor a menor) y por nombre si empatan
         const sortedPlayerData = data.playerData.sort((a, b) => {
           const balanceA = a.rockCoins - a.waste;
@@ -554,6 +605,9 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
         console.log('🏆 [CLIENTE] Datos de jugadores ordenados:', sortedPlayerData);
         setAllPlayersData(sortedPlayerData);
         console.log('🏆 [CLIENTE] Estado allPlayersData actualizado');
+      } else if (data.playerData && Array.isArray(data.playerData) && data.playerData.length === 0) {
+        console.log('⚠️ [CLIENTE] Array de jugadores vacío recibido - manteniendo datos existentes');
+        // No actualizar si recibimos un array vacío
         
         // Delay para asegurar que todos los datos estén completamente actualizados antes de navegar
         setTimeout(() => {
@@ -739,7 +793,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
           console.log('🚀 Forzando start_round manualmente...');
           
           // Forzar start_round manualmente
-          const futureTime = new Date(Date.now() + 30000); // 30 segundos para pruebas
+          const futureTime = new Date(Date.now() + 120000); // 2 minutos
           setGameStatus('in_progress');
           setRoundTime(futureTime);
           setRound(1);
@@ -752,7 +806,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       console.log('📄 WebSocket desconectado, forzando directamente...');
       
       // Forzar inmediatamente si no hay WebSocket
-      const futureTime = new Date(Date.now() + 30000); // 30 segundos para pruebas
+      const futureTime = new Date(Date.now() + 120000); // 2 minutos
       setGameStatus('in_progress');
       setRoundTime(futureTime);
       setRound(1);
@@ -817,9 +871,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
   const markRoundReady = async () => {
     if (isWebSocketConnected) {
       console.log(`⏭️ [ROUND:READY] Marcando como listo para ronda ${round} vía WebSocket...`);
-      console.log(`⏭️ [ROUND:READY] gameId: ${gameId}, userId: ${userId}, round: ${round}`);
-      console.log(`⏭️ [ROUND:READY] WebSocket conectado: ${isWebSocketConnected}`);
-      console.log(`⏭️ [ROUND:READY] WebSocket service:`, getWebSocket());
       setIsReadyForNextRound(true);
       getWebSocket().roundReady(gameId, userId, round);
     } else {
@@ -1102,46 +1153,83 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
     }
     
     if (!roundTime) {
-      console.log("⚠️ No hay roundTime, manteniendo countdown en 30");
-      setCountdown(30);
+      console.log("⚠️ No hay roundTime, manteniendo countdown en 120");
+      setCountdown(120);
       return;
     }
 
-      console.log("⏰ Iniciando temporizador con roundTime:", roundTime);
+        console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
 
     intervalRef.current = setInterval(() => {
       const now = new Date();
       const diff = roundTime.getTime() - now.getTime();
       const totalSecondsLeft = Math.max(0, Math.floor(diff / 1000));
       
+      // Debug del timer (solo en casos críticos)
+      if (gameStatus === 'in_progress' && totalSecondsLeft <= 5 && totalSecondsLeft > 0) {
+        console.log(`⏰ [TIMER] Últimos segundos: ${totalSecondsLeft}s`);
+      }
+      
+        // Activar loading cuando countdown llegue a 0 (independiente del gameStatus)
+        if (totalSecondsLeft <= 0 && !endRoundCalledRef.current) {
+          console.log("🏁 [TIMER] Countdown llegó a 0 - activando loading de calculating rewards");
+          endRoundCalledRef.current = true;
+          setIsCalculatingRewards(true);
+          
+          // LIMPIAR EL TIMER INMEDIATAMENTE para evitar bucles
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+            console.log("🧹 [TIMER] Timer limpiado al llegar a 0");
+          }
+          
+          // Navegación automática a EndOfRound cuando timer llegue a 0
+          console.log('🧭 [TIMER] Navegando a EndOfRound (modo loader)');
+          console.log('🧭 [TIMER] safeNavigate disponible:', !!safeNavigate);
+          console.log('🧭 [TIMER] gameId:', gameId, 'userId:', userId);
+          
+          if (safeNavigate) {
+            console.log('🧭 [TIMER] Ejecutando safeNavigate("EndOfRound")');
+            safeNavigate('EndOfRound');
+            console.log('🧭 [TIMER] safeNavigate ejecutado');
+          } else {
+            console.error('❌ [TIMER] safeNavigate no disponible');
+          }
+          
+          // Solicitar al servidor que procese el final de ronda
+          console.log("📡 [TIMER] Solicitando final de ronda al servidor");
+          const webSocketService = getWebSocket();
+          if (webSocketService.isConnected) {
+            console.log("📡 [TIMER] Emitiendo round_ended al servidor:", { gameId, userId });
+            webSocketService.emit('round_ended', { gameId, userId });
+          } else {
+            console.error("❌ [TIMER] WebSocket no conectado, no se puede emitir round_ended");
+          }
+        }
+
         if (gameStatus === 'in_progress') {
           setCountdown(prevCountdown => {
             if (prevCountdown !== totalSecondsLeft) {
+              // Solo log cada 10 segundos o en los últimos 10
+              if (totalSecondsLeft % 10 === 0 || totalSecondsLeft <= 10) {
+                console.log(`⏰ [TIMER] Countdown: ${totalSecondsLeft}s`);
+              }
               return totalSecondsLeft;
             }
             return prevCountdown;
           });
-        
-        // Activar loading cuando countdown llegue a 0
-        if (totalSecondsLeft <= 0 && !endRoundCalledRef.current) {
-          console.log("🏁 Countdown llegó a 0 - activando loading de calculating rewards");
-          endRoundCalledRef.current = true;
-          setIsCalculatingRewards(true);
-          
-          // Solicitar al servidor que procese el final de ronda
-          console.log("📡 Solicitando final de ronda al servidor");
-          const webSocketService = getWebSocket();
-          if (webSocketService.isConnected) {
-            webSocketService.emit('round_ended', { gameId, userId });
-          }
-        }
       } else if (gameStatus === 'roundEnd') {
-        // Cuando el estado es 'roundEnd', mantener el countdown en 0
-        setCountdown(0);
+        // Cuando el estado es 'roundEnd', NO interrumpir el timer - dejar que continúe hasta que llegue a 0 naturalmente
+        // Solo actualizar countdown si aún no ha llegado a 0
+        if (totalSecondsLeft > 0) {
+          setCountdown(totalSecondsLeft);
+        } else {
+          setCountdown(0);
+        }
       } else {
         // console.log("⏳ countdown tick (otros estados):", totalSecondsLeft, "- manteniendo en 120");
-        // En otros estados, mantener countdown en 30
-        setCountdown(30);
+        // En otros estados, mantener countdown en 120
+        setCountdown(120);
       }
     }, 1000);
 
@@ -1354,6 +1442,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       
               // Inventario del WebSocket
               webSocketInventory,
+              setWebSocketInventory,
         getInventoryFromWebSocket,
         minedBlocks,
         playerRankings,
@@ -1363,7 +1452,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
         isCalculatingRewards,
         roundRewards,
         setRoundRewards,
-        roundReadyError,
+        roundMeta,
       
       // Funciones del juego
       startGame,
@@ -1373,7 +1462,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId, navigation 
       
       // WebSocket
       isWebSocketConnected,
-      webSocketService: getWebSocket()
+      webSocketService: getWebSocket(),
+      getWebSocket
     }}>
       {children}
     </GameContextHybridRobust.Provider>

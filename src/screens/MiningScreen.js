@@ -75,12 +75,12 @@ const MiningScreen = ({ route, navigation }) => {
   // Función segura para obtener el número de bloque
   const getBlockNumber = () => {
     if (!blockId || typeof blockId !== 'string') {
-      console.log(`⚠️ getBlockNumber: blockId inválido - ${blockId}`);
+      // console.log(`⚠️ getBlockNumber: blockId inválido - ${blockId}`);
       return '...';
     }
     const parts = blockId.split('-');
     const blockNumber = parts.length > 1 ? parts[1] : '...';
-    console.log(`✅ getBlockNumber: ${blockNumber} (de ${blockId})`);
+    // console.log(`✅ getBlockNumber: ${blockNumber} (de ${blockId})`);
     return blockNumber;
   };
 
@@ -103,15 +103,15 @@ const MiningScreen = ({ route, navigation }) => {
   
   // Logs de debugging para hasValidData (solo cuando cambia)
   if (hasValidData && !results) {
-    console.log(`🔍 hasValidData check:`, {
-      blockId: !!blockId,
-      currentProblem: !!currentProblem,
-      activeProblem: !!activeProblem,
-      hasValidData,
-      blockIdValue: blockId,
-      currentProblemId: currentProblem?.id,
-      activeProblemId: activeProblem?.blockId
-    });
+    // console.log(`🔍 hasValidData check:`, {
+    //   blockId: !!blockId,
+    //   currentProblem: !!currentProblem,
+    //   activeProblem: !!activeProblem,
+    //   hasValidData,
+    //   blockIdValue: blockId,
+    //   currentProblemId: currentProblem?.id,
+    //   activeProblemId: activeProblem?.blockId
+    // });
   }
   
   // Obtener el nombre del usuario que realizó la transacción
@@ -641,7 +641,7 @@ const MiningScreen = ({ route, navigation }) => {
 
             {!results && !isWaiting && miningQueue > 0 && hasValidData && (
               <View style={styles.navigationButtons}>
-                {console.log(`🔨 [MINING-BUTTON] Mostrando botón con miningQueue=${miningQueue}, miningProblems.length=${miningProblems.length}`)}
+                {/* {console.log(`🔨 [MINING-BUTTON] Mostrando botón con miningQueue=${miningQueue}, miningProblems.length=${miningProblems.length}`)} */}
                 <TouchableOpacity 
                   onPress={() => {
                     const prevIndex = currentProblemIndex - 1;

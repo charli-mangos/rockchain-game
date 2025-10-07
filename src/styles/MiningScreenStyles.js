@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 55, // Reducido de 70 a 55
     borderWidth: 3,
-    borderColor: '#ba5d17',
+    borderColor: '#1d3d39',
     borderRadius: 8, // Mismo borderRadius que el botón Submit
     backgroundColor: '#fdf4e8',
     justifyContent: 'center',
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   answerDisplayActive: {
-    borderColor: '#ba5d17',
+    borderColor: '#1d3d39',
     backgroundColor: '#fdf4e8',
     shadowOpacity: 0.2,
     shadowRadius: 6,

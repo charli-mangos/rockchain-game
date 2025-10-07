@@ -22,7 +22,18 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
 
     const webSocketService = getWebSocketService();
     if (!webSocketService.isConnected) {
-      console.error('❌ WebSocket no está conectado');
+      console.warn('⚠️ WebSocket no está conectado, esperando conexión...');
+      // Esperar a que el WebSocket se conecte
+      const checkConnection = () => {
+        if (webSocketService.isConnected) {
+          console.log('✅ WebSocket conectado, enviando solicitud de problemas pendientes');
+          webSocketService.emit('mining:pending-count', { userId });
+        } else {
+          // Reintentar después de 500ms
+          setTimeout(checkConnection, 500);
+        }
+      };
+      checkConnection();
       return;
     }
 
@@ -89,7 +100,18 @@ export const SimpleMiningProvider = ({ children, gameId, userId }) => {
 
     const webSocketService = getWebSocketService();
     if (!webSocketService.isConnected) {
-      console.error('❌ WebSocket no está conectado');
+      console.warn('⚠️ WebSocket no está conectado, esperando conexión...');
+      // Esperar a que el WebSocket se conecte
+      const checkConnection = () => {
+        if (webSocketService.isConnected) {
+          console.log('✅ WebSocket conectado, enviando problem-open');
+          webSocketService.emit('mining:problem-open', { blockId, userId });
+        } else {
+          // Reintentar después de 500ms
+          setTimeout(checkConnection, 500);
+        }
+      };
+      checkConnection();
       return;
     }
 

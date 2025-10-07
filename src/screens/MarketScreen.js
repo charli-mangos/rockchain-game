@@ -9,6 +9,11 @@ import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 const MarketScreen = ({ navigation, route }) => {
   const { productList, gameId, userId } = useGameContextHybridRobust();
   
+  // Agregar elemento invisible si el número de productos es impar
+  const dataWithSpacer = productList.length % 2 === 1 
+    ? [...productList, { isSpacer: true, id: 'spacer' }]
+    : productList;
+  
   // console.log('MarketScreen - productList:', productList);
   // console.log('MarketScreen - gameId:', gameId);
   // console.log('MarketScreen - userId:', userId);
@@ -64,6 +69,11 @@ const MarketScreen = ({ navigation, route }) => {
   };
 
   const renderProduct = ({ item }) => {
+    // Si es un espaciador invisible, renderizar View vacío
+    if (item.isSpacer) {
+      return <View style={{ flex: 1, margin: 5 }} />;
+    }
+    
     // console.log('MarketScreen - rendering product:', item);
     return (
       <ExpandableProduct
@@ -85,9 +95,9 @@ const MarketScreen = ({ navigation, route }) => {
           onSettingsPress={() => console.log('Settings Pressed')}
       />
       <FlatList
-        data={productList}
+        data={dataWithSpacer}
         renderItem={renderProduct}
-        keyExtractor={(item, index) => index.toString()}
+        keyExtractor={(item, index) => item.isSpacer ? 'spacer' : index.toString()}
         numColumns={2}
         style={styles.flatList}
         contentContainerStyle={styles.flatListContainer}

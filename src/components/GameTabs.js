@@ -50,7 +50,7 @@ const Tabs = ({ route }) => {
 };
 
 const GameTabs = ({ route }) => {
-  const { gameId, userId, isCalculatingRewards, gameStatus } = useGameContextHybridRobust();
+  const { gameId, userId, isCalculatingRewards, gameStatus, roundRewards } = useGameContextHybridRobust();
   const { showMiningBubble, setShowMiningBubble, miningQueue } = useGameContextHybridRobust();
   const simpleMiningContext = useSimpleMiningContext();
   
@@ -84,13 +84,26 @@ const GameTabs = ({ route }) => {
     };
   }, [gameId, userId, navigation]);
 
-  // Navegar a EndOfRoundScreen cuando las recompensas estén listas
+  // SISTEMA CORREGIDO DE NAVEGACIÓN - Solo navegar cuando recompensas estén listas
   useEffect(() => {
-    if (gameStatus === 'roundEnd' && !isCalculatingRewards) {
-      console.log('🎮 GameTabs: Recompensas procesadas, navegando a EndOfRoundScreen');
+    console.log('🎮 [GameTabs] Navegación check:', {
+      gameStatus,
+      isCalculatingRewards,
+      hasRoundRewards: !!roundRewards,
+      roundRewards
+    });
+    
+    if (gameStatus === 'roundEnd' && !isCalculatingRewards && roundRewards) {
+      console.log('🎮 [GameTabs] ✅ CONDICIONES CUMPLIDAS - Navegando a EndOfRoundScreen');
       navigation.navigate('EndOfRound', { gameId, userId });
+    } else {
+      console.log('🎮 [GameTabs] ⏳ Esperando condiciones:', {
+        gameStatusOk: gameStatus === 'roundEnd',
+        calculatingOk: !isCalculatingRewards,
+        rewardsOk: !!roundRewards
+      });
     }
-  }, [gameStatus, isCalculatingRewards, gameId, userId, navigation]);
+  }, [gameStatus, isCalculatingRewards, roundRewards, gameId, userId, navigation]);
 
   return (
     <View style={{ flex: 1 }}>

@@ -1,16 +1,72 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
 import RewardAnimation from '../components/RewardAnimation';
+import RotatingCube from '../components/RotatingCube';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db, functions } from '../../firebase';
 import { useNavigation } from '@react-navigation/native';
 import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
+
+// Generador determinista 0..1
+const seededRand = (seedStr) => {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967295;
+};
+
+const computeLocalRewards = ({
+  allPlayersData,
+  minedBlocks,
+  round,
+  roundMeta,
+  userSelectedIndustry,
+  gameId,
+  userId
+}) => {
+  if (!Array.isArray(allPlayersData) || allPlayersData.length === 0) return null;
+
+  const blocks = Array.isArray(minedBlocks) ? minedBlocks.filter(b => {
+    return b && (b.round === round || b.round === (round - 1));
+  }) : [];
+
+  const rewards = {};
+  // MINING: +50 por cada bloque correcto
+  for (const block of blocks) {
+    if (block?.winner?.isCorrect && block?.winner?.userId) {
+      const uid = block.winner.userId;
+      if (!rewards[uid]) rewards[uid] = {};
+      rewards[uid].miningReward = (rewards[uid].miningReward || 0) + 50;
+    }
+  }
+
+  // WASTE: si el usuario acierta → usar valor global de roundMeta
+  console.log('🗑️ [WASTE] Verificando condiciones:', {
+    roundMeta: roundMeta,
+    userSelectedIndustry: userSelectedIndustry,
+    winningIndustry: roundMeta?.winningIndustry,
+    wasteRewardApplied: roundMeta?.wasteRewardApplied
+  });
+  
+  if (roundMeta?.winningIndustry && userSelectedIndustry && userSelectedIndustry === roundMeta.winningIndustry) {
+    const val = roundMeta.wasteRewardApplied; // Valor único global
+    console.log('🗑️ [WASTE] Usuario acertó industria! Aplicando wasteRemoved:', val);
+    if (!rewards[userId]) rewards[userId] = {};
+    rewards[userId].wasteRemoved = val;
+  } else {
+    console.log('🗑️ [WASTE] Usuario no acertó industria o faltan datos');
+  }
+
+  return rewards;
+};
 
 const EndOfRoundScreen = ({ route }) => {
   const { 
@@ -26,27 +82,131 @@ const EndOfRoundScreen = ({ route }) => {
     webSocketService,
     roundRewards,
     setRoundRewards,
-    roundReadyError
+    isCalculatingRewards,
+    roundMeta,
+    webSocketInventory,
+    setWebSocketInventory,
+    getWebSocket,
+    minedBlocks
   } = useGameContextHybridRobust();
   
-  // Usar los datos completos de todos los jugadores
-  const players = allPlayersData.sort((a, b) => {
-    // Ordenar por balance (RockCoins - Waste) de mayor a menor
+  // Crear displayPlayers aplicando recompensas locales solo para UI
+  const basePlayers = [...allPlayersData].sort((a, b) => {
     const balanceA = a.rockCoins - a.waste;
     const balanceB = b.rockCoins - b.waste;
     return balanceB - balanceA;
   });
 
+  const displayPlayers = basePlayers.map(p => {
+    const r = (roundRewards && roundRewards[p.userId]) || {};
+    const rockCoins = p.rockCoins + (r.miningReward || 0);
+    const waste = Math.max(0, p.waste - (r.wasteRemoved || 0));
+    return { ...p, rockCoins, waste };
+  }).sort((a, b) => (b.rockCoins - b.waste) - (a.rockCoins - a.waste));
+
   // Debug: Log de datos recibidos
   console.log('🎮 [EndOfRoundScreen] Datos recibidos del contexto:');
   console.log('🎮 [EndOfRoundScreen] allPlayersData:', allPlayersData);
   console.log('🎮 [EndOfRoundScreen] allPlayersData.length:', allPlayersData.length);
-  console.log('🎮 [EndOfRoundScreen] players (ordenados):', players);
+  console.log('🎮 [EndOfRoundScreen] displayPlayers (con recompensas aplicadas):', displayPlayers);
   console.log('🎮 [EndOfRoundScreen] winningIndustry:', winningIndustry);
   console.log('🎮 [EndOfRoundScreen] round:', round);
   console.log('🎮 [EndOfRoundScreen] isWebSocketConnected:', isWebSocketConnected);
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
+  
+  // Cargar industria seleccionada del usuario desde el contexto
+  useEffect(() => {
+    if (allPlayersData && allPlayersData.length > 0) {
+      const currentPlayer = allPlayersData.find(player => player.userId === userId);
+      if (currentPlayer && currentPlayer.selectedIndustry) {
+        console.log('🏭 [INDUSTRY] Cargando industria seleccionada:', currentPlayer.selectedIndustry);
+        setUserSelectedIndustry(currentPlayer.selectedIndustry);
+      }
+    }
+  }, [allPlayersData, userId]);
+  
+  // Estado interno para overlay de calculating (3 segundos fijos como detalle visual)
+  const [isCalculating, setIsCalculating] = useState(true);
   const [rewardMessage, setRewardMessage] = useState(null);
+  const calculatingTimeoutRef = useRef(null);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  
+  // Overlay de calculating de 3 segundos como detalle visual
+  useEffect(() => {
+    console.log('🎬 [CALCULATING] Iniciando overlay de 3 segundos');
+    setIsCalculating(true);
+    
+    // Animación de progreso de 3 segundos
+    Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: 3000,
+      useNativeDriver: false,
+    }).start();
+    
+    calculatingTimeoutRef.current = setTimeout(() => {
+      console.log('🎬 [CALCULATING] Overlay de 3 segundos completado');
+      setIsCalculating(false);
+    }, 3000);
+
+    return () => {
+      if (calculatingTimeoutRef.current) {
+        clearTimeout(calculatingTimeoutRef.current);
+      }
+    };
+  }, []); // Solo se ejecuta una vez al montar el componente
+
+  // Calcular recompensas locales y apagar overlay SIEMPRE
+  useEffect(() => {
+    console.log('⛏️ [REWARDS] Calculando recompensas locales...');
+    console.log('🎯 [ROUND_META] roundMeta recibido:', roundMeta);
+    console.log('👤 [USER] userSelectedIndustry:', userSelectedIndustry);
+    
+    const rewards = computeLocalRewards({
+      allPlayersData,
+      minedBlocks,
+      round,
+      roundMeta,
+      userSelectedIndustry,
+      gameId,
+      userId
+    });
+
+    if (rewards && Object.keys(rewards).length > 0) {
+      console.log('🎁 [REWARDS] setRoundRewards con recompensas:', rewards);
+      setRoundRewards(rewards);
+    } else {
+      console.log('🎁 [REWARDS] setRoundRewards vacío para apagar overlay');
+      setRoundRewards({}); // sin premios, pero quita el loader
+    }
+
+    // 2) Inventario optimista (una sola vez por pantalla)
+    if (!appliedOptimisticRef.current && rewards && Object.keys(rewards).length > 0) {
+      appliedOptimisticRef.current = true;
+      const mine = rewards[userId] || {};
+      const deltaCoins = mine.miningReward || 0;
+      const deltaWaste = -(mine.wasteRemoved || 0);
+
+      console.log('💰 [OPTIMISTIC] Aplicando inventario optimista:', { deltaCoins, deltaWaste });
+      
+      setWebSocketInventory(prev => ({
+        ...prev,
+        rockCoins: Math.max(0, (prev?.rockCoins || 0) + deltaCoins),
+        waste: Math.max(0, (prev?.waste || 0) + deltaWaste),
+      }));
+    }
+
+    // 3) Emitir fin de ronda (idempotente en server)
+    try {
+      const ws = getWebSocket && getWebSocket();
+      if (ws) {
+        ws.emit('round_ended', { gameId, userId });
+        console.log('📡 [END] round_ended emitido (optimista)');
+      }
+    } catch (e) {
+      console.warn('No se pudo emitir round_ended (optimista):', e?.message);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round, minedBlocks, roundMeta, userSelectedIndustry, gameId, userId]);
   const navigation = useNavigation();
 
   // Refs para controlar el estado de procesamiento
@@ -55,6 +215,13 @@ const EndOfRoundScreen = ({ route }) => {
   const unsubscribeRef = useRef(null);
   const effectRunRef = useRef(false);
   const isNavigatingRef = useRef(false); // Nuevo ref para controlar navegación
+  
+  // Correlación: calcId local para logs
+  const calcIdRef = useRef(`${gameId}:${round}:${userId}:${Date.now()}`);
+  console.log('🆔 [ROUND_CALC] calcId=', calcIdRef.current);
+  
+  // Ref para evitar doble contabilidad optimista
+  const appliedOptimisticRef = useRef(false);
 
   // Resetear estado cuando cambia la ronda
   useEffect(() => {
@@ -139,11 +306,17 @@ const EndOfRoundScreen = ({ route }) => {
         }
       };
 
-      webSocketService.on('rewards_assigned', handleRewardsAssigned);
+      const ws = getWebSocket();
+      if (ws) {
+        ws.on('rewards_assigned', handleRewardsAssigned);
+      }
 
       unsubscribeRef.current = () => {
         unsubscribeUser();
-        webSocketService.off('rewards_assigned', handleRewardsAssigned);
+        const ws = getWebSocket();
+        if (ws) {
+          ws.off('rewards_assigned', handleRewardsAssigned);
+        }
       };
 
       return () => {
@@ -169,74 +342,14 @@ const EndOfRoundScreen = ({ route }) => {
         return;
       }
       
-      // Solo procesar recompensas si:
-      // 1. No se han asignado recompensas en el backend
-      // 2. No se han procesado localmente para esta ronda
-      // 3. La ronda actual coincide con la ronda del juego
-      // 4. NO estamos en proceso de navegación
-      // 5. El estado del juego es 'roundEnd'
-      if (!gameData.rewardsAssigned && 
-          !rewardsProcessedRef.current && 
-          gameData.round === round &&
-          !isNavigatingRef.current &&
-          gameData.status === 'roundEnd') {
-        console.log(`💰 Asignando recompensas para la ronda ${round}`);
-        try {
-          const assignRewardsFunction = httpsCallable(functions, 'assignRoundRewards');
-          
-          // Usar verificación de autenticación
-          const result = await callAuthenticatedFunction(
-            () => assignRewardsFunction({ gameId }),
-            'assignRoundRewards'
-          );
-          
-          console.log('✅ Recompensas asignadas:', result.data);
-          rewardsProcessedRef.current = true;
-          } catch (error) {
-          console.error('❌ Error al asignar recompensas:', error);
-          // Si hay error, no marcar como procesado para permitir reintento
-          rewardsProcessedRef.current = false;
-        }
-      } else {
-        console.log(`🚫 No se procesan recompensas: rewardsAssigned=${gameData.rewardsAssigned}, processed=${rewardsProcessedRef.current}, round=${gameData.round}, currentRound=${round}, navigating=${isNavigatingRef.current}, status=${gameData.status}`);
-      }
+      // ELIMINADO: El servidor ahora es la única autoridad para recompensas
+      // Las recompensas se procesan automáticamente en el servidor cuando llega round_ended
+      // El cliente solo muestra los datos que recibe del servidor
+      console.log(`📊 Estado del juego: status=${gameData.status}, round=${gameData.round}, rewardsAssigned=${gameData.rewardsAssigned}`);
       
-      // Mostrar recompensas si existen y no se han mostrado aún
-      if (gameData.roundRewards && !rewardMessage && gameData.round === round && !isNavigatingRef.current) {
-        console.log('📋 Mostrando recompensas:', gameData.roundRewards);
-        setRoundRewards(gameData.roundRewards);
-        
-        const userRewards = gameData.roundRewards[userId];
-        if (userRewards) {
-          let message = '';
-          let totalRewards = 0;
-          
-          // Recompensa por industria
-          if (userRewards.industryReward && userRewards.industryReward > 0) {
-            message += `Industry Reward: +${userRewards.industryReward} RockCoins\n`;
-            totalRewards += userRewards.industryReward;
-            if (userRewards.wasteRemoved > 0) {
-              message += `Waste reduced: -${userRewards.wasteRemoved}\n`;
-            }
-          }
-          
-          // SOLO mostrar recompensas por industria y reciclaje en el cartel verde
-          // Las recompensas por minado se muestran de otra manera (en los bloques)
-          
-          // Total de recompensas (solo industria + reciclaje)
-          if (totalRewards > 0) {
-            message += `\nTotal: +${totalRewards} RockCoins`;
-            console.log(`🎁 Mostrando mensaje de recompensas para ronda ${round}: ${message}`);
-            setRewardMessage(message);
-            
-          }
-        }
-      } else if (gameData.roundRewards && gameData.round !== round) {
-        // Si hay recompensas pero son de una ronda diferente, limpiarlas
-        console.log(`🧹 Limpiando recompensas de ronda anterior: ${gameData.round} vs ${round}`);
-        setRewardMessage(null);
-        // NO limpiar roundRewards aquí - viene del contexto global
-      }
+      // ELIMINADO: Las recompensas ahora vienen del servidor via ROUND_END
+      // No hay procesamiento local de recompensas - solo mostrar lo que viene del servidor
+      console.log(`📊 Recompensas manejadas por el servidor - solo mostrar datos recibidos`);
     });
 
     // Obtener industria seleccionada del usuario
@@ -266,11 +379,6 @@ const EndOfRoundScreen = ({ route }) => {
       console.log('🚀 Usuario presionó Next Round');
       console.log(`🔌 WebSocket conectado: ${isWebSocketConnected}`);
       
-      // Limpiar error anterior si existe
-      if (roundReadyError) {
-        console.log('🧹 Limpiando error anterior:', roundReadyError);
-      }
-      
       // ACTIVAR PROTECCIÓN DE NAVEGACIÓN
       isNavigatingRef.current = true;
       console.log('🔒 Activando protección de navegación');
@@ -293,16 +401,12 @@ const EndOfRoundScreen = ({ route }) => {
         if (isWebSocketConnected) {
           console.log(`🔄 [ROUND:READY] Marcando como listo para ronda ${round} vía WebSocket`);
           await markRoundReady();
-          
-          // Navegar a pantalla de espera después de emitir round:ready
-          console.log('🎮 Navegando a WaitingRoom para espera de final de ronda');
-          navigation.navigate('WaitingRoom', { gameId, userId, round });
         } else {
           console.log(`🔄 [ROUND:READY] Marcando como listo para ronda ${round} vía Firestore (fallback)`);
           await markPlayerReady();
-          // Para fallback, usar WaitingRoom
-          navigation.navigate('WaitingRoom', { gameId, userId });
         }
+        // markRoundReady() maneja la emisión de round:ready
+        // La navegación se maneja automáticamente cuando todos estén listos
       }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
@@ -311,6 +415,71 @@ const EndOfRoundScreen = ({ route }) => {
       isNavigatingRef.current = false;
     }
   };
+
+  // Overlay de calculating que se muestra encima del contenido original
+  const showCalculatingOverlay = isCalculating;
+
+  // Activar sistema de recompensas cuando se monte el componente en modo calculating
+  useEffect(() => {
+    if (isCalculatingRewards && !roundRewards) {
+      console.log('🎯 [REWARDS] Activando sistema de recompensas - solicitando al servidor');
+      console.log('🎯 [REWARDS] Estado actual:', { isCalculatingRewards, hasRoundRewards: !!roundRewards, gameId, userId });
+      
+      // Solicitar al servidor que procese el final de ronda
+      const webSocketService = getWebSocket();
+      if (webSocketService && webSocketService.isConnected) {
+        console.log("📡 [REWARDS] Emitiendo round_ended al servidor:", { gameId, userId });
+        webSocketService.emit('round_ended', { gameId, userId });
+        console.log("✅ [REWARDS] Solicitud de final de ronda enviada al servidor");
+      } else {
+        console.error("❌ [REWARDS] WebSocket no conectado, no se puede emitir round_ended");
+      }
+    }
+  }, [isCalculatingRewards, roundRewards, gameId, userId]);
+
+  // Cálculo inmediato de recompensas desde blockchain si no hay roundRewards
+  useEffect(() => {
+    if (!roundRewards && !isCalculatingRewards) {
+      console.log('⛏️ [REWARDS] Calculando recompensas inmediatamente desde blockchain');
+      
+      const roundRewards = {};
+      const currentRoundBlocks = minedBlocks.filter(block => block.round === 0);
+      console.log(`⛏️ [REWARDS] Bloques encontrados:`, currentRoundBlocks);
+      
+      currentRoundBlocks.forEach(block => {
+        if (block.winner && block.winner.isCorrect) {
+          const winnerId = block.winner.userId;
+          if (!roundRewards[winnerId]) {
+            roundRewards[winnerId] = {};
+          }
+          roundRewards[winnerId].miningReward = (roundRewards[winnerId].miningReward || 0) + 50;
+          console.log(`💰 [REWARDS] ${block.winner.userName || winnerId}: +50 RockCoins`);
+        }
+      });
+      
+      if (Object.keys(roundRewards).length > 0) {
+        console.log('🎁 [REWARDS] Recompensas calculadas:', roundRewards);
+        setRoundRewards(roundRewards);
+      }
+    }
+  }, [roundRewards, isCalculatingRewards, minedBlocks]);
+
+  // Log cuando se reciben las recompensas
+  useEffect(() => {
+    if (roundRewards && Object.keys(roundRewards).length > 0) {
+      console.log('🎉 [REWARDS] Recompensas recibidas del servidor:', roundRewards);
+      console.log('🎉 [REWARDS] Desglose de recompensas:');
+      if (roundRewards.mining) {
+        console.log('⛏️ [REWARDS] Recompensas de minado:', roundRewards.mining);
+      }
+      if (roundRewards.waste) {
+        console.log('🗑️ [REWARDS] Recompensas de waste:', roundRewards.waste);
+      }
+      if (roundRewards.balances) {
+        console.log('💰 [REWARDS] Balances finales:', roundRewards.balances);
+      }
+    }
+  }, [roundRewards]);
 
   return (
     <View style={styles.container}>
@@ -327,7 +496,7 @@ const EndOfRoundScreen = ({ route }) => {
         showsVerticalScrollIndicator={false}
       >
         <PlayerRankingComponent 
-          players={players} 
+          players={displayPlayers}
           title="Round Rankings" 
           currentUserId={userId}
           roundRewards={roundRewards}
@@ -395,18 +564,6 @@ const EndOfRoundScreen = ({ route }) => {
         />
       </ScrollView>
 
-        {/* Mostrar error si existe */}
-        {roundReadyError && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>
-              ❌ Error: {roundReadyError}
-            </Text>
-            <Text style={styles.errorSubtext}>
-              Inténtalo de nuevo en unos segundos
-            </Text>
-          </View>
-        )}
-
         <TouchableOpacity 
           style={styles.readyButton}
           onPress={handleReady}
@@ -420,6 +577,36 @@ const EndOfRoundScreen = ({ route }) => {
           <ActivityIndicator color="#fff" size="small" />
         )}
       </TouchableOpacity>
+      
+      {/* Overlay de calculating - 3 segundos como detalle visual */}
+      {showCalculatingOverlay && (
+        <View style={styles.calculatingOverlay}>
+          <View style={styles.calculatingContent}>
+            <RotatingCube size={100} />
+            <Text style={styles.calculatingTitle}>
+              Calculating rewards…
+            </Text>
+            <Text style={styles.calculatingSubtitle}>
+              Processing mining results
+            </Text>
+            <View style={styles.calculatingProgress}>
+              <View style={styles.progressBar}>
+                <Animated.View 
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 };

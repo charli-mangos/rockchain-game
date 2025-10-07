@@ -60,8 +60,8 @@ class SocketAdapter {
         : process.env.EXPO_PUBLIC_WEBSOCKET_URL || 'wss://your-socket-server.example.com';
       
       const serverType = wsUrl.includes('localhost') ? 'Servidor Local' : 'Cloud Run';
-      console.log(`🔌 [SocketAdapter] Iniciando conexión a ${serverType}...`);
-      console.log('🔌 [SocketAdapter] Conectando a:', wsUrl);
+      console.log(`🔌 [ADAPTER] connecting to <${wsUrl}>`);
+      console.log(`🔌 [ADAPTER] server type: ${serverType}`);
       
       // Crear socket
       this.socket = io(wsUrl, {
@@ -75,11 +75,11 @@ class SocketAdapter {
       // Esperar conexión
       await this._waitForConnection();
       
-      console.log(`🔌 [SocketAdapter] Conectado exitosamente a ${serverType}`);
+      console.log(`🔌 [ADAPTER] connection_success socketId=${this.socket.id}`);
       return true;
       
     } catch (error) {
-      console.error('🔌 [SocketAdapter] Error de conexión:', error);
+      console.error('🔌 [ADAPTER] Error de conexión:', error);
       this.isConnected = false;
       throw error;
     }
@@ -114,6 +114,12 @@ class SocketAdapter {
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this._emit('connection_success', { socketId: this.socket.id, reconnected: true });
+      
+      // Re-enviar auth automáticamente en reconexión
+      if (this.currentUserId) {
+        console.log('🔐 [ADAPTER] Re-enviando auth en reconexión:', { userId: this.currentUserId });
+        this.emit('auth', { userId: this.currentUserId, userName: 'Player' });
+      }
     });
 
     this.socket.on('reconnect_error', (error) => {
@@ -132,6 +138,12 @@ class SocketAdapter {
 
   // Mapear eventos de Cloud Run a eventos legacy
   _setupCloudRunEventMapping() {
+    // auth_success (Cloud Run) -> connection_success (legacy)
+    this.socket.on('auth_success', (data) => {
+      console.log('🔌 [SocketAdapter] auth_success Cloud Run -> connection_success legacy:', data);
+      this._emit('connection_success', { socketId: data.socketId });
+    });
+
     // game_status (Cloud Run) -> game_status (legacy)
     this.socket.on('game_status', (data) => {
       console.log('🔌 [SocketAdapter] game_status Cloud Run -> legacy:', data);
@@ -247,11 +259,7 @@ class SocketAdapter {
       this._emit('economy:state', data);
     });
 
-    // game_status (Cloud Run) -> game_status (legacy) - NUEVO PARA FINAL DE RONDA
-    this.socket.on('game_status', (data) => {
-      console.log('🔌 [SocketAdapter] game_status Cloud Run -> legacy:', data);
-      this._emit('game_status', data);
-    });
+    // ELIMINADO: Listener duplicado de game_status
 
     // round_ended (Cloud Run) -> round_ended (legacy) - NUEVO PARA FINAL DE RONDA
     this.socket.on('round_ended', (data) => {
@@ -406,7 +414,16 @@ class SocketAdapter {
     console.log('🔌 [SocketAdapter] joinGame llamado:', { gameId, userId, userName });
     this.currentGameId = gameId;
     this.currentUserId = userId;
-    return this.emit('join_game', { gameId, userId, userName });
+    
+    // Enviar autenticación automáticamente
+    console.log('🔐 [ADAPTER] auth sent { userId:', userId, ', hasToken: true }');
+    this.emit('auth', { userId, userName });
+    
+    // Esperar un poco para que el auth se procese antes de join_game
+    setTimeout(() => {
+      console.log('🎮 [ADAPTER] join_game sent:', { gameId, userId, userName });
+      this.emit('join_game', { gameId, userId, userName });
+    }, 100);
   }
 
   startGame() {

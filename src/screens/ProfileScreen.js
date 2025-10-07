@@ -16,6 +16,11 @@ const ProfileScreen = ({ navigation, route }) => {
   const userProducts = webSocketInventory?.products || []; 
   const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
   
+  // Agregar elemento invisible si el número de productos es impar
+  const dataWithSpacer = userProducts.length % 2 === 1 
+    ? [...userProducts, { isSpacer: true, id: 'spacer' }]
+    : userProducts;
+  
   // Proteger contra userData null
   if (!userData) {
     return (
@@ -44,14 +49,21 @@ const ProfileScreen = ({ navigation, route }) => {
     }
   };
 
-  const renderProduct = ({ item }) => (
-    <ExpandableProduct
-      product={item}
-      gameId={gameId}
-      userId={userId}
-      screenType="ProfileScreen"
-    />
-  );
+  const renderProduct = ({ item }) => {
+    // Si es un espaciador invisible, renderizar View vacío
+    if (item.isSpacer) {
+      return <View style={{ flex: 1, margin: 5 }} />;
+    }
+    
+    return (
+      <ExpandableProduct
+        product={item}
+        gameId={gameId}
+        userId={userId}
+        screenType="ProfileScreen"
+      />
+    );
+  };
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
@@ -94,7 +106,7 @@ const ProfileScreen = ({ navigation, route }) => {
         </View>
 
         {/* Modal para editar el perfil */}
-        <Modal visible={isEditing} transparent={true} animationType="none">
+        <Modal visible={isEditing} transparent={true} animationType="fade">
           <TouchableWithoutFeedback onPress={() => setIsEditing(false)}>
             <View style={styles.modalContainer}>
               <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
@@ -127,9 +139,9 @@ const ProfileScreen = ({ navigation, route }) => {
 
         {/* FlatList para mostrar los productos comprados */}
         <FlatList
-          data={userProducts}
+          data={dataWithSpacer}
           renderItem={renderProduct}
-          keyExtractor={(item, index) => index.toString()}
+          keyExtractor={(item, index) => item.isSpacer ? 'spacer' : index.toString()}
           numColumns={2}
           style={styles.flatList}
           contentContainerStyle={styles.flatListContainer}
