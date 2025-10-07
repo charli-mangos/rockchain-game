@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TextInput, FlatList, Modal, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Button } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';  // Importamos ImagePicker
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -12,6 +13,7 @@ import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 
 const ProfileScreen = ({ navigation, route }) => {
+  const { t } = useTranslation();
   const { userData, webSocketInventory, gameId, userId } = useGameContextHybridRobust();
   const userProducts = webSocketInventory?.products || []; 
   const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
@@ -25,7 +27,7 @@ const ProfileScreen = ({ navigation, route }) => {
   if (!userData) {
     return (
       <View style={styles.container}>
-        <Text>Cargando datos del usuario...</Text>
+        <Text>{t('profile.loading')}</Text>
       </View>
     );
   }
@@ -45,7 +47,7 @@ const ProfileScreen = ({ navigation, route }) => {
         setUserData({ ...userData, image: pickerResult.uri });  // Guardamos la imagen seleccionada en el estado
       }
     } else {
-      alert('Permission to access gallery was denied');
+      alert(t('profile.galleryPermissionDenied'));
     }
   };
 
@@ -69,7 +71,7 @@ const ProfileScreen = ({ navigation, route }) => {
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.screenContainer}>
         <GameHeader
-          title="RockProfile"
+          title={t('profile.title')}
           gameId={gameId} // Pasamos el gameId aquí
           userId={userId}
           onSettingsPress={() => console.log('Settings Pressed')}
@@ -83,7 +85,7 @@ const ProfileScreen = ({ navigation, route }) => {
 
           {/* Información del inventario */}
           <View style={styles.inventoryInfo}>
-          <Text style={styles.inventoryTitle}>Inventory Status</Text>
+          <Text style={styles.inventoryTitle}>{t('profile.inventoryStatus')}</Text>
           <View style={styles.inventoryStats}>
             <View style={styles.inventoryStatRow}>
               <Image 
@@ -91,15 +93,15 @@ const ProfileScreen = ({ navigation, route }) => {
                 style={styles.inventoryIcon} 
                 tintColor='#1d3d39'
               />
-              <Text style={[styles.inventoryStat, { color: '#1d3d39' }]}>RockCoins: {webSocketInventory.rockCoins || 600}</Text>
+              <Text style={[styles.inventoryStat, { color: '#1d3d39' }]}>{t('profile.rockCoins')}: {webSocketInventory.rockCoins || 600}</Text>
             </View>
             <View style={styles.inventoryStatRow}>
               <Ionicons name="trash" size={20} color="#1d3d39" style={styles.inventoryIcon} />
-              <Text style={styles.inventoryStat}>Waste: {webSocketInventory.waste || 0}</Text>
+              <Text style={styles.inventoryStat}>{t('profile.waste')}: {webSocketInventory.waste || 0}</Text>
             </View>
             <View style={styles.inventoryStatRow}>
               <Ionicons name="cube" size={20} color="#1d3d39" style={styles.inventoryIcon} />
-              <Text style={styles.inventoryStat}>Products: {userProducts.length}</Text>
+              <Text style={styles.inventoryStat}>{t('profile.products')}: {userProducts.length}</Text>
             </View>
           </View>
         </View>
@@ -114,7 +116,7 @@ const ProfileScreen = ({ navigation, route }) => {
                   <TouchableOpacity style={styles.closeButton} onPress={() => setIsEditing(false)}>
                     <Ionicons name="close" size={24} color="#1d3d39" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Edit Profile</Text>
+                  <Text style={styles.modalTitle}>{t('profile.editProfile')}</Text>
 
                   {/* Imagen seleccionable */}
                   <TouchableOpacity onPress={pickImage}>
@@ -125,7 +127,7 @@ const ProfileScreen = ({ navigation, route }) => {
                     value={userData.userName}
                     onChangeText={(text) => setUserData({ ...userData, name: text })}
                     style={styles.input}
-                    placeholder="Enter your name"
+                    placeholder={t('profile.enterYourName')}
                     placeholderTextColor="#1d3d39"
                   />
                 </View>
@@ -135,7 +137,7 @@ const ProfileScreen = ({ navigation, route }) => {
         </Modal>
 
         {/* Texto de productos en itálica */}
-        <Text style={styles.productsTitle}>Your Products</Text>
+        <Text style={styles.productsTitle}>{t('profile.yourProducts')}</Text>
 
         {/* FlatList para mostrar los productos comprados */}
         <FlatList

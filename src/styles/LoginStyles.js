@@ -43,6 +43,11 @@ const styles = StyleSheet.create({
     color: '#ba5d17',
     marginBottom: 20,
   },
+  languageSwitcherContainer: {
+    marginBottom: 20,
+    marginTop: 10,
+    width: '80%',
+  },
 });
 
 export default styles;

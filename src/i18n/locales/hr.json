@@ -1,0 +1,151 @@
+{
+  "app": {
+    "title": "RockChain",
+    "confirm": "Potvrdi",
+    "cancel": "Odustani",
+    "next": "Sljedeće",
+    "back": "Nazad"
+  },
+  "auth": {
+    "login": "Prijavi se",
+    "logout": "Odjavi se",
+    "email": "E-pošta",
+    "password": "Lozinka",
+    "invalidEmail": "Molimo unesite valjanu e-mail adresu.",
+    "incorrectPassword": "Netočna lozinka.",
+    "userNotFound": "Nije pronađen račun s ovom e-mail adresom.",
+    "usernameRequired": "Molimo unesite korisničko ime.",
+    "username": "Korisničko ime",
+    "registrationSuccess": "Uspješno ste se registrirali!",
+    "forgotPassword": "Zaboravili ste lozinku?",
+    "privacy": "Privatnost",
+    "register": "Registriraj se",
+    "signIn": "Prijavi se",
+    "couldNotSaveUser": "Korisnik se nije mogao spremiti u Firestore."
+  },
+  "home": {
+    "welcome": "Dobrodošli",
+    "welcomeToRockChain": "Dobrodošli u RockChain",
+    "changeLanguage": "Promijeni jezik",
+    "start": "Pokreni igru"
+  },
+  "round": {
+    "end": "Kraj runde",
+    "calculating": "Izračunavanje nagrada...",
+    "nextRound": "Sljedeća runda",
+    "waitingAll": "Čekanje svih igrača…",
+    "ready": "Spremno",
+    "gameComplete": "Igra Završena!",
+    "roundComplete": "Runda {{n}} Završena",
+    "rankings": "Rang Lista Runde",
+    "wasteManagement": "Upravljanje Otpadom",
+    "winningIndustry": "Pobjednička Industrija",
+    "yourSelection": "Vaš Odabir",
+    "industryGuessed": "Industrija pogodena",
+    "industryMissed": "Industrija Propuštena",
+    "minedBlocks": "Iskopani Blokovi"
+  },
+  "market": {
+    "title": "RockMarket",
+    "products": "Proizvodi",
+    "profit": "Profitabilnost",
+    "price": "Cijena"
+  },
+  "chat": {
+    "title": "RockStock",
+    "compareRounds": "Usporedi runde",
+    "round": "Runda {{n}}"
+  },
+  "tabs": {
+    "market": "Tržište",
+    "profile": "Profil",
+    "stats": "Statistike",
+    "recycle": "Recikliranje",
+    "chat": "Chat",
+    "mining": "Rudarstvo"
+  },
+  "profile": {
+    "title": "RockProfile",
+    "loading": "Učitavanje korisničkih podataka...",
+    "editProfile": "Uredi Profil",
+    "galleryPermissionDenied": "Dozvola za pristup galeriji je odbijena",
+    "inventoryStatus": "Status Inventara",
+    "rockCoins": "RockCoins",
+    "waste": "Otpad",
+    "products": "Proizvodi",
+    "enterYourName": "Unesite vaše ime",
+    "yourProducts": "Vaši Proizvodi"
+  },
+  "mining": {
+    "title": "RockMining",
+    "loadingResults": "Učitavanje rezultata...",
+    "congratulations": "Čestitamo {{name}}!",
+    "solvedCorrectly": "Točno ste riješili blok!",
+    "notCorrect": "Nije točno.",
+    "correctAnswer": "Odgovor je: {{answer}}",
+    "results": "Rezultati",
+    "wrong": "pogrešno",
+    "nextBlock": "Sljedeći Blok",
+    "exitMining": "Izađi iz Rudarstva",
+    "blockNumber": "Blok #{{number}}",
+    "yourAnswer": "Vaš odgovor",
+    "submit": "Pošalji",
+    "loadingBlock": "Učitavanje bloka...",
+    "loadingProblem": "Učitavanje problema...",
+    "preparingMining": "Priprema rudarstva...",
+    "unknown": "Nepoznato",
+    "couldNotSendResponse": "Odgovor se nije mogao poslati. Molimo pokušajte ponovo."
+  },
+  "stats": {
+    "title": "RockStats",
+    "globalRankings": "Globalna Rang Lista"
+  },
+  "recycle": {
+    "title": "RockWaste"
+  },
+  "game": {
+    "waitingRoom": "Čekaonica",
+    "waitingForPlayers": "Čekanje igrača...",
+    "playersConnected": "Igrači povezani",
+    "startGame": "Pokreni igru",
+    "joinGame": "Pridruži se igri",
+    "gameCode": "Kod igre",
+    "enterCode": "Unesite kod igre",
+    "join": "Pridruži se",
+    "startingIn": "Igra počinje za {{count}}...",
+    "preparingGame": "Priprema igre...",
+    "preparingToStart": "Priprema za početak...",
+    "websocketDisconnected": "WebSocket odspojen - koristi se rezervni način",
+    "startRockChain": "Pokreni RockChain",
+    "pleaseEnterGameCode": "Molimo unesite kod igre.",
+    "gameNotFound": "Igra nije pronađena. Molimo provjerite kod igre.",
+    "cannotJoinOwnGame": "Ne možete se pridružiti vlastitoj igri. Molimo unesite drugi kod.",
+    "failedToJoinGame": "Neuspješno pridruživanje igri. Molimo pokušajte ponovo.",
+    "onlyHostCanStart": "Samo domaćin može pokrenuti igru.",
+    "gameAlreadyStarted": "Igra je već pokrenuta ili završena.",
+    "failedToStartGame": "Neuspješno pokretanje igre. Molimo pokušajte ponovo.",
+    "yourGameCode": "Vaš Kod Igre",
+    "numberOfPlayers": "Broj igrača",
+    "gameInProgress": "Igra je već u tijeku",
+    "waitingForHost": "Čekanje da domaćin pokrene igru...",
+    "joinGameCode": "Pridruži se Kodu Igre",
+    "enterGameCode": "Unesite 6-znamenkasti kod igre",
+    "failedToCreateGame": "Neuspješno stvaranje igre. Molimo pokušajte ponovo."
+  },
+  "navigation": {
+    "settings": "Postavke",
+    "back": "Nazad",
+    "close": "Zatvori"
+  },
+  "common": {
+    "loading": "Učitavanje...",
+    "error": "Greška",
+    "success": "Uspjeh",
+    "retry": "Pokušaj ponovo",
+    "save": "Spremi",
+    "cancel": "Odustani",
+    "ok": "OK",
+    "yes": "Da",
+    "no": "Ne"
+  }
+}

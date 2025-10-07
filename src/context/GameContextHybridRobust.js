@@ -59,6 +59,17 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   const [roundMeta, setRoundMeta] = useState(null); // { round, winningIndustry, wasteRewardApplied, roundSeed }
   const [isWaiting, setIsWaiting] = useState(false);
   const [results, setResults] = useState(null);
+  
+  // Estados para el sistema de Ready
+  const [nextRoundWaiting, setNextRoundWaiting] = useState(false);
+  const [roundReadyProgress, setRoundReadyProgress] = useState({ 
+    readyCount: 0, 
+    totalPlayers: 0, 
+    readyList: [] 
+  });
+  
+  // Estado local para controlar navegación individual
+  const [isWaitingNextRoundLocal, setIsWaitingNextRoundLocal] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [currentBlockId, setCurrentBlockId] = useState(null);
   const [currentTransactionUserName, setCurrentTransactionUserName] = useState(null);
@@ -425,16 +436,99 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // ELIMINADO: Listener legacy rewards_assigned - solo usar ROUND_END
 
     // NUEVOS LISTENERS PARA FINAL DE RONDA
+    // === SISTEMA DE READY PARA NEXT ROUND ===
+    
     // Listener para progreso de ready
     getWebSocket().on('round:ready:progress', (data) => {
       console.log('⏭️ [ROUND:READY] Progreso de jugadores listos:', data);
-      // TODO: Mostrar progreso en la UI si es necesario
+      setRoundReadyProgress({
+        readyCount: data.readyCount,
+        totalPlayers: data.totalPlayers,
+        readyList: data.readyList
+      });
+      // NO cambiar gameStatus aquí - solo guardar progreso
+      // NO navegar aquí - cada jugador navega cuando pulsa Next Round
     });
 
-    // Listener para errores de ready
-    getWebSocket().on('round:ready:error', (data) => {
-      console.error('❌ [ROUND:READY] Error:', data);
-      // TODO: Mostrar error en la UI
+    // Listener para todos listos
+    getWebSocket().on('round:ready:all', (data) => {
+      console.log('🎉 [ROUND:READY] Todos los jugadores listos:', data);
+    });
+
+    // Listener para preparando siguiente ronda
+    getWebSocket().on('next_round:preparing', (data) => {
+      console.log('🔄 [NEXT_ROUND] Preparando siguiente ronda:', data);
+      setGameStatus('preparingNextRound');
+    });
+
+    // Listener para ronda preparada
+    getWebSocket().on('next_round:prepared', (data) => {
+      console.log('✅ [NEXT_ROUND] Ronda preparada:', data);
+      console.log('📊 [NEXT_ROUND] Datos recibidos:', {
+        round: data.round,
+        hasRoundMeta: !!data.roundMeta,
+        hasMarket: !!data.market,
+        hasProducts: !!data.products,
+        roundTimeISO: data.roundTimeISO,
+        marketRounds: data.market?.rounds ? Object.keys(data.market.rounds) : 'N/A'
+      });
+      
+      setRound(data.round);
+      setRoundMeta(data.roundMeta);
+      setMarketData(data.market);
+      setProductsData(data.products);
+      setRoundTime(new Date(data.roundTimeISO));
+      setGameStatus('startingNextRound');
+    });
+
+    // Listener para countdown de inicio
+    getWebSocket().on('starting_next_round', (data) => {
+      console.log('🚀 [NEXT_ROUND] Iniciando ronda en 3 segundos:', data);
+      // Resetear calculating para evitar overlays en nueva ronda
+      setIsCalculatingRewards(false);
+    });
+
+    // Listener para nueva ronda iniciada
+    getWebSocket().on('new_round', (data) => {
+      console.log('🎮 [NEW_ROUND] Nueva ronda iniciada:', data);
+      console.log('📊 [NEW_ROUND] Datos recibidos:', {
+        round: data.round,
+        status: data.status,
+        roundTimeISO: data.roundTimeISO,
+        hasRoundMeta: !!data.roundMeta,
+        hasMarket: !!data.market,
+        hasProducts: !!data.products
+      });
+      
+      // 1) RESET completo de todos los flags del fin de ronda anterior
+      console.log('🧹 [NEW_ROUND] Reseteando flags de ronda anterior');
+      setIsCalculatingRewards(false);
+      setRoundRewards(null);
+      setWinningIndustry(null);
+      setIsWaitingNextRoundLocal(false);
+      setMinedBlocks([]);
+      setNextRoundWaiting(false);
+      setRoundReadyProgress({ readyCount: 0, totalPlayers: 0, readyList: [] });
+      
+      // 2) Estado base de la ronda nueva
+      console.log('🔄 [NEW_ROUND] Configurando estado de nueva ronda');
+      setRound(data.round);
+      setGameStatus('in_progress');
+      setRoundTime(new Date(data.roundTimeISO));
+      setRoundMeta(data.roundMeta);
+      setMarketData(data.market);
+      setProductsData(data.products);
+      
+      // 3) Resetear flags del timer para nueva ronda
+      endRoundCalledRef.current = false;
+      
+      // 4) Navegación después de todos los resets
+      console.log('🧭 [NEW_ROUND] Navegando a GameTabs después de resets');
+      if (safeReset) {
+        safeReset('GameTabs');
+      } else if (safeNavigate) {
+        safeNavigate('GameTabs');
+      }
     });
 
     // Listener para nuevo estado de economía
@@ -465,10 +559,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       if (data.status === 'starting') {
         console.log('🎮 [GAME_STATUS] Navegando a WaitingRoom - estado starting');
         safeNavigate('WaitingRoom');
-      } else if (data.status === 'waitingForNextRound') {
-        console.log('🎮 [GAME_STATUS] Navegando a EndOfRoundWaiting - estado waitingForNextRound');
-        safeNavigate('EndOfRoundWaiting');
       }
+      // ELIMINADO: Auto-navegación por waitingForNextRound - cada jugador navega cuando pulsa Next Round
     });
 
     // SISTEMA ORIGINAL DE CALCULATING REWARDS (como funcionaba ayer)
@@ -849,6 +941,19 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
   // Función para obtener problemas de minado del WebSocket (NO USADA)
 
+  // Función para marcar ready para la siguiente ronda
+  const markRoundReady = () => {
+    console.log('✅ [READY] Marcando como listo para siguiente ronda');
+    const webSocketService = getWebSocket();
+    if (webSocketService && webSocketService.isConnected) {
+      webSocketService.emit('round:ready', { gameId, userId });
+      // NO cambiar estado global aquí - solo enviar al servidor
+      console.log('✅ [READY] Ready enviado al servidor');
+    } else {
+      console.error('❌ [READY] WebSocket no conectado');
+    }
+  };
+
   const markPlayerReady = async () => {
     if (isWebSocketConnected) {
       // Usar WebSocket para coordinación
@@ -867,23 +972,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     }
   };
 
-  // NUEVA FUNCIÓN: Marcar como listo para la siguiente ronda (nuevo sistema)
-  const markRoundReady = async () => {
-    if (isWebSocketConnected) {
-      console.log(`⏭️ [ROUND:READY] Marcando como listo para ronda ${round} vía WebSocket...`);
-      setIsReadyForNextRound(true);
-      getWebSocket().roundReady(gameId, userId, round);
-    } else {
-      // Fallback a Firestore
-      console.log(`⏭️ [ROUND:READY] Marcando como listo vía Firestore (fallback)...`);
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        [`games.${gameId}.readyForNextRound`]: true
-      });
-      setIsReadyForNextRound(true);
-      safeNavigate('WaitingRoom');
-    }
-  };
 
   const endRound = () => {
     console.log('🏁 endRound() llamada');
@@ -1143,22 +1231,29 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
   // EFECTO PARA EL TEMPORIZADOR DE COUNTDOWN
   useEffect(() => {
-    console.log("🕒 roundTime:", roundTime);
-    console.log("🎮 gameStatus:", gameStatus);
+    console.log("🕒 [TIMER] roundTime:", roundTime);
+    console.log("🎮 [TIMER] gameStatus:", gameStatus);
+    console.log("📊 [TIMER] Estado del timer:", {
+      hasRoundTime: !!roundTime,
+      roundTimeValue: roundTime,
+      gameStatus,
+      intervalExists: !!intervalRef.current
+    });
 
     // Limpiar intervalo anterior si existe
     if (intervalRef.current) {
+      console.log("🧹 [TIMER] Limpiando intervalo anterior");
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
     
     if (!roundTime) {
-      console.log("⚠️ No hay roundTime, manteniendo countdown en 120");
+      console.log("⚠️ [TIMER] No hay roundTime, manteniendo countdown en 120");
       setCountdown(120);
       return;
     }
 
-        console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
+    console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
 
     intervalRef.current = setInterval(() => {
       const now = new Date();
@@ -1170,8 +1265,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         console.log(`⏰ [TIMER] Últimos segundos: ${totalSecondsLeft}s`);
       }
       
-        // Activar loading cuando countdown llegue a 0 (independiente del gameStatus)
-        if (totalSecondsLeft <= 0 && !endRoundCalledRef.current) {
+        // Activar loading cuando countdown llegue a 0 SOLO si estamos en in_progress
+        if (totalSecondsLeft <= 0 && !endRoundCalledRef.current && gameStatus === 'in_progress') {
           console.log("🏁 [TIMER] Countdown llegó a 0 - activando loading de calculating rewards");
           endRoundCalledRef.current = true;
           setIsCalculatingRewards(true);
@@ -1454,11 +1549,21 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         setRoundRewards,
         roundMeta,
       
+      // Sistema de Ready para Next Round
+      nextRoundWaiting, setNextRoundWaiting,
+      roundReadyProgress, setRoundReadyProgress,
+      
       // Funciones del juego
       startGame,
       readyToPlay,
       endRound,
       markRoundReady,
+      
+      // Estados para Next Round
+      nextRoundWaiting,
+      roundReadyProgress,
+      isWaitingNextRoundLocal,
+      setIsWaitingNextRoundLocal,
       
       // WebSocket
       isWebSocketConnected,

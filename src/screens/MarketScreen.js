@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, FlatList } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/MarketScreenStyles';
 import GameHeader from '../components/GameHeader';
@@ -7,6 +8,7 @@ import ExpandableProduct from '../components/ExpandableProduct';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const MarketScreen = ({ navigation, route }) => {
+  const { t } = useTranslation();
   const { productList, gameId, userId } = useGameContextHybridRobust();
   
   // Agregar elemento invisible si el número de productos es impar
@@ -89,7 +91,7 @@ const MarketScreen = ({ navigation, route }) => {
   return (
     <View style={styles.screenContainer}>
       <GameHeader
-          title="RockMarket"
+          title={t('market.title')}
           gameId={gameId}
           userId={userId}
           onSettingsPress={() => console.log('Settings Pressed')}

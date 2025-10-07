@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { View, Text, Button, FlatList, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -9,6 +10,7 @@ import styles from '../styles/RecycleScreenStyles';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const RecycleScreen = ({ navigation, route }) => {
+  const { t } = useTranslation();
   const { gameId, userId } = useGameContextHybridRobust();
   // Industrias que utilizan residuos físicos para waste management
   const industryData = {
@@ -105,7 +107,7 @@ const RecycleScreen = ({ navigation, route }) => {
   return (
     <View style={styles.screenContainer}>
         <GameHeader
-            title="RockWaste"
+            title={t('recycle.title')}
             gameId={gameId} // Pasamos el gameId aquí
             userId={userId}
             onSettingsPress={() => console.log('Settings Pressed')}
@@ -113,13 +115,13 @@ const RecycleScreen = ({ navigation, route }) => {
 
         <View style={styles.questContainer}>
             <Text style={styles.questionText}>
-                Select the Recycling Industry
+                {t('recycle.selectIndustry')}
             </Text>
             <Text style={styles.text}>
-                Choose which industry you think will win this round. If you guess correctly, your waste will be reduced.
+                {t('recycle.chooseIndustry')}
             </Text>
             <Text style={styles.subText}>
-                The winning industry is randomly selected each round. Good luck!
+                {t('recycle.winningIndustryRandom')}
             </Text>
             <FlatList
                 data={industries}

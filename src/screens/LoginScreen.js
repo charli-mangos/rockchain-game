@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, Text, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { auth, db, functions } from '../../firebase';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -9,8 +10,10 @@ import styles from '../styles/LoginStyles';
 import WelcomeHeader from '../components/WelcomeHeader';
 import RotatingCube from '../components/RotatingCube';
 import DismissKeyboardView from '../components/DismissKeyboardView';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 const LoginScreen = ({ navigation, route }) => {
+  const { t } = useTranslation();
   const { setGameParams } = route.params || {};
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,14 +45,14 @@ const LoginScreen = ({ navigation, route }) => {
       return { gameId, gameCode };
     } catch (e) {
       console.error('Error creating game:', e);
-      Alert.alert('Error', 'Failed to create the game. Please try again.');
+      Alert.alert(t('common.error'), t('game.failedToCreateGame'));
       throw e;
     }
   };
 
   const handleLogin = async () => {
     if (!validateEmail(email)) {
-      setError("Please enter a valid email address.");
+      setError(t('auth.invalidEmail'));
       return;
     }
     setLoading(true);
@@ -73,10 +76,10 @@ const LoginScreen = ({ navigation, route }) => {
     } catch (error) {
       switch (error.code) {
         case 'auth/wrong-password':
-          setError('Incorrect password.');
+          setError(t('auth.incorrectPassword'));
           break;
         case 'auth/user-not-found':
-          setError('No account found with this email.');
+          setError(t('auth.userNotFound'));
           break;
         default:
           setError(error.message);
@@ -89,11 +92,11 @@ const LoginScreen = ({ navigation, route }) => {
 
   const handleRegister = async () => {
     if (!validateEmail(email)) {
-      setError("Please enter a valid email address.");
+      setError(t('auth.invalidEmail'));
       return;
     }
     if (showUserName && !userName.trim()) {
-      setError("Please enter a username.");
+      setError(t('auth.usernameRequired'));
       return;
     }
     setLoading(true);
@@ -103,7 +106,7 @@ const LoginScreen = ({ navigation, route }) => {
 
       await saveUserToFirestore(userId, email, userName); // Guarda userName en Firestore
 
-      Alert.alert("Registration Successful", "You have successfully registered!");
+      Alert.alert(t('auth.registrationSuccess'), t('auth.registrationSuccess'));
       
       const gameData = await createGame(userId);
       console.log('LoginScreen - Game created successfully (register):', gameData);
@@ -143,20 +146,23 @@ const LoginScreen = ({ navigation, route }) => {
       console.log('User saved to Firestore with new structure');
     } catch (error) {
       console.error('Error saving user to Firestore:', error);
-      Alert.alert('Error', 'Could not save user to Firestore.');
+      Alert.alert(t('common.error'), t('auth.couldNotSaveUser'));
     }
   };
 
   return (
     <DismissKeyboardView style={styles.container}>
-      <WelcomeHeader title="Welcome to RockChain" />
+      <WelcomeHeader title={t('home.welcomeToRockChain')} />
       {loading ? (
         <RotatingCube size={80} color="#ba5d17" /> 
       ) : (
         <>
+          <View style={styles.languageSwitcherContainer}>
+            <LanguageSwitcher />
+          </View>
           {showUserName && (
             <TextInput
-              placeholder="username"
+              placeholder={t('auth.username')}
               value={userName}
               onChangeText={setUserName}
               style={styles.input}
@@ -164,7 +170,7 @@ const LoginScreen = ({ navigation, route }) => {
           )}
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <TextInput
-            placeholder="email"
+            placeholder={t('auth.email')}
             value={email}
             onChangeText={setEmail}
             style={styles.input}
@@ -172,7 +178,7 @@ const LoginScreen = ({ navigation, route }) => {
             autoCapitalize="none"
           />
           <TextInput
-            placeholder="password"
+            placeholder={t('auth.password')}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -182,7 +188,7 @@ const LoginScreen = ({ navigation, route }) => {
 
           {/* Cambiar el botón de inicio de sesión a un enlace */}
           <TouchableOpacity style={styles.button} onPress={showUserName ? handleRegister : handleLogin}>
-            <Text style={styles.buttonText}>{showUserName ? "Register" : "Sign in"}</Text>
+            <Text style={styles.buttonText}>{showUserName ? t('auth.register') : t('auth.signIn')}</Text>
           </TouchableOpacity>
 
           {/* Cambiar el botón de registro a un estilo de botón */}
@@ -191,14 +197,14 @@ const LoginScreen = ({ navigation, route }) => {
               setShowUserName(!showUserName);
             }}
           >
-            <Text style={styles.linkRegister}>{showUserName ? "Sign in" : "Register"}</Text>
+            <Text style={styles.linkRegister}>{showUserName ? t('auth.signIn') : t('auth.register')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-            <Text style={styles.link}>Forgot your password?</Text>
+            <Text style={styles.link}>{t('auth.forgotPassword')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('PrivacyPolicy')}>
-            <Text style={styles.link}>Privacy</Text>
+            <Text style={styles.link}>{t('auth.privacy')}</Text>
           </TouchableOpacity>
         </>
       )}

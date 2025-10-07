@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, Text, TouchableOpacity, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { functions, db } from '../../firebase';
 import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
@@ -10,6 +11,7 @@ import WelcomeHeader from '../components/WelcomeHeader';
 import RotatingCube from '../components/RotatingCube';
 
 const GameScreen = ({ route }) => {
+  const { t } = useTranslation();
   const { gameId, userId, setGameParams } = route.params || {};
   const navigation = useNavigation();
   
@@ -98,7 +100,7 @@ const GameScreen = ({ route }) => {
   // Función para unirse a un juego
   const joinGame = async () => {
     if (!joinGameCode.trim()) {
-      Alert.alert('Error', 'Please enter a game code.');
+      Alert.alert(t('common.error'), t('game.pleaseEnterGameCode'));
       return;
     }
 
@@ -123,7 +125,7 @@ const GameScreen = ({ route }) => {
 
       if (querySnapshot.empty) {
         console.error('❌ No se encontró ningún juego con gameCode:', joinGameCode.toUpperCase());
-        Alert.alert('Error', 'Game not found. Please check the game code.');
+        Alert.alert(t('common.error'), t('game.gameNotFound'));
         return;
       }
 
@@ -141,7 +143,7 @@ const GameScreen = ({ route }) => {
 
       // Verificar que no se está uniendo a su propio juego
       if (targetGameId === gameId) {
-        Alert.alert('Error', 'You cannot join your own game. Please enter a different game code.');
+        Alert.alert(t('common.error'), t('game.cannotJoinOwnGame'));
         return;
       }
 
@@ -209,7 +211,7 @@ const GameScreen = ({ route }) => {
         code: error.code,
         details: error.details
       });
-      Alert.alert('Error', 'Failed to join the game. Please try again.');
+      Alert.alert(t('common.error'), t('game.failedToJoinGame'));
     } finally {
       setLoading(false);
     }
@@ -220,12 +222,12 @@ const GameScreen = ({ route }) => {
     console.log('🎮 startGame called by user:', userId, 'hostId:', hostId, 'isHost:', isHost);
     
     if (!isHost) {
-      Alert.alert('Error', 'Only the host can start the game.');
+      Alert.alert(t('common.error'), t('game.onlyHostCanStart'));
       return;
     }
 
     if (gameStatus !== 'waiting') {
-      Alert.alert('Error', 'Game is already started or finished.');
+      Alert.alert(t('common.error'), t('game.gameAlreadyStarted'));
       return;
     }
 
@@ -243,7 +245,7 @@ const GameScreen = ({ route }) => {
       navigation.navigate('WaitingRoom', { gameId: gameId, userId: userId });
     } catch (error) {
       console.error('Error starting the game:', error);
-      Alert.alert('Error', 'Failed to start the game. Please try again.');
+      Alert.alert(t('common.error'), t('game.failedToStartGame'));
     } finally {
       setLoading(false);
     }
@@ -252,31 +254,31 @@ const GameScreen = ({ route }) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
-        <WelcomeHeader title={"Start a RockChain"} />
+        <WelcomeHeader title={t('game.startRockChain')} />
         {loading ? (
           <RotatingCube size={80} color="#ba5d17" /> 
         ) : (
           <View style={styles.inputContainer}>
             {/* Sección para el jugador para empezar su propia partida */}
-            <Text style={styles.label}>Your Game Code: <Text style={[styles.bold, { color: '#1d3d39' }]}>{gameCode}</Text></Text>
-            <Text style={styles.label}>Number of players: {playerCount}/10</Text>
+            <Text style={styles.label}>{t('game.yourGameCode')}: <Text style={[styles.bold, { color: '#1d3d39' }]}>{gameCode}</Text></Text>
+            <Text style={styles.label}>{t('game.numberOfPlayers')}: {playerCount}/10</Text>
             
             {/* Mostrar botón START GAME solo si es el host y el juego está en waiting */}
             {isHost && gameStatus === 'waiting' ? (
               <TouchableOpacity style={styles.button} onPress={startGame}>
-                <Text style={styles.buttonText}>START GAME</Text>
+                <Text style={styles.buttonText}>{t('game.startGame')}</Text>
               </TouchableOpacity>
             ) : isHost && gameStatus !== 'waiting' ? (
-              <Text style={styles.label}>Game is already in progress</Text>
+              <Text style={styles.label}>{t('game.gameInProgress')}</Text>
             ) : (
-              <Text style={styles.label}>Waiting for host to start the game...</Text>
+              <Text style={styles.label}>{t('game.waitingForHost')}</Text>
             )}
 
             {/* Sección para unirse a la partida de otro jugador */}
-            <Text style={styles.inputLabel}>Join a Game Code</Text>
+            <Text style={styles.inputLabel}>{t('game.joinGameCode')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter 6-digit game code"
+              placeholder={t('game.enterGameCode')}
               value={joinGameCode}
               onChangeText={(text) => setJoinGameCode(text.toUpperCase())}
               maxLength={6}
@@ -284,7 +286,7 @@ const GameScreen = ({ route }) => {
               autoCapitalize="characters"
             />
             <TouchableOpacity style={styles.button} onPress={joinGame}>
-                <Text style={styles.buttonText}>JOIN GAME</Text>
+                <Text style={styles.buttonText}>{t('game.joinGame')}</Text>
             </TouchableOpacity>
           </View>
         )}

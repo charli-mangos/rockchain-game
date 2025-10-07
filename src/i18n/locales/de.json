@@ -1,0 +1,151 @@
+{
+  "app": {
+    "title": "RockChain",
+    "confirm": "Bestätigen",
+    "cancel": "Abbrechen",
+    "next": "Weiter",
+    "back": "Zurück"
+  },
+  "auth": {
+    "login": "Anmelden",
+    "logout": "Abmelden",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "invalidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
+    "incorrectPassword": "Falsches Passwort.",
+    "userNotFound": "Kein Konto mit dieser E-Mail gefunden.",
+    "usernameRequired": "Bitte geben Sie einen Benutzernamen ein.",
+    "username": "Benutzername",
+    "registrationSuccess": "Sie haben sich erfolgreich registriert!",
+    "forgotPassword": "Passwort vergessen?",
+    "privacy": "Datenschutz",
+    "register": "Registrieren",
+    "signIn": "Anmelden",
+    "couldNotSaveUser": "Benutzer konnte nicht in Firestore gespeichert werden."
+  },
+  "home": {
+    "welcome": "Willkommen",
+    "welcomeToRockChain": "Willkommen zu RockChain",
+    "changeLanguage": "Sprache ändern",
+    "start": "Spiel starten"
+  },
+  "round": {
+    "end": "Rundenende",
+    "calculating": "Belohnungen werden berechnet...",
+    "nextRound": "Nächste Runde",
+    "waitingAll": "Warten auf alle Spieler…",
+    "ready": "Bereit",
+    "gameComplete": "Spiel Abgeschlossen!",
+    "roundComplete": "Runde {{n}} Abgeschlossen",
+    "rankings": "Runden-Rangliste",
+    "wasteManagement": "Abfallwirtschaft",
+    "winningIndustry": "Gewinnende Industrie",
+    "yourSelection": "Ihre Auswahl",
+    "industryGuessed": "Industrie erraten",
+    "industryMissed": "Industrie Verfehlt",
+    "minedBlocks": "Geschürfte Blöcke"
+  },
+  "market": {
+    "title": "RockMarket",
+    "products": "Produkte",
+    "profit": "Rentabilität",
+    "price": "Preis"
+  },
+  "chat": {
+    "title": "RockStock",
+    "compareRounds": "Runden vergleichen",
+    "round": "Runde {{n}}"
+  },
+  "tabs": {
+    "market": "Markt",
+    "profile": "Profil",
+    "stats": "Statistiken",
+    "recycle": "Recyceln",
+    "chat": "Chat",
+    "mining": "Mining"
+  },
+  "profile": {
+    "title": "RockProfile",
+    "loading": "Benutzerdaten werden geladen...",
+    "editProfile": "Profil bearbeiten",
+    "galleryPermissionDenied": "Berechtigung für Galeriezugriff wurde verweigert",
+    "inventoryStatus": "Inventarstatus",
+    "rockCoins": "RockCoins",
+    "waste": "Abfall",
+    "products": "Produkte",
+    "enterYourName": "Geben Sie Ihren Namen ein",
+    "yourProducts": "Ihre Produkte"
+  },
+  "mining": {
+    "title": "RockMining",
+    "loadingResults": "Ergebnisse werden geladen...",
+    "congratulations": "Herzlichen Glückwunsch {{name}}!",
+    "solvedCorrectly": "Sie haben den Block korrekt gelöst!",
+    "notCorrect": "Nicht korrekt.",
+    "correctAnswer": "Die Antwort ist: {{answer}}",
+    "results": "Ergebnisse",
+    "wrong": "falsch",
+    "nextBlock": "Nächster Block",
+    "exitMining": "Mining verlassen",
+    "blockNumber": "Block #{{number}}",
+    "yourAnswer": "Ihre Antwort",
+    "submit": "Einreichen",
+    "loadingBlock": "Block wird geladen...",
+    "loadingProblem": "Problem wird geladen...",
+    "preparingMining": "Mining wird vorbereitet...",
+    "unknown": "Unbekannt",
+    "couldNotSendResponse": "Antwort konnte nicht gesendet werden. Bitte versuchen Sie es erneut."
+  },
+  "stats": {
+    "title": "RockStats",
+    "globalRankings": "Globale Rangliste"
+  },
+  "recycle": {
+    "title": "RockWaste"
+  },
+  "game": {
+    "waitingRoom": "Warteraum",
+    "waitingForPlayers": "Warten auf Spieler...",
+    "playersConnected": "Spieler verbunden",
+    "startGame": "Spiel starten",
+    "joinGame": "Spiel beitreten",
+    "gameCode": "Spielcode",
+    "enterCode": "Spielcode eingeben",
+    "join": "Beitreten",
+    "startingIn": "Spiel startet in {{count}}...",
+    "preparingGame": "Spiel wird vorbereitet...",
+    "preparingToStart": "Vorbereitung zum Start...",
+    "websocketDisconnected": "WebSocket getrennt - Fallback-Modus aktiv",
+    "startRockChain": "Einen RockChain starten",
+    "pleaseEnterGameCode": "Bitte geben Sie einen Spielcode ein.",
+    "gameNotFound": "Spiel nicht gefunden. Bitte überprüfen Sie den Spielcode.",
+    "cannotJoinOwnGame": "Sie können Ihrem eigenen Spiel nicht beitreten. Bitte geben Sie einen anderen Code ein.",
+    "failedToJoinGame": "Beitritt zum Spiel fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "onlyHostCanStart": "Nur der Gastgeber kann das Spiel starten.",
+    "gameAlreadyStarted": "Spiel wurde bereits gestartet oder beendet.",
+    "failedToStartGame": "Spielstart fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "yourGameCode": "Ihr Spielcode",
+    "numberOfPlayers": "Anzahl der Spieler",
+    "gameInProgress": "Spiel läuft bereits",
+    "waitingForHost": "Warten auf Gastgeber zum Spielstart...",
+    "joinGameCode": "Spielcode beitreten",
+    "enterGameCode": "6-stelligen Spielcode eingeben",
+    "failedToCreateGame": "Spiel konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
+  },
+  "navigation": {
+    "settings": "Einstellungen",
+    "back": "Zurück",
+    "close": "Schließen"
+  },
+  "common": {
+    "loading": "Laden...",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "retry": "Wiederholen",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "ok": "OK",
+    "yes": "Ja",
+    "no": "Nein"
+  }
+}

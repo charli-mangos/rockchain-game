@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
@@ -69,11 +70,13 @@ const computeLocalRewards = ({
 };
 
 const EndOfRoundScreen = ({ route }) => {
+  const { t } = useTranslation();
   const { 
     gameId, 
     userId, 
     allPlayersData, 
     round, 
+    gameStatus,
     isReadyForNextRound, 
     markPlayerReady, 
     markRoundReady,
@@ -87,7 +90,8 @@ const EndOfRoundScreen = ({ route }) => {
     webSocketInventory,
     setWebSocketInventory,
     getWebSocket,
-    minedBlocks
+    minedBlocks,
+    setIsWaitingNextRoundLocal
   } = useGameContextHybridRobust();
   
   // Crear displayPlayers aplicando recompensas locales solo para UI
@@ -400,13 +404,18 @@ const EndOfRoundScreen = ({ route }) => {
         // Para rondas 1 y 2, usar el NUEVO sistema de round:ready
         if (isWebSocketConnected) {
           console.log(`🔄 [ROUND:READY] Marcando como listo para ronda ${round} vía WebSocket`);
+          
+          // 1) Marcar ready en server (idempotente)
           await markRoundReady();
+          
+          // 2) Setear intención local y navegar SOLO este jugador
+          setIsWaitingNextRoundLocal(true);
+          console.log('🧭 [READY] Navegando a WaitingForNextRound (solo este jugador)');
+          navigation.navigate('WaitingForNextRound', { gameId, userId });
         } else {
           console.log(`🔄 [ROUND:READY] Marcando como listo para ronda ${round} vía Firestore (fallback)`);
           await markPlayerReady();
         }
-        // markRoundReady() maneja la emisión de round:ready
-        // La navegación se maneja automáticamente cuando todos estén listos
       }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
@@ -417,7 +426,8 @@ const EndOfRoundScreen = ({ route }) => {
   };
 
   // Overlay de calculating que se muestra encima del contenido original
-  const showCalculatingOverlay = isCalculating;
+  // Solo mostrar si estamos realmente en fin de ronda (evita overlay rezagado en nueva ronda)
+  const showCalculatingOverlay = (gameStatus === 'roundEnd') && (isCalculatingRewards || !roundRewards);
 
   // Activar sistema de recompensas cuando se monte el componente en modo calculating
   useEffect(() => {
@@ -484,7 +494,7 @@ const EndOfRoundScreen = ({ route }) => {
   return (
     <View style={styles.container}>
       <GameHeader 
-        title={round === 3 ? 'Game Complete!' : `Round ${round} Complete`} 
+        title={round === 3 ? t('round.gameComplete') : t('round.roundComplete', { n: round })} 
         userId={userId} 
         gameId={gameId}
         currentScreen="EndOfRound"
@@ -497,22 +507,22 @@ const EndOfRoundScreen = ({ route }) => {
       >
         <PlayerRankingComponent 
           players={displayPlayers}
-          title="Round Rankings" 
+          title={t('round.rankings')} 
           currentUserId={userId}
           roundRewards={roundRewards}
         />
 
         <View style={styles.industryContainer}>
-          <Text style={styles.industryTitle}>Waste Management</Text>
+          <Text style={styles.industryTitle}>{t('round.wasteManagement')}</Text>
           <View style={styles.industryInfo}>
             <View style={styles.industryRow}>
-              <Text style={styles.industryLabel}>Winning Industry:</Text>
+              <Text style={styles.industryLabel}>{t('round.winningIndustry')}:</Text>
               <Text style={styles.industryValue}>
                 {winningIndustry || 'Not selected yet'}
               </Text>
             </View>
             <View style={styles.industryRow}>
-              <Text style={styles.industryLabel}>Your Selection:</Text>
+              <Text style={styles.industryLabel}>{t('round.yourSelection')}:</Text>
               <Text style={[
                 styles.yourSelectionValue,
                 userSelectedIndustry === winningIndustry ? styles.correctSelection : styles.incorrectSelection
@@ -526,7 +536,7 @@ const EndOfRoundScreen = ({ route }) => {
               <View style={styles.successBanner}>
                 <Text style={styles.successBannerIcon}>✓</Text>
                 <View style={styles.successBannerText}>
-                  <Text style={styles.successBannerTitle}>Industry guessed!</Text>
+                  <Text style={styles.successBannerTitle}>{t('round.industryGuessed')}!</Text>
                   <Text style={styles.successBannerSubtitle}>
                     Your waste it's been reduced
                   </Text>
@@ -539,7 +549,7 @@ const EndOfRoundScreen = ({ route }) => {
               <View style={styles.failBanner}>
                 <Text style={styles.failBannerIcon}>✕</Text>
                 <View style={styles.failBannerText}>
-                  <Text style={styles.failBannerTitle}>Industry Missed</Text>
+                  <Text style={styles.failBannerTitle}>{t('round.industryMissed')}</Text>
                   <Text style={styles.failBannerSubtitle}>
                     No waste reduction this round
                   </Text>
@@ -557,7 +567,7 @@ const EndOfRoundScreen = ({ route }) => {
 
         <BlockchainComponent 
           gameId={gameId} 
-          title="Mined Blocks" 
+          title={t('round.minedBlocks')} 
           showReward={true}
           filterByRound={round}
           currentUserId={userId}

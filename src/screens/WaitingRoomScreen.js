@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import styles from '../styles/WaitingScreenStyles';
 import WaitingRoomHeader from '../components/WaitingRoomHeader';
 
 const WaitingRoomScreen = ({ route }) => {
+  const { t } = useTranslation();
   const { 
     gameId, 
     userId,
@@ -36,18 +38,18 @@ const WaitingRoomScreen = ({ route }) => {
   // FUNCIÓN HELPER: Determinar qué mensaje mostrar
   const getDisplayMessage = () => {
     if (contextGameStatus === 'starting' && waitingRoomCountdown !== null && waitingRoomCountdown > 0) {
-      return `Game starting in ${waitingRoomCountdown}...`;
+      return t('game.startingIn', { count: waitingRoomCountdown });
     }
     
     if (contextGameStatus === 'starting') {
-      return "Preparing game...";
+      return t('game.preparingGame');
     }
     
     if (contextGameStatus === 'in_progress') {
-      return "Preparing to start...";
+      return t('game.preparingToStart');
     }
     
-    return "Waiting for all players to be ready...";
+    return t('game.waitingForPlayers');
   };
 
   // EFECTO PARA MANEJAR COUNTDOWN DE WAITING ROOM (3 segundos)
@@ -219,12 +221,12 @@ const WaitingRoomScreen = ({ route }) => {
 
   return (
     <View style={styles.container}>
-      <WaitingRoomHeader title={"Waiting Room"} />
-      <Text style={styles.playerCountLabel}>Players: {playerCount}</Text>
+      <WaitingRoomHeader title={t('game.waitingRoom')} />
+      <Text style={styles.playerCountLabel}>{t('game.playersConnected')}: {playerCount}</Text>
       <Text style={styles.label}>{getDisplayMessage()}</Text>
       {!isWebSocketConnected && (
         <Text style={[styles.label, { color: '#F44336', fontSize: 12 }]}>
-          ⚠️ WebSocket desconectado - usando modo fallback
+          ⚠️ {t('game.websocketDisconnected')}
         </Text>
       )}
     </View>

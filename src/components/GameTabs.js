@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useSimpleMiningContext } from '../context/SimpleMiningContext';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
@@ -19,7 +20,8 @@ const Tab = createBottomTabNavigator();
 
 
 const Tabs = ({ route }) => {
-  const { gameId, userId, isCalculatingRewards } = useGameContextHybridRobust();
+  const { t } = useTranslation();
+  const { gameId, userId } = useGameContextHybridRobust();
   const { setShowMiningBubble } = useGameContextHybridRobust();
 
   return (
@@ -50,7 +52,7 @@ const Tabs = ({ route }) => {
 };
 
 const GameTabs = ({ route }) => {
-  const { gameId, userId, isCalculatingRewards, gameStatus, roundRewards } = useGameContextHybridRobust();
+  const { gameId, userId, gameStatus } = useGameContextHybridRobust();
   const { showMiningBubble, setShowMiningBubble, miningQueue } = useGameContextHybridRobust();
   const simpleMiningContext = useSimpleMiningContext();
   
@@ -69,7 +71,7 @@ const GameTabs = ({ route }) => {
       console.log('🎮 GameTabs: Recibido round_ended:', data);
       if (data.status === 'roundEnd') {
         console.log('🎮 GameTabs: round_ended recibido, esperando a que se procesen las recompensas...');
-        // NO navegar inmediatamente - esperar a que isCalculatingRewards sea false
+        // NO navegar inmediatamente - el timer maneja la navegación
       }
     };
 
@@ -84,26 +86,7 @@ const GameTabs = ({ route }) => {
     };
   }, [gameId, userId, navigation]);
 
-  // SISTEMA CORREGIDO DE NAVEGACIÓN - Solo navegar cuando recompensas estén listas
-  useEffect(() => {
-    console.log('🎮 [GameTabs] Navegación check:', {
-      gameStatus,
-      isCalculatingRewards,
-      hasRoundRewards: !!roundRewards,
-      roundRewards
-    });
-    
-    if (gameStatus === 'roundEnd' && !isCalculatingRewards && roundRewards) {
-      console.log('🎮 [GameTabs] ✅ CONDICIONES CUMPLIDAS - Navegando a EndOfRoundScreen');
-      navigation.navigate('EndOfRound', { gameId, userId });
-    } else {
-      console.log('🎮 [GameTabs] ⏳ Esperando condiciones:', {
-        gameStatusOk: gameStatus === 'roundEnd',
-        calculatingOk: !isCalculatingRewards,
-        rewardsOk: !!roundRewards
-      });
-    }
-  }, [gameStatus, isCalculatingRewards, roundRewards, gameId, userId, navigation]);
+  // ELIMINADO: Navegación basada en calculating - el timer maneja la navegación a EndOfRound
 
   return (
     <View style={{ flex: 1 }}>
@@ -130,21 +113,7 @@ const GameTabs = ({ route }) => {
       )}
       <Tabs route={route} />
       
-      {/* Indicador de "Calculating round rewards" */}
-      {isCalculatingRewards && (
-        <View style={styles.loadingOverlay}>
-          <View style={styles.loadingContainer}>
-            <RotatingCube 
-              size={80} 
-              color="#ba5d17" 
-              duration={2000}
-              containerStyle={styles.rotatingCubeContainer}
-            />
-            <Text style={styles.loadingText}>Calculating round rewards...</Text>
-            <Text style={styles.loadingSubtext}>Processing mining rewards and industry results</Text>
-          </View>
-        </View>
-      )}
+      {/* ELIMINADO: Overlay de calculating - solo se muestra en EndOfRoundScreen */}
     </View>
   );
 };

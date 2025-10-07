@@ -1,5 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import styles from '../styles/StatsScreenStyles';
 import GameHeader from '../components/GameHeader';
 import NavigationBar from '../components/NavigationBar';
@@ -8,6 +9,7 @@ import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
 
 const StatsScreen = ({ navigation, route }) => {
+  const { t } = useTranslation();
   const { gameId, userId, allPlayersData } = useGameContextHybridRobust();
   
   // Usar los datos completos de todos los jugadores
@@ -21,7 +23,7 @@ const StatsScreen = ({ navigation, route }) => {
   return (
     <View style={styles.screenContainer}>
       <GameHeader
-        title="RockStats"
+        title={t('stats.title')}
         gameId={gameId}
         userId={userId}
         onSettingsPress={() => console.log('Settings Pressed')}
@@ -30,7 +32,7 @@ const StatsScreen = ({ navigation, route }) => {
       <View style={styles.playersContainer}>
         <PlayerRankingComponent 
           players={players} 
-          title="Global Rankings" 
+            title={t('stats.globalRankings')}
           currentUserId={userId}
           roundRewards={null}
         />

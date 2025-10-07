@@ -1,21 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useUserName } from '../hooks/useUserName';
 
 const BlockCard = ({ block, index, showReward, currentUserId }) => {
+  const { t } = useTranslation();
   const minerId = block.winner?.userId;
   const minerName = useUserName(minerId);
   const isCurrentUserWinner = minerId === currentUserId;
   
   return (
     <View style={styles.blockCard}>
-      <Text style={styles.blockNumber}>{`Block #${index + 1}`}</Text>
-      <Text style={styles.blockId}>ID: {block.id}</Text>
-      <Text style={styles.minedByLabel}>Mined by:</Text>
-      <Text style={styles.minedByName}>{minerName || 'Unknown'}</Text>
+      <Text style={styles.blockNumber}>{t('blockchain.blockNumber', { number: index + 1 })}</Text>
+      <Text style={styles.blockId}>{t('blockchain.id')}: {block.id}</Text>
+      <Text style={styles.minedByLabel}>{t('blockchain.minedBy')}:</Text>
+      <Text style={styles.minedByName}>{minerName || t('blockchain.unknown')}</Text>
       <Text style={styles.blockDetails}>
-        Time: {((block.winner?.responseTime || 0) / 1000).toFixed(2)}s
+        {t('blockchain.time')}: {((block.winner?.responseTime || 0) / 1000).toFixed(2)}s
       </Text>
       {showReward && block.winner && isCurrentUserWinner && (
         <View style={styles.rewardContainer}>
@@ -31,6 +33,7 @@ const BlockConnection = () => (
 );
 
 const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null, currentUserId }) => {
+  const { t } = useTranslation();
   const { webSocketInventory, minedBlocks, round } = useGameContextHybridRobust();
   const [blocks, setBlocks] = useState([]);
 
@@ -85,7 +88,7 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
             ))}
           </ScrollView>
         ) : (
-          <Text style={styles.waitingText}>No blocks mined yet</Text>
+          <Text style={styles.waitingText}>{t('blockchain.noBlocksMinedYet')}</Text>
         )}
       </View>
     </View>
