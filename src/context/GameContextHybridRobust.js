@@ -97,6 +97,56 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     totalPlayers: 0, 
     readyList: [] 
   });
+
+  // Funciones para manejar feedback educativo
+  const dismissEducationalFeedback = () => {
+    setShowEducationalFeedback(false);
+    setEducationalFeedback(null);
+  };
+
+  // Funciones para actualizar progreso de aprendizaje
+  const updateLearningProgress = async (type, data = {}) => {
+    try {
+      let result;
+      switch (type) {
+        case 'block_mined':
+          result = await learningProgress.recordBlockMined();
+          break;
+        case 'waste_reduced':
+          result = await learningProgress.recordWasteReduction(data.amount || 0);
+          break;
+        case 'correct_industry':
+          result = await learningProgress.recordCorrectIndustrySelection();
+          break;
+        case 'rockcoins_earned':
+          result = await learningProgress.recordRockcoinsEarned(data.amount || 0);
+          break;
+        case 'game_completed':
+          result = await learningProgress.recordGameCompleted();
+          break;
+        case 'transaction_completed':
+          result = await learningProgress.recordTransactionCompleted();
+          break;
+        default:
+          console.log('Unknown learning progress type:', type);
+          return;
+      }
+
+      // Mostrar notificación si hay nuevos logros
+      if (result.newAchievements.length > 0) {
+        console.log('🎉 New achievements unlocked:', result.newAchievements);
+        // Aquí podrías mostrar una notificación de logros desbloqueados
+      }
+
+      // Mostrar notificación si subió de nivel
+      if (result.levelUp) {
+        console.log('🎊 Level up! New level:', result.newProgress.level);
+        // Aquí podrías mostrar una notificación de subida de nivel
+      }
+    } catch (error) {
+      console.error('Error updating learning progress:', error);
+    }
+  };
   
   // Estado local para controlar navegación individual
   const [isWaitingNextRoundLocal, setIsWaitingNextRoundLocal] = useState(false);
@@ -466,55 +516,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     webSocketService.on('economy:state', handleEconomyState);
     webSocketService.on('round_meta', handleRoundMeta);
 
-    // Funciones para manejar feedback educativo
-    const dismissEducationalFeedback = () => {
-      setShowEducationalFeedback(false);
-      setEducationalFeedback(null);
-    };
-
-    // Funciones para actualizar progreso de aprendizaje
-    const updateLearningProgress = async (type, data = {}) => {
-      try {
-        let result;
-        switch (type) {
-          case 'block_mined':
-            result = await learningProgress.recordBlockMined();
-            break;
-          case 'waste_reduced':
-            result = await learningProgress.recordWasteReduction(data.amount || 0);
-            break;
-          case 'correct_industry':
-            result = await learningProgress.recordCorrectIndustrySelection();
-            break;
-          case 'rockcoins_earned':
-            result = await learningProgress.recordRockcoinsEarned(data.amount || 0);
-            break;
-          case 'game_completed':
-            result = await learningProgress.recordGameCompleted();
-            break;
-          case 'transaction_completed':
-            result = await learningProgress.recordTransactionCompleted();
-            break;
-          default:
-            console.log('Unknown learning progress type:', type);
-            return;
-        }
-
-        // Mostrar notificación si hay nuevos logros
-        if (result.newAchievements.length > 0) {
-          console.log('🎉 New achievements unlocked:', result.newAchievements);
-          // Aquí podrías mostrar una notificación de logros desbloqueados
-        }
-
-        // Mostrar notificación si subió de nivel
-        if (result.levelUp) {
-          console.log('🎊 Level up! New level:', result.newProgress.level);
-          // Aquí podrías mostrar una notificación de subida de nivel
-        }
-      } catch (error) {
-        console.error('Error updating learning progress:', error);
-      }
-    };
 
     // Cleanup
     return () => {
