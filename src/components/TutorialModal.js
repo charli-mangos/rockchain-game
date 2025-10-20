@@ -65,7 +65,7 @@ const TutorialModal = ({ visible, onClose, tutorial, onNext, onPrevious, current
 
           {/* Content */}
           <View style={styles.content}>
-            <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer} showsVerticalScrollIndicator={false}>
               <View style={styles.iconContainer}>
                 <Ionicons 
                   name={tutorial.icon || "school"} 
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     width: width * 0.9,
-    maxHeight: height * 0.8,
+    maxHeight: height * 0.9,
     backgroundColor: '#fff',
     borderRadius: 20,
     overflow: 'hidden',
@@ -193,6 +193,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
     padding: 20,
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
   },
   iconContainer: {
     alignItems: 'center',
