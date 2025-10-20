@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import RotatingCube from '../components/RotatingCube';
 
 const WaitingForNextRoundScreen = ({ route }) => {
-  const { t } = useTranslation();
   const { gameId, userId } = route?.params || {};
   const {
     round,
@@ -40,13 +38,13 @@ const WaitingForNextRoundScreen = ({ route }) => {
   const getStatusMessage = () => {
     switch (gameStatus) {
       case 'waitingForNextRound':
-        return t('waiting.waitingForAllPlayers');
+        return 'Waiting for all players...';
       case 'preparingNextRound':
-        return t('waiting.preparingNextRound');
+        return 'Preparing next round...';
       case 'startingNextRound':
-        return t('waiting.startingIn', { count: countdown });
+        return `Starting in ${countdown}...`;
       default:
-        return t('waiting.gettingReady');
+        return 'Preparing next round...';
     }
   };
 
@@ -70,25 +68,19 @@ const WaitingForNextRoundScreen = ({ route }) => {
 
   return (
     <View style={styles.container}>
+      {/* Header similar a WaitingRoomHeader */}
+      <View style={styles.headerContainer}>
+        <RotatingCube size={100} color="#ba5d17" />
+        <Text style={styles.headerTitle}>{getStatusMessage()}</Text>
+      </View>
+      
       <View style={styles.content}>
-        {/* Status Icon */}
-        <View style={styles.statusContainer}>
-          {getStatusIcon()}
-        </View>
-        
-        {/* Status Message */}
-        <Text style={styles.statusMessage}>
-          {getStatusMessage()}
-        </Text>
         
         {/* Progress for waiting */}
         {gameStatus === 'waitingForNextRound' && (
           <View style={styles.progressContainer}>
             <Text style={styles.progressText}>
-              {t('waiting.playersReady', { 
-                ready: roundReadyProgress.readyCount || 0, 
-                total: roundReadyProgress.totalPlayers || 0 
-              })}
+              {roundReadyProgress.readyCount || 0} / {roundReadyProgress.totalPlayers || 0} players ready
             </Text>
             
             {/* Player List */}
@@ -108,7 +100,7 @@ const WaitingForNextRoundScreen = ({ route }) => {
                       styles.readyStatus,
                       isReady ? styles.ready : styles.notReady
                     ]}>
-                      {isReady ? t('waiting.ready') : t('waiting.waiting')}
+                      {isReady ? '✓ Ready' : '⏳ Waiting'}
                     </Text>
                   </View>
                 );
@@ -125,23 +117,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  headerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 20,
+    backgroundColor: '#fff',
+    marginBottom: 35,
+    marginTop: 50,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 35,
+    color: '#1d3d39',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-  },
-  statusContainer: {
-    marginBottom: 30,
-    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 50,
   },
   statusMessage: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1d3d39',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 30,
   },
   countdownContainer: {
     alignItems: 'center',
@@ -155,6 +159,7 @@ const styles = StyleSheet.create({
   progressContainer: {
     width: '100%',
     maxWidth: 400,
+    marginTop: 20,
   },
   progressText: {
     fontSize: 18,
@@ -171,9 +176,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#fdf4e8',
     borderRadius: 8,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#1d3d39',
   },
   playerName: {
     fontSize: 16,
@@ -185,10 +192,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   ready: {
-    color: '#4caf50',
+    color: '#2d5a56',
   },
   notReady: {
-    color: '#ff9800',
+    color: '#ba5d17',
   },
 });
 

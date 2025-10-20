@@ -31,7 +31,8 @@
     "react-native-screens": "~4.10.0",
     "react-native-svg": "15.11.2",
     "socket.io-client": "^4.8.1",
-    "expo-localization": "~16.1.6"
+    "expo-localization": "~16.1.6",
+    "expo-linear-gradient": "~14.1.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

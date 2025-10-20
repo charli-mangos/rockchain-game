@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
@@ -70,7 +69,6 @@ const computeLocalRewards = ({
 };
 
 const EndOfRoundScreen = ({ route }) => {
-  const { t } = useTranslation();
   const { 
     gameId, 
     userId, 
@@ -203,7 +201,7 @@ const EndOfRoundScreen = ({ route }) => {
     try {
       const ws = getWebSocket && getWebSocket();
       if (ws) {
-        ws.emit('round_ended', { gameId, userId });
+        ws.emit('round_ended', { gameId, userId, round });
         console.log('📡 [END] round_ended emitido (optimista)');
       }
     } catch (e) {
@@ -419,7 +417,7 @@ const EndOfRoundScreen = ({ route }) => {
       }
     } catch (error) {
       console.error('Error al marcar como listo:', error);
-      Alert.alert('Error', 'No se pudo marcar como listo para la siguiente ronda');
+      Alert.alert(t('common.error'), t('game.failedToMarkReady'));
       // Si hay error, desactivar protección de navegación
       isNavigatingRef.current = false;
     }
@@ -494,7 +492,7 @@ const EndOfRoundScreen = ({ route }) => {
   return (
     <View style={styles.container}>
       <GameHeader 
-        title={round === 3 ? t('round.gameComplete') : t('round.roundComplete', { n: round })} 
+        title={round === 3 ? 'Game Complete!' : `Round ${round} Complete`} 
         userId={userId} 
         gameId={gameId}
         currentScreen="EndOfRound"
@@ -507,22 +505,22 @@ const EndOfRoundScreen = ({ route }) => {
       >
         <PlayerRankingComponent 
           players={displayPlayers}
-          title={t('round.rankings')} 
+          title="Round Rankings" 
           currentUserId={userId}
           roundRewards={roundRewards}
         />
 
         <View style={styles.industryContainer}>
-          <Text style={styles.industryTitle}>{t('round.wasteManagement')}</Text>
+          <Text style={styles.industryTitle}>Waste Management</Text>
           <View style={styles.industryInfo}>
             <View style={styles.industryRow}>
-              <Text style={styles.industryLabel}>{t('round.winningIndustry')}:</Text>
+              <Text style={styles.industryLabel}>Winning Industry:</Text>
               <Text style={styles.industryValue}>
                 {winningIndustry || 'Not selected yet'}
               </Text>
             </View>
             <View style={styles.industryRow}>
-              <Text style={styles.industryLabel}>{t('round.yourSelection')}:</Text>
+              <Text style={styles.industryLabel}>Your Selection:</Text>
               <Text style={[
                 styles.yourSelectionValue,
                 userSelectedIndustry === winningIndustry ? styles.correctSelection : styles.incorrectSelection
@@ -536,7 +534,7 @@ const EndOfRoundScreen = ({ route }) => {
               <View style={styles.successBanner}>
                 <Text style={styles.successBannerIcon}>✓</Text>
                 <View style={styles.successBannerText}>
-                  <Text style={styles.successBannerTitle}>{t('round.industryGuessed')}!</Text>
+                  <Text style={styles.successBannerTitle}>Industry guessed!</Text>
                   <Text style={styles.successBannerSubtitle}>
                     Your waste it's been reduced
                   </Text>
@@ -549,7 +547,7 @@ const EndOfRoundScreen = ({ route }) => {
               <View style={styles.failBanner}>
                 <Text style={styles.failBannerIcon}>✕</Text>
                 <View style={styles.failBannerText}>
-                  <Text style={styles.failBannerTitle}>{t('round.industryMissed')}</Text>
+                  <Text style={styles.failBannerTitle}>Industry Missed</Text>
                   <Text style={styles.failBannerSubtitle}>
                     No waste reduction this round
                   </Text>
@@ -567,7 +565,7 @@ const EndOfRoundScreen = ({ route }) => {
 
         <BlockchainComponent 
           gameId={gameId} 
-          title={t('round.minedBlocks')} 
+          title="Mined Blocks" 
           showReward={true}
           filterByRound={round}
           currentUserId={userId}

@@ -119,6 +119,14 @@ class SocketAdapter {
       if (this.currentUserId) {
         console.log('🔐 [ADAPTER] Re-enviando auth en reconexión:', { userId: this.currentUserId });
         this.emit('auth', { userId: this.currentUserId, userName: 'Player' });
+        
+        // Re-enviar join_game si tenemos gameId
+        if (this.currentGameId) {
+          setTimeout(() => {
+            console.log('🎮 [ADAPTER] Re-enviando join_game en reconexión:', { gameId: this.currentGameId, userId: this.currentUserId });
+            this.emit('join_game', { gameId: this.currentGameId, userId: this.currentUserId, userName: 'Player' });
+          }, 200);
+        }
       }
     });
 

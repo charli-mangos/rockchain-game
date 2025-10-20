@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, FlatList, Dimensions, Image } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { LineChart } from 'react-native-chart-kit';
@@ -12,7 +11,6 @@ import DropDownPicker from 'react-native-dropdown-picker';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const ChatScreen = ({ navigation, route }) => {
-  const { t } = useTranslation();
   const { gameId, userId, marketData } = useGameContextHybridRobust();
   const [priceHistory, setPriceHistory] = useState([]); // Inicializar como array vacío
   const [round, setRound] = useState(0); // Inicializar como 0
@@ -38,16 +36,7 @@ const ChatScreen = ({ navigation, route }) => {
     if (!marketData) return;
 
     const roundsData = marketData.rounds || {};
-    const currentRound = Object.keys(roundsData).length;
-    setRound(currentRound);
-    
-    console.log('📊 [CHATSCREEN] Datos de mercado actualizados:', {
-      hasMarketData: !!marketData,
-      roundsCount: currentRound,
-      availableRounds: Object.keys(roundsData),
-      selectedType,
-      selectedQuality
-    });
+    setRound(Object.keys(roundsData).length);
 
     const filteredData = generateFilteredData(roundsData, selectedType, selectedQuality);
     setPriceHistory(filteredData);
@@ -286,7 +275,7 @@ const ChatScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.screenContainer}>
-      <GameHeader title={t('chat.title')} gameId={gameId} userId={userId} />
+      <GameHeader title="RockStock" gameId={gameId} userId={userId} />
 
       {/* Filtros principales */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 21 }}>

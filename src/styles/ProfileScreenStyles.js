@@ -155,6 +155,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
+  saveButton: {
+    backgroundColor: '#1d3d39',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    width: '100%',
+    alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
 
 export default styles;

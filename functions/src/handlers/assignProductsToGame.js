@@ -150,3 +150,5 @@ exports.assignProductsToGame = async ({ gameId, round }) => {
     throw new Error('Failed to assign products to game');
   }
 };
+
+module.exports = { assignProductsToGame };

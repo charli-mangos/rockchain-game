@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   },
   languageSwitcherContainer: {
     marginBottom: 20,
-    marginTop: 10,
+    marginTop: 5,
     width: '80%',
   },
 });

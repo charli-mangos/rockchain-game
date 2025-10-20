@@ -58,7 +58,7 @@ exports.joinGame = onCall({
     
     if (currentPlayers >= maxPlayers) {
       console.error(`❌ Juego lleno: ${currentPlayers}/${maxPlayers}`);
-      throw new Error('Game is full');
+      throw new Error('No caben más jugadores en esta sala. La sala está llena.');
     }
 
     // 4. VERIFICAR SI EL USUARIO YA ESTÁ EN EL JUEGO
@@ -143,8 +143,8 @@ exports.joinGame = onCall({
     // Mensajes de error específicos
     if (error.message.includes('Game not found')) {
       throw new Error('Game not found. Please check the code and try again.');
-    } else if (error.message.includes('Game is full')) {
-      throw new Error('Game is full. Please try another game.');
+    } else if (error.message.includes('Game is full') || error.message.includes('No caben más jugadores')) {
+      throw new Error('No caben más jugadores en esta sala. La sala está llena.');
     } else if (error.message.includes('not accepting new players')) {
       throw new Error('Game has already started. Please try another game.');
     } else if (error.message.includes('User not found')) {

@@ -1,27 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, TextInput, FlatList, Modal, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Button } from 'react-native';
+import { View, Text, Image, TextInput, FlatList, Modal, TouchableOpacity, TouchableWithoutFeedback, Keyboard, Button, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';  // Importamos ImagePicker
 import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, functions } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { callAuthenticatedFunction } from '../utils/authHelper';
 import { Ionicons } from '@expo/vector-icons';
 import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/ProfileScreenStyles';
 import GameHeader from '../components/GameHeader';
 import ExpandableProduct from '../components/ExpandableProduct';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
+import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 
 const ProfileScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
-  const { userData, webSocketInventory, gameId, userId } = useGameContextHybridRobust();
+  const { userData, webSocketInventory, gameId, userId, refreshUserData, updateUserDataImmediately } = useGameContextHybridRobust();
   const userProducts = webSocketInventory?.products || []; 
   const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
+  const [editingData, setEditingData] = useState({ userName: '', imageUrl: '' }); // Estado para los datos que se están editando
+  const [isSaving, setIsSaving] = useState(false); // Estado para controlar el guardado
   
   // Agregar elemento invisible si el número de productos es impar
   const dataWithSpacer = userProducts.length % 2 === 1 
     ? [...userProducts, { isSpacer: true, id: 'spacer' }]
     : userProducts;
+
+  // Inicializar datos de edición cuando se abre el modal
+  useEffect(() => {
+    if (isEditing && userData) {
+      setEditingData({
+        userName: userData.userName || '',
+        imageUrl: userData.imageUrl || ''
+      });
+    }
+  }, [isEditing, userData]);
   
   // Proteger contra userData null
   if (!userData) {
@@ -44,10 +59,63 @@ const ProfileScreen = ({ navigation, route }) => {
       });
 
       if (!pickerResult.cancelled) {
-        setUserData({ ...userData, image: pickerResult.uri });  // Guardamos la imagen seleccionada en el estado
+        setEditingData({ ...editingData, imageUrl: pickerResult.uri });
       }
     } else {
       alert(t('profile.galleryPermissionDenied'));
+    }
+  };
+
+  // Función para guardar el perfil
+  const saveProfile = async () => {
+    if (!editingData.userName.trim()) {
+      Alert.alert(t('common.error'), t('game.userNameRequired'));
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updateUserProfileFunction = httpsCallable(functions, 'updateUserProfile');
+      await callAuthenticatedFunction(
+        () => updateUserProfileFunction({ 
+          userName: editingData.userName.trim(),
+          imageUrl: editingData.imageUrl.trim() || null
+        }),
+        'updateUserProfile'
+      );
+      
+      // 1. ACTUALIZAR INMEDIATAMENTE LOS DATOS LOCALES
+      console.log('🔄 Actualizando datos locales inmediatamente...');
+      updateUserDataImmediately(editingData.userName.trim(), editingData.imageUrl.trim() || null);
+      console.log('✅ Datos locales actualizados inmediatamente');
+      
+      // 2. NOTIFICAR AL SERVIDOR WEBSOCKET INMEDIATAMENTE
+      console.log('📡 Notificando al servidor WebSocket sobre actualización del perfil...');
+      const getWebSocket = getWebSocketService;
+      if (getWebSocket && getWebSocket().isConnected) {
+        getWebSocket().emit('update_user_profile', {
+          gameId,
+          userId,
+          userName: editingData.userName.trim(),
+          imageUrl: editingData.imageUrl.trim() || null
+        });
+        console.log('✅ Notificación enviada al servidor WebSocket');
+      } else {
+        console.log('⚠️ WebSocket no conectado, no se puede notificar al servidor');
+      }
+      
+      // 3. MOSTRAR ALERTA DE ÉXITO
+      Alert.alert(t('common.success'), t('game.profileUpdated'));
+      setIsEditing(false);
+      
+      // 4. REFRESCAR DATOS DEL USUARIO Y RANKING EN TODA LA APP (como respaldo)
+      console.log('🔄 Refrescando datos después de actualizar perfil...');
+      refreshUserData();
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert(t('common.error'), t('game.failedToUpdateProfile'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -120,16 +188,30 @@ const ProfileScreen = ({ navigation, route }) => {
 
                   {/* Imagen seleccionable */}
                   <TouchableOpacity onPress={pickImage}>
-                    <Image source={userData.image ? { uri: userData.image } : require('../assets/User.png')} style={[styles.avatar, { tintColor: '#1d3d39' }]} />
+                    <Image 
+                      source={editingData.imageUrl ? { uri: editingData.imageUrl } : require('../assets/User.png')} 
+                      style={[styles.avatar, { tintColor: '#1d3d39' }]} 
+                    />
                   </TouchableOpacity>
 
                   <TextInput
-                    value={userData.userName}
-                    onChangeText={(text) => setUserData({ ...userData, name: text })}
+                    value={editingData.userName}
+                    onChangeText={(text) => setEditingData({ ...editingData, userName: text })}
                     style={styles.input}
                     placeholder={t('profile.enterYourName')}
                     placeholderTextColor="#1d3d39"
                   />
+
+                  {/* Botón de guardar */}
+                  <TouchableOpacity 
+                    style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
+                    onPress={saveProfile}
+                    disabled={isSaving}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {isSaving ? t('common.loading') : t('game.saveProfile')}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
             </View>

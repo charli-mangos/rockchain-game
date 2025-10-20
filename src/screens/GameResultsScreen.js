@@ -47,7 +47,7 @@ const GameResultsScreen = ({ route }) => {
       });
     } catch (error) {
       console.error('❌ Error al crear nueva partida:', error);
-      Alert.alert('Error', 'No se pudo crear la nueva partida. Inténtalo de nuevo.');
+      Alert.alert(t('common.error'), t('game.failedToCreateNewGame'));
     } finally {
       setIsCreatingGame(false);
     }

@@ -59,6 +59,14 @@ exports.startGame = onCall({
       throw new Error('Game is already started or finished.');
     }
 
+    // Verificar que hay al menos 2 jugadores para iniciar el juego
+    // COMENTADO PARA PRUEBAS - Permitir 1 jugador
+    const playerCount = gameData.playerCount || 0;
+    // if (playerCount < 2) {
+    //   console.error(`❌ No se puede iniciar el juego con menos de 2 jugadores. Jugadores actuales: ${playerCount}`);
+    //   throw new Error('Se necesitan al menos 2 jugadores para iniciar el juego.');
+    // }
+
     // Inicializar blockchain/gameId con el número total de jugadores
     await admin.firestore().collection('blockchain').doc(gameId).set({
       totalPlayers: gameData.players.length,

@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useSimpleMiningContext } from '../context/SimpleMiningContext';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
@@ -20,7 +19,6 @@ const Tab = createBottomTabNavigator();
 
 
 const Tabs = ({ route }) => {
-  const { t } = useTranslation();
   const { gameId, userId } = useGameContextHybridRobust();
   const { setShowMiningBubble } = useGameContextHybridRobust();
 

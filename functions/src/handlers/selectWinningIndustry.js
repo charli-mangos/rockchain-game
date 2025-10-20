@@ -77,4 +77,6 @@ exports.selectWinningIndustry = async ({ gameId }) => {
     console.error('❌ Error en selectWinningIndustry:', error);
     throw new Error('Failed to select winning industry.');
   }
-}; 
+};
+
+module.exports = { selectWinningIndustry }; 

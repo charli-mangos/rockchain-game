@@ -37,6 +37,9 @@ const { endRound } = require('./src/handlers/endRound');
 const { checkRoundCompletion } = require('./src/handlers/checkRoundCompletion');
 const { progressGame } = require('./src/handlers/progressGame');
 const { evaluateRound } = require('./src/handlers/evaluateRound');
+const { updateUserProfile } = require('./src/handlers/updateUserProfile');
+const { leaveGame } = require('./src/handlers/leaveGame');
+const { startNextRound } = require('./src/handlers/startNextRound');
 
 exports.createGame = createGame;
 exports.joinGame = joinGame;
@@ -55,6 +58,9 @@ exports.endRound = endRound;
 exports.checkRoundCompletion = checkRoundCompletion;
 exports.progressGame = progressGame;
 exports.evaluateRound = evaluateRound;
+exports.updateUserProfile = updateUserProfile;
+exports.leaveGame = leaveGame;
+exports.startNextRound = startNextRound;
 // Create and deploy your first functions
 // https://firebase.google.com/docs/functions/get-started
 

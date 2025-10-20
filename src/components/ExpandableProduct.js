@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Image, Alert, Modal, TouchableWithoutFeedback } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { doc, updateDoc, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db, functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -14,7 +13,6 @@ import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 
 const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
-  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [showSummary, setShowSummary] = useState(false); // Controla si se muestra el resumen de compra
   const navigation = useNavigation();
@@ -48,7 +46,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
     setShowSummary(false); // Ocultar resumen si se cierra el modal
   };
 
-  const generateProblem = async (product, transType) => {
+  const generateProblem = async (product, transType, transformedProduct = null, wasteExtra = null) => {
     try {
       if (!gameId) {
         console.error('gameId is undefined in generateProblem');
@@ -59,18 +57,28 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         gameId,
         product,
         transType,
-        userId
+        userId,
+        transformedProduct,
+        wasteExtra
       });
 
       // Enviar transacción directamente al WebSocket
       const webSocketService = getWebSocketService();
       if (webSocketService.isConnected) {
-        webSocketService.emit('product_transaction', {
+        const transactionData = {
           gameId,
           userId,
           product,
           transactionType: transType
-        });
+        };
+        
+        // Agregar parámetros adicionales para transformación
+        if (transType === 'transform' && transformedProduct && wasteExtra !== null) {
+          transactionData.transformedProduct = transformedProduct;
+          transactionData.wasteExtra = wasteExtra;
+        }
+        
+        webSocketService.emit('product_transaction', transactionData);
         
         console.log('✅ Transacción enviada al WebSocket - el problema se generará automáticamente');
         return { success: true, message: 'Transacción procesada vía WebSocket' };
@@ -85,7 +93,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         transType,
         userId
       });
-      Alert.alert(t('common.error'), t('product.failedToGenerateProblem'));
+      Alert.alert('Error', 'Failed to generate mining problem. Please try again.');
       throw error;
     }
   };
@@ -113,7 +121,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       // Verificar que gameId es válido
       if (!gameId || typeof gameId !== 'string' || gameId.length === 0) {
         console.error('Invalid gameId:', gameId);
-        Alert.alert(t('product.purchaseFailed'), t('product.invalidGameId'));
+        Alert.alert("Purchase Failed", "Invalid game ID. Please restart the game.");
         return;
       }
 
@@ -131,7 +139,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       
       if (!gameSnapshot.exists()) {
         console.error('Game document does not exist:', gameId);
-        Alert.alert(t('product.purchaseFailed'), t('product.gameNotFound'));
+        Alert.alert("Purchase Failed", "Game not found. Please try again.");
         return;
       }
       
@@ -139,7 +147,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       
       if (!gameData) {
         console.error('Game data is null or undefined for gameId:', gameId);
-        Alert.alert(t('product.purchaseFailed'), t('product.gameDataCorrupted'));
+        Alert.alert("Purchase Failed", "Game data is corrupted. Please try again.");
         return;
       }
       
@@ -151,7 +159,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       // Si la lista de productos está vacía, esperar un poco y reintentar
       if (productList.length === 0) {
         console.log('Product list is empty, waiting for products to load...');
-        Alert.alert(t('product.purchaseFailed'), t('product.productsStillLoading'));
+        Alert.alert("Purchase Failed", "Products are still loading. Please try again in a moment.");
         return;
       }
   
@@ -161,7 +169,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       
       if (!productToRemove) {
         console.error('Product not found in productList. Available products:', productList.map(p => ({ id: p.id, type: p.type, marbleType: p.marbleType })));
-        Alert.alert(t('product.purchaseFailed'), t('product.productNotAvailable'));
+        Alert.alert("Purchase Failed", "This product is no longer available.");
         return;
       }
   
@@ -170,7 +178,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       
       if (!userSnapshot.exists()) {
         console.error('User document does not exist:', userId);
-        Alert.alert(t('product.purchaseFailed'), t('product.userNotFound'));
+        Alert.alert("Purchase Failed", "User not found. Please try again.");
         return;
       }
       
@@ -178,7 +186,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       
       if (!userData) {
         console.error('User data is null or undefined for userId:', userId);
-        Alert.alert(t('product.purchaseFailed'), t('product.userDataCorrupted'));
+        Alert.alert("Purchase Failed", "User data is corrupted. Please try again.");
         return;
       }
       
@@ -187,7 +195,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       const userWaste = userData.games[gameId]?.waste || 0;
   
       if (userRockCoins < product.currentPrice) {
-        Alert.alert(t('product.insufficientFunds'), t('product.insufficientFundsMessage'));
+        Alert.alert("Insufficient Funds", "You do not have enough RockCoins to purchase this product.");
         return;
       }
   
@@ -224,7 +232,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         productId: product?.id,
         userId
       });
-      Alert.alert(t('common.error'), t('product.errorProcessingPurchase'));
+      Alert.alert("Error", "An error occurred while processing your purchase.");
     }
   };
 
@@ -233,7 +241,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       // Usar el inventario del WebSocket en lugar de Firestore
       const productToSell = webSocketInventory.products.find((item) => item.id === product.id);
       if (!productToSell) {
-        Alert.alert(t('product.sellFailed'), t('product.productNotAvailable'));
+        Alert.alert("Sell Failed", "This product is no longer available.");
         return;
       }
 
@@ -263,7 +271,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       }
     } catch (error) {
       console.error("Error selling product:", error);
-      Alert.alert(t('common.error'), t('product.errorProcessingSale'));
+      Alert.alert("Error", "An error occurred while processing the sale.");
     }
   };
 
@@ -272,12 +280,12 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       // Usar el inventario del WebSocket en lugar de Firestore
       const productToTransform = webSocketInventory.products.find((item) => item.id === product.id);
       if (!productToTransform) {
-        Alert.alert(t('product.transformFailed'), t('product.productNotAvailable'));
+        Alert.alert("Transform Failed", "This product is no longer available.");
         return;
       }
   
       if (productToTransform.type === "Slab") {
-        Alert.alert(t('product.transformNotAllowed'), t('product.slabsCannotBeTransformed'));
+        Alert.alert("Transform Not Allowed", "Slabs cannot be transformed.");
         return;
       }
   
@@ -308,7 +316,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
           newType = productToTransform.type.replace("Block", "Slab");
         }
       } else {
-        Alert.alert(t('product.transformNotAllowed'), t('product.onlyBlocksCanBeTransformed'));
+        Alert.alert("Transform Not Allowed", "Only blocks can be transformed into slabs.");
         return;
       }
       
@@ -373,7 +381,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         
         // Solo procesar localmente si WebSocket no está conectado
         // Generar problema de minería
-        await generateProblem(transformedProduct, 'transform');
+        await generateProblem(productToTransform, 'transform', transformedProduct, wasteExtra);
         
         incrementMiningQueue(); // Se incrementa la burbuja de minería
     
@@ -382,7 +390,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
       }
     } catch (error) {
       console.error("Error transforming product:", error);
-      Alert.alert(t('common.error'), t('product.errorTransformingProduct'));
+      Alert.alert("Error", "An error occurred while transforming the product.");
     }
   };
   
@@ -443,7 +451,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
                   </View>
                 </View>
                 <View style={styles.priceRow}>
-                  <Text style={styles.detailText}>{t('product.price')}: <Text style={{fontWeight: 'bold'}}>{product.currentPrice}</Text></Text>
+                  <Text style={styles.detailText}>Price: <Text style={{fontWeight: 'bold'}}>{product.currentPrice}</Text></Text>
                   <Image 
                     source={require('../assets/RockCoinBlack.png')} 
                     style={styles.rockCoinIconDetail} 
@@ -486,7 +494,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
                         style={styles.button}
                         onPress={() => handleSell(product)}
                       >
-                        <Text style={styles.buttonText}>{t('product.sell')}</Text>
+                        <Text style={styles.buttonText}>SELL</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.button, product.type === "Slab" && styles.disabledButton]}

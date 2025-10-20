@@ -231,6 +231,13 @@ const GameScreen = ({ route }) => {
       return;
     }
 
+    // Verificar que hay al menos 2 jugadores para iniciar
+    // COMENTADO PARA PRUEBAS - Permitir 1 jugador
+    // if (playerCount < 2) {
+    //   Alert.alert(t('common.error'), t('game.needAtLeastTwoPlayers'));
+    //   return;
+    // }
+
     console.log('✅ Host verified, starting game...');
     setLoading(true);
     
@@ -261,7 +268,7 @@ const GameScreen = ({ route }) => {
           <View style={styles.inputContainer}>
             {/* Sección para el jugador para empezar su propia partida */}
             <Text style={styles.label}>{t('game.yourGameCode')}: <Text style={[styles.bold, { color: '#1d3d39' }]}>{gameCode}</Text></Text>
-            <Text style={styles.label}>{t('game.numberOfPlayers')}: {playerCount}/10</Text>
+            <Text style={styles.label}>{t('game.numberOfPlayers')}: {playerCount}/3</Text>
             
             {/* Mostrar botón START GAME solo si es el host y el juego está en waiting */}
             {isHost && gameStatus === 'waiting' ? (

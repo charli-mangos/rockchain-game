@@ -3,9 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Platform, ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import * as NavigationBar from 'expo-navigation-bar';
 import { I18nextProvider } from 'react-i18next';
-import i18n, { bootstrapI18n } from './src/i18n';
+import * as NavigationBar from 'expo-navigation-bar';
 import LoginScreen from './src/screens/LoginScreen';
 import GameScreen from './src/screens/GameScreen';
 import WaitingRoomScreen from './src/screens/WaitingRoomScreen';
@@ -16,6 +15,8 @@ import WaitingForNextRoundScreen from './src/screens/WaitingForNextRoundScreen';
 import { GameProviderHybridRobust } from './src/context/GameContextHybridRobust';
 import { SimpleMiningProvider } from './src/context/SimpleMiningContext';
 import NetworkStatusBanner from './src/components/NetworkStatusBanner';
+import { bootstrapI18n } from './src/i18n';
+import i18n from './src/i18n';
 
 import { HermesInternal } from 'react-native';
 
@@ -26,6 +27,17 @@ const App = () => {
   const [gameParams, setGameParams] = useState(null);
   const [i18nReady, setI18nReady] = useState(false);
 
+  // Inicializar i18n
+  useEffect(() => {
+    bootstrapI18n().then(() => {
+      setI18nReady(true);
+    }).catch((error) => {
+      console.error('Error initializing i18n:', error);
+      // Si hay error, forzar inglés como fallback
+      setI18nReady(true);
+    });
+  }, []);
+
   // Ocultar la barra de navegación del sistema en Android
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -33,14 +45,9 @@ const App = () => {
     }
   }, []);
 
-  // Inicializar i18n
-  useEffect(() => {
-    bootstrapI18n().then(() => setI18nReady(true));
-  }, []);
-
   if (!i18nReady) {
     return (
-      <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" />
       </View>
     );

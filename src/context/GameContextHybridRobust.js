@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { doc, onSnapshot, collection, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { db, functions, auth } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -17,8 +19,9 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     return null;
   }
 
-  // Obtener navigation usando el hook
+  // Obtener navigation y traducción usando los hooks
   const navigation = useNavigation();
+  const { t } = useTranslation();
 
   // Helper para obtener la instancia del WebSocketService
   const getWebSocket = () => getWebSocketService();
@@ -26,7 +29,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   // Estados del juego
   const [countdown, setCountdown] = useState(120);
   const [roundTime, setRoundTime] = useState(null);
-  const [round, setRound] = useState(0);
+  const [round, setRound] = useState(1);
   const [gameStatus, setGameStatus] = useState('waiting');
   const [playerCount, setPlayerCount] = useState(0);
   const [players, setPlayers] = useState([]);
@@ -59,6 +62,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   const [roundMeta, setRoundMeta] = useState(null); // { round, winningIndustry, wasteRewardApplied, roundSeed }
   const [isWaiting, setIsWaiting] = useState(false);
   const [results, setResults] = useState(null);
+  const [roundEndedSent, setRoundEndedSent] = useState(false);
   
   // Estados para el sistema de Ready
   const [nextRoundWaiting, setNextRoundWaiting] = useState(false);
@@ -77,6 +81,12 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   const [currentTransactionType, setCurrentTransactionType] = useState(null);
   const [miningHistory, setMiningHistory] = useState(new Set());
 
+  // ESTADOS PARA COORDINACIÓN EN TIEMPO REAL
+  const [clockDrift, setClockDrift] = useState(0); // Desfase entre reloj local y servidor (ms)
+  const [lastAppliedRoundId, setLastAppliedRoundId] = useState(null); // Para idempotencia
+  const [lastAppliedVersion, setLastAppliedVersion] = useState(0); // Para idempotencia
+  const [authoritativeState, setAuthoritativeState] = useState(null); // Estado autoritativo del servidor
+
   // REFS
   const navigationRef = useRef(navigation);
   const hasNavigatedRef = useRef(false);
@@ -84,6 +94,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   const intervalRef = useRef(null);
   const endRoundCalledRef = useRef(false);
   const roundTimerCalledRef = useRef(false);
+  const lastSyncTimeRef = useRef(null); // Para tracking de resincronización
 
   useEffect(() => {
     console.log('🔗 Estableciendo navigationRef:', !!navigation);
@@ -119,6 +130,79 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     }
   };
 
+  // FUNCIONES PARA COORDINACIÓN EN TIEMPO REAL
+  const calculateClockDrift = (serverNowMs) => {
+    const localNow = Date.now();
+    const drift = serverNowMs - localNow;
+    console.log(`🕐 [CLOCK_DRIFT] serverNow: ${serverNowMs}, localNow: ${localNow}, drift: ${drift}ms`);
+    
+    // Log métrica de drift
+    console.log(`📊 [CLIENT_METRIC] clock_drift: ${drift}ms, gameId: ${gameId}, userId: ${userId}`);
+    
+    return drift;
+  };
+
+  const getCorrectedTime = () => {
+    return Date.now() + clockDrift;
+  };
+
+  const calculateRemainingTime = (roundEndsAtMs) => {
+    if (!roundEndsAtMs) return 0;
+    const correctedNow = getCorrectedTime();
+    const remaining = Math.max(0, roundEndsAtMs - correctedNow);
+    console.log(`⏰ [TIMER] roundEndsAt: ${roundEndsAtMs}, correctedNow: ${correctedNow}, remaining: ${remaining}ms`);
+    return remaining;
+  };
+
+  const isEventIdempotent = (roundId, version) => {
+    // Si es la misma ronda pero versión menor o igual, ya fue aplicado
+    if (lastAppliedRoundId === roundId && version <= lastAppliedVersion) {
+      console.log(`🔄 [IDEMPOTENCY] Evento ya aplicado: roundId=${roundId}, version=${version}`);
+      return false;
+    }
+    return true;
+  };
+
+  const applyAuthoritativeState = (state) => {
+    if (!isEventIdempotent(state.roundId, state.version)) {
+      console.log(`📊 [CLIENT_METRIC] event_duplicate: roundId=${state.roundId}, version=${state.version}, gameId=${gameId}`);
+      return false;
+    }
+
+    console.log(`🎯 [AUTHORITY] Aplicando estado autoritativo:`, state);
+    
+    // Log métrica de aplicación de estado
+    console.log(`📊 [CLIENT_METRIC] state_applied: roundId=${state.roundId}, version=${state.version}, gameId=${gameId}, userId=${userId}`);
+    
+    // Actualizar desfase de reloj
+    if (state.serverNowMs) {
+      const newDrift = calculateClockDrift(state.serverNowMs);
+      setClockDrift(newDrift);
+      lastSyncTimeRef.current = Date.now();
+    }
+
+    // Actualizar estado del juego
+    if (state.round !== undefined) setRound(state.round);
+    if (state.roundEndsAtMs) {
+      setRoundTime(new Date(state.roundEndsAtMs));
+    }
+
+    // Actualizar tracking de idempotencia
+    setLastAppliedRoundId(state.roundId);
+    setLastAppliedVersion(state.version);
+    setAuthoritativeState(state);
+
+    return true;
+  };
+
+  const requestResync = () => {
+    console.log(`🔄 [RESYNC] Solicitando resincronización...`);
+    const webSocketService = getWebSocket();
+    if (webSocketService && webSocketService.isConnected) {
+      webSocketService.emit('resync_state', { gameId, userId });
+    }
+  };
+
   // CONECTAR AL WEBSOCKET
   useEffect(() => {
     console.log('🔌 Iniciando useEffect de conexión WebSocket...');
@@ -151,6 +235,11 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         
         // Unirse al juego
         getWebSocket().joinGame(gameId, userId, userName);
+        
+        // Solicitar resincronización inmediata
+        setTimeout(() => {
+          requestResync();
+        }, 500); // Esperar 500ms para que se complete la conexión
         
         console.log('✅ WebSocket conectado para coordinación');
       } catch (error) {
@@ -217,6 +306,153 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     }
   }, [players, allPlayersData.length]);
 
+  // LISTENERS PARA EVENTOS AUTORITATIVOS
+  useEffect(() => {
+    console.log('🎯 Configurando listeners de eventos autoritativos...');
+    
+    const webSocketService = getWebSocket();
+    if (!webSocketService) return;
+
+    // Listener para resincronización
+    const handleResyncState = (data) => {
+      console.log('🔄 [RESYNC] Recibido estado autoritativo:', data);
+      applyAuthoritativeState(data);
+    };
+
+    // Listener para start_round autoritativo
+    const handleStartRound = (data) => {
+      console.log('🚀 [START_ROUND] Recibido evento autoritativo:', data);
+      if (applyAuthoritativeState(data)) {
+        setGameStatus('in_progress');
+        if (data.winningIndustry) setWinningIndustry(data.winningIndustry);
+        // Actualizar roundTime si viene en el evento
+        if (data.roundTime) {
+          const roundTimeDate = new Date(data.roundTime);
+          setRoundTime(roundTimeDate);
+          console.log('🚀 [START_ROUND] roundTime actualizado desde evento autoritativo:', roundTimeDate);
+        }
+      }
+    };
+
+    // Listener para game_status autoritativo
+    const handleGameStatus = (data) => {
+      console.log('📊 [GAME_STATUS] Recibido evento autoritativo:', data);
+      if (applyAuthoritativeState(data)) {
+        // NO cambiar gameStatus si es roundEnd - se maneja en el listener específico
+        if (data.status && data.status !== 'roundEnd') {
+          setGameStatus(data.status);
+        } else if (data.status === 'roundEnd') {
+          console.log('📊 [GAME_STATUS] Estado roundEnd autoritativo recibido - delegando al listener específico');
+        }
+      }
+    };
+
+    // Listener para round_ended autoritativo
+    const handleRoundEnded = (data) => {
+      console.log('🏁 [ROUND_ENDED] Recibido evento autoritativo:', data);
+      if (applyAuthoritativeState(data)) {
+        setGameStatus('roundEnd');
+        // Actualizar la ronda si viene en el evento
+        if (data.round !== undefined) {
+          setRound(data.round);
+          console.log('🏁 [ROUND_ENDED] Ronda actualizada a:', data.round);
+        }
+      }
+    };
+
+    // Listener para countdown_start
+    const handleCountdownStart = (data) => {
+      console.log('⏰ [COUNTDOWN] Recibido countdown_start:', data);
+      
+      // Aplicar estado autoritativo
+      if (applyAuthoritativeState(data)) {
+        setGameStatus('starting');
+        // Actualizar la ronda si viene en el evento
+        if (data.round !== undefined) {
+          setRound(data.round);
+          console.log('⏰ [COUNTDOWN] Ronda actualizada a:', data.round);
+        }
+      }
+      
+      // Solicitar inicio de ronda después del countdown
+      if (data.countdownSeconds) {
+        setTimeout(() => {
+          console.log('🚀 [COUNTDOWN] Solicitando inicio de ronda después del countdown');
+          webSocketService.emit('start_round_request', { 
+            gameId, 
+            userId, 
+            round: data.round 
+          });
+        }, data.countdownSeconds * 1000);
+      }
+    };
+
+    // Listener para economy:state (actualización de mercado)
+    const handleEconomyState = (data) => {
+      console.log('🏪 [ECONOMY_STATE] Recibido evento autoritativo:', data);
+      if (applyAuthoritativeState(data)) {
+        if (data.round !== undefined) setRound(data.round);
+        if (data.market) {
+          setMarketData(data.market);
+          console.log('🏪 [ECONOMY_STATE] Mercado actualizado para ronda:', data.round);
+        }
+      }
+    };
+
+    // Listener para round_meta (metadatos de ronda)
+    const handleRoundMeta = (data) => {
+      console.log('🎯 [ROUND_META] Recibido evento autoritativo:', data);
+      if (applyAuthoritativeState(data)) {
+        setRoundMeta(data);
+        if (data.winningIndustry) setWinningIndustry(data.winningIndustry);
+        console.log('🎯 [ROUND_META] Metadatos de ronda actualizados:', data);
+        console.log('🎯 [ROUND_META] winningIndustry actualizado a:', data.winningIndustry);
+        console.log('🎯 [ROUND_META] wasteRewardApplied:', data.wasteRewardApplied);
+      }
+    };
+
+    // Registrar listeners
+    webSocketService.on('resync_state', handleResyncState);
+    webSocketService.on('start_round', handleStartRound);
+    webSocketService.on('game_status', handleGameStatus);
+    webSocketService.on('round_ended', handleRoundEnded);
+    webSocketService.on('countdown_start', handleCountdownStart);
+    webSocketService.on('economy:state', handleEconomyState);
+    webSocketService.on('round_meta', handleRoundMeta);
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Limpiando listeners de eventos autoritativos');
+      webSocketService.off('resync_state', handleResyncState);
+      webSocketService.off('start_round', handleStartRound);
+      webSocketService.off('game_status', handleGameStatus);
+      webSocketService.off('round_ended', handleRoundEnded);
+      webSocketService.off('countdown_start', handleCountdownStart);
+      webSocketService.off('economy:state', handleEconomyState);
+      webSocketService.off('round_meta', handleRoundMeta);
+    };
+  }, [gameId, userId]);
+
+  // RESINCRONIZACIÓN PERIÓDICA
+  useEffect(() => {
+    if (!isWebSocketConnected || !gameId || !userId) return;
+
+    // Solicitar resincronización cada 30 segundos si no hemos sincronizado recientemente
+    const resyncInterval = setInterval(() => {
+      const timeSinceLastSync = lastSyncTimeRef.current ? Date.now() - lastSyncTimeRef.current : Infinity;
+      
+      // Si han pasado más de 30 segundos desde la última sincronización, solicitar resync
+      if (timeSinceLastSync > 30000) {
+        console.log('🔄 [RESYNC] Resincronización periódica (30s sin sync)');
+        requestResync();
+      }
+    }, 30000); // Cada 30 segundos
+
+    return () => {
+      clearInterval(resyncInterval);
+    };
+  }, [isWebSocketConnected, gameId, userId]);
+
   // SUSCRIBIRSE A EVENTOS DEL WEBSOCKET
   useEffect(() => {
     console.log('🔌 Configurando listeners de WebSocket...');
@@ -244,6 +480,12 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       console.log('🔌 Estado isWebSocketConnected DESPUÉS: true');
       console.log('🔌 Estado completo del servicio:', getWebSocket().getConnectionStatus());
       
+      // RESINCRONIZACIÓN AUTOMÁTICA AL RECONECTAR
+      setTimeout(() => {
+        console.log('🔄 [RESYNC] Solicitando resincronización tras reconexión...');
+        requestResync();
+      }, 1000); // Esperar 1 segundo para que se complete la conexión
+      
       // REHIDRATACIÓN: Si estamos en roundEnd y no tenemos roundRewards, solicitar rehidratación
       if (gameStatus === 'roundEnd' && !roundRewards) {
         console.log('🔄 [REHYDRATE] Conexión restablecida en roundEnd sin roundRewards, solicitando rehidratación');
@@ -267,8 +509,23 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // Eventos del juego
     getWebSocket().on('game_status', (data) => {
       console.log('🔌 Recibiendo game_status - Estado actual:', gameStatus, 'Nuevo estado:', data.status);
+      console.log('🔌 [GAME_STATUS] Ronda recibida:', data.round);
+      
+      // NO cambiar gameStatus si es roundEnd - se maneja en el listener específico
+      if (data.status === 'roundEnd') {
+        console.log('🔌 [GAME_STATUS] Estado roundEnd recibido - delegando al listener específico');
+        if (data.round !== undefined && data.round !== null) {
+          setRound(data.round);
+          console.log('🔌 [GAME_STATUS] Ronda actualizada a:', data.round);
+        }
+        return;
+      }
+      
       setGameStatus(data.status);
-      setRound(data.round || 1);
+      if (data.round !== undefined && data.round !== null) {
+        setRound(data.round);
+        console.log('🔌 [GAME_STATUS] Ronda actualizada a:', data.round);
+      }
       
       // Navegación basada en estado
       if (data.status === 'starting') {
@@ -283,6 +540,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       setGameStatus(data.status);
       setRound(data.round || 1);
       setWinningIndustry(data.winningIndustry);
+      setRoundEndedSent(false);
       
       if (data.roundTime) {
         const roundTimeDate = new Date(data.roundTime);
@@ -409,7 +667,9 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       setRoundMeta(data);
       if (data.winningIndustry) {
         setWinningIndustry(data.winningIndustry);
+        console.log('🎯 [ROUND_META] winningIndustry actualizado a:', data.winningIndustry);
       }
+      console.log('🎯 [ROUND_META] wasteRewardApplied:', data.wasteRewardApplied);
     });
 
     // Safety net en game_status
@@ -450,9 +710,27 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       // NO navegar aquí - cada jugador navega cuando pulsa Next Round
     });
 
+    // Listener para errores de ready
+    getWebSocket().on('round:ready:error', (data) => {
+      console.error(`❌ [ROUND:READY] Error en transición de ronda:`, data);
+      // Resetear el estado de ready
+      setIsReadyForNextRound(false);
+      setRoundReadyProgress({ readyCount: 0, totalPlayers: 0, readyList: [] });
+      // Mostrar mensaje de error al usuario
+      console.error(`❌ [ROUND:READY] ${data.message}`);
+    });
+
     // Listener para todos listos
     getWebSocket().on('round:ready:all', (data) => {
       console.log('🎉 [ROUND:READY] Todos los jugadores listos:', data);
+      
+      // Solo el host puede iniciar la siguiente ronda
+      if (userId === hostId) {
+        console.log('🚀 [HOST] Todos listos, iniciando siguiente ronda automáticamente...');
+        startNextRound();
+      } else {
+        console.log('⏳ [PLAYER] Esperando a que el host inicie la siguiente ronda...');
+      }
     });
 
     // Listener para preparando siguiente ronda
@@ -464,15 +742,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // Listener para ronda preparada
     getWebSocket().on('next_round:prepared', (data) => {
       console.log('✅ [NEXT_ROUND] Ronda preparada:', data);
-      console.log('📊 [NEXT_ROUND] Datos recibidos:', {
-        round: data.round,
-        hasRoundMeta: !!data.roundMeta,
-        hasMarket: !!data.market,
-        hasProducts: !!data.products,
-        roundTimeISO: data.roundTimeISO,
-        marketRounds: data.market?.rounds ? Object.keys(data.market.rounds) : 'N/A'
-      });
-      
       setRound(data.round);
       setRoundMeta(data.roundMeta);
       setMarketData(data.market);
@@ -491,27 +760,18 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // Listener para nueva ronda iniciada
     getWebSocket().on('new_round', (data) => {
       console.log('🎮 [NEW_ROUND] Nueva ronda iniciada:', data);
-      console.log('📊 [NEW_ROUND] Datos recibidos:', {
-        round: data.round,
-        status: data.status,
-        roundTimeISO: data.roundTimeISO,
-        hasRoundMeta: !!data.roundMeta,
-        hasMarket: !!data.market,
-        hasProducts: !!data.products
-      });
       
       // 1) RESET completo de todos los flags del fin de ronda anterior
-      console.log('🧹 [NEW_ROUND] Reseteando flags de ronda anterior');
       setIsCalculatingRewards(false);
       setRoundRewards(null);
       setWinningIndustry(null);
       setIsWaitingNextRoundLocal(false);
+      setRoundEndedSent(false);
       setMinedBlocks([]);
       setNextRoundWaiting(false);
       setRoundReadyProgress({ readyCount: 0, totalPlayers: 0, readyList: [] });
       
       // 2) Estado base de la ronda nueva
-      console.log('🔄 [NEW_ROUND] Configurando estado de nueva ronda');
       setRound(data.round);
       setGameStatus('in_progress');
       setRoundTime(new Date(data.roundTimeISO));
@@ -523,7 +783,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       endRoundCalledRef.current = false;
       
       // 4) Navegación después de todos los resets
-      console.log('🧭 [NEW_ROUND] Navegando a GameTabs después de resets');
       if (safeReset) {
         safeReset('GameTabs');
       } else if (safeNavigate) {
@@ -534,6 +793,10 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // Listener para nuevo estado de economía
     getWebSocket().on('economy:state', (data) => {
       console.log('🏪 [ECONOMY] Nuevo estado de economía recibido:', data);
+      if (data.round !== undefined) {
+        setRound(data.round);
+        console.log(`🏪 [ECONOMY] Ronda actualizada a: ${data.round}`);
+      }
       if (data.market) {
         setProductList(data.market.products || []);
         console.log(`🏪 [ECONOMY] Productos actualizados: ${data.market.products?.length || 0} productos`);
@@ -547,13 +810,19 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       // NO cambiar gameStatus si es roundEnd - se maneja en ROUND_END
       if (data.status === 'roundEnd') {
         console.log('🎮 [GAME_STATUS] Estado roundEnd recibido - esperando ROUND_END para cambiar status');
-        setRound(data.round || 1);
+        if (data.round !== undefined && data.round !== null) {
+          setRound(data.round);
+          console.log('🎮 [GAME_STATUS] Ronda actualizada a:', data.round);
+        }
         return;
       }
       
       console.log('🎮 [GAME_STATUS] Cambiando gameStatus de', gameStatus, 'a', data.status);
       setGameStatus(data.status);
-      setRound(data.round || 1);
+      if (data.round !== undefined && data.round !== null) {
+        setRound(data.round);
+        console.log('🎮 [GAME_STATUS] Ronda actualizada a:', data.round);
+      }
       
       // Navegación basada en estado
       if (data.status === 'starting') {
@@ -654,6 +923,99 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       if (data.inventory) {
         setWebSocketInventory(data.inventory);
         setUserProducts(data.inventory.products);
+      }
+    });
+
+    // Listener para actualizaciones de datos del usuario
+    getWebSocket().on('user_data_updated', (data) => {
+      console.log('👤 [CLIENTE] Datos del usuario actualizados:', data);
+      if (data.gameId === gameId && data.userId === userId) {
+        setUserData(prevData => ({
+          ...prevData,
+          userName: data.userName || prevData.userName,
+          imageUrl: data.imageUrl || prevData.imageUrl
+        }));
+        console.log('👤 [CLIENTE] Datos del usuario actualizados en el contexto');
+      }
+    });
+
+    // Listener para actualizaciones del ranking
+    getWebSocket().on('player_rankings_updated', (data) => {
+      console.log('🏆 [CLIENTE] Ranking actualizado:', data);
+      if (data.gameId === gameId) {
+        if (Array.isArray(data.playerData)) {
+          const sortedPlayers = data.playerData.sort((a, b) => (b.totalRewards || 0) - (a.totalRewards || 0));
+          setPlayerRankings(sortedPlayers);
+          setAllPlayersData(sortedPlayers);
+          console.log('🏆 [CLIENTE] Ranking actualizado en el contexto:', sortedPlayers);
+        }
+      }
+    });
+
+    // Listener para actualizaciones de perfil de jugadores
+    getWebSocket().on('player_profile_updated', (data) => {
+      console.log('👤 [CLIENTE] Perfil de jugador actualizado:', data);
+      if (data.gameId === gameId) {
+        // Actualizar datos del jugador en el ranking si es el usuario actual
+        if (data.userId === userId) {
+          setUserData(prevData => ({
+            ...prevData,
+            userName: data.userName,
+            imageUrl: data.imageUrl
+          }));
+          console.log('👤 [CLIENTE] Datos del usuario actual actualizados');
+        }
+        
+        // Actualizar datos del jugador en el ranking
+        setPlayerRankings(prevRankings => 
+          prevRankings.map(player => 
+            player.userId === data.userId 
+              ? { ...player, userName: data.userName, imageUrl: data.imageUrl }
+              : player
+          )
+        );
+        
+        setAllPlayersData(prevPlayers => 
+          prevPlayers.map(player => 
+            player.userId === data.userId 
+              ? { ...player, userName: data.userName, imageUrl: data.imageUrl }
+              : player
+          )
+        );
+        
+        console.log('👤 [CLIENTE] Datos del jugador actualizados en ranking');
+      }
+    });
+
+    // Listener para actualizaciones de datos del usuario (desde Firebase)
+    getWebSocket().on('user_data_updated', (data) => {
+      console.log('👤 [CLIENTE] Datos del usuario actualizados desde Firebase:', data);
+      if (data.gameId === gameId && data.userId === userId) {
+        // Actualizar datos del usuario actual inmediatamente
+        setUserData(prevData => ({
+          ...prevData,
+          userName: data.userName || prevData.userName,
+          imageUrl: data.imageUrl || prevData.imageUrl
+        }));
+        
+        // Actualizar en el ranking también
+        setPlayerRankings(prevRankings => 
+          prevRankings.map(player => 
+            player.userId === userId 
+              ? { ...player, userName: data.userName || player.userName, imageUrl: data.imageUrl || player.imageUrl }
+              : player
+          )
+        );
+        
+        setAllPlayersData(prevPlayers => 
+          prevPlayers.map(player => 
+            player.userId === userId 
+              ? { ...player, userName: data.userName || player.userName, imageUrl: data.imageUrl || player.imageUrl }
+              : player
+          )
+        );
+        
+        console.log('👤 [CLIENTE] Datos del usuario actualizados desde Firebase en el contexto');
       }
     });
 
@@ -840,8 +1202,117 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       getWebSocket().off('mining_response_update');
       getWebSocket().off('transaction_success');
       getWebSocket().off('inventory_data');
+      getWebSocket().off('user_data_updated');
+      getWebSocket().off('player_rankings_updated');
+      getWebSocket().off('player_profile_updated');
     };
   }, [gameId, userId, round]);
+
+  // FUNCIÓN PARA SALIR DEL JUEGO
+  const leaveGame = async () => {
+    console.log(`🚪 [CLIENTE] Saliendo del juego ${gameId}`);
+    
+    try {
+      // 1. LLAMAR A LA FUNCIÓN FIREBASE
+      const leaveGameFunction = httpsCallable(functions, 'leaveGame');
+      await callAuthenticatedFunction(
+        () => leaveGameFunction({ gameId }),
+        'leaveGame'
+      );
+      
+      console.log(`✅ [CLIENTE] Función leaveGame ejecutada exitosamente`);
+      
+      // 2. NOTIFICAR AL SERVIDOR WEBSOCKET
+      if (getWebSocket().isConnected) {
+        getWebSocket().emit('leave_game', { gameId, userId });
+        console.log(`📡 [CLIENTE] Notificación de salida enviada al WebSocket`);
+      }
+      
+      // 3. LIMPIAR ESTADO LOCAL
+      setGameData(null);
+      setUserData(prevData => ({
+        ...prevData,
+        gameData: null
+      }));
+      setPlayerRankings([]);
+      setAllPlayersData([]);
+      setWebSocketInventory({ products: [], rockCoins: 600, waste: 0 });
+      
+      console.log(`🧹 [CLIENTE] Estado local limpiado`);
+      
+      // 4. NAVEGAR A LA PANTALLA DE LOGIN
+      navigation.navigate('Login');
+      
+    } catch (error) {
+      console.error('❌ Error al salir del juego:', error);
+      Alert.alert(t('common.error'), t('game.failedToLeaveGame'));
+    }
+  };
+
+  // FUNCIÓN PARA INICIAR SIGUIENTE RONDA
+  const startNextRound = async () => {
+    console.log(`🎮 startNextRound llamado por usuario: ${userId}, hostId: ${hostId}, isHost: ${userId === hostId}`);
+    
+    // Verificar que el usuario es el host
+    if (userId !== hostId) {
+      console.log('❌ Solo el host puede iniciar la siguiente ronda');
+      Alert.alert(t('common.error'), 'Solo el host puede iniciar la siguiente ronda');
+      return;
+    }
+    
+    // Verificar que hay al menos 2 jugadores
+    // COMENTADO PARA PRUEBAS - Permitir 1 jugador
+    // if (playerCount < 2) {
+    //   console.log('❌ No se puede iniciar la siguiente ronda con menos de 2 jugadores');
+    //   Alert.alert(t('common.error'), 'Se necesitan al menos 2 jugadores para continuar');
+    //   return;
+    // }
+    
+    try {
+      console.log('🚀 Iniciando siguiente ronda vía Firebase Function...');
+      const startNextRoundFunction = httpsCallable(functions, 'startNextRound');
+      const result = await callAuthenticatedFunction(
+        () => startNextRoundFunction({ gameId }),
+        'startNextRound'
+      );
+      
+      console.log('✅ Siguiente ronda iniciada exitosamente en Firestore');
+      console.log('📊 Resultado de startNextRound:', result);
+      
+      // Extraer datos de la respuesta
+      const newRound = result.data?.round || (round + 1);
+      const roundData = result.data?.data || {};
+      
+      console.log(`📊 Nueva ronda: ${newRound}`);
+      console.log(`📊 Datos de la ronda:`, roundData);
+      
+      // Notificar al servidor WebSocket sobre la nueva ronda
+      if (getWebSocket().isConnected) {
+        getWebSocket().emit('start_next_round', { gameId, userId });
+        console.log('📡 Notificación de nueva ronda enviada al WebSocket');
+        
+        // Notificar a todos los jugadores que la ronda está preparada
+        getWebSocket().emit('next_round:prepared', {
+          gameId,
+          round: newRound,
+          roundMeta: {
+            totalRounds: 3,
+            currentRound: newRound
+          },
+          market: {
+            products: [] // Se actualizará desde Firestore
+          },
+          roundTimeISO: new Date(Date.now() + 3000).toISOString() // 3 segundos de preparación
+        });
+        
+        console.log('📡 Notificación de ronda preparada enviada a todos los jugadores');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error al iniciar siguiente ronda:', error);
+      Alert.alert(t('common.error'), 'Error al iniciar la siguiente ronda');
+    }
+  };
 
   // FUNCIONES DEL JUEGO (HÍBRIDAS)
   const startGame = async () => {
@@ -849,19 +1320,108 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     console.log('🔌 WebSocket conectado:', isWebSocketConnected);
     console.log('🔌 getWebSocket().isConnected:', getWebSocket().isConnected);
     
-    if (isWebSocketConnected) {
-      // Usar WebSocket para coordinación
-      console.log('🚀 Iniciando juego vía WebSocket...');
-      getWebSocket().startGame();
-    } else {
-      // Fallback a Firestore
-      console.log('📄 Iniciando juego vía Firestore (fallback)...');
-      const startGameFunction = httpsCallable(functions, 'startGame');
-      await callAuthenticatedFunction(
-        () => startGameFunction({ gameId }),
-        'startGame'
-      );
+    // Verificar que hay al menos 2 jugadores para iniciar
+    // COMENTADO PARA PRUEBAS - Permitir 1 jugador
+    // if (playerCount < 2) {
+    //   console.log('❌ No se puede iniciar el juego con menos de 2 jugadores. Jugadores actuales:', playerCount);
+    //   Alert.alert(t('common.error'), t('game.needAtLeastTwoPlayers'));
+    //   return;
+    // }
+    
+    try {
+      const webSocketService = getWebSocket();
+      console.log('🔍 [DEBUG] Estado del WebSocket:', {
+        isWebSocketConnected,
+        webSocketConnected: webSocketService.isConnected,
+        connectionState: webSocketService.getConnectionState(),
+        currentGameId: webSocketService.currentGameId,
+        currentUserId: webSocketService.currentUserId
+      });
+      
+      if (isWebSocketConnected && webSocketService.isConnected) {
+        // Usar WebSocket para coordinación
+        console.log('🚀 Iniciando juego vía WebSocket...');
+        const result = webSocketService.startGame();
+        console.log('🚀 [DEBUG] startGame result:', result);
+      } else {
+        // Fallback a Firestore
+        console.log('📄 Iniciando juego vía Firestore (fallback)...');
+        const startGameFunction = httpsCallable(functions, 'startGame');
+        await callAuthenticatedFunction(
+          () => startGameFunction({ gameId }),
+          'startGame'
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error en startGame:', error);
+      console.error('Error starting the game:', error);
+      
+      // Intentar fallback si el WebSocket falla
+      if (isWebSocketConnected) {
+        console.log('🔄 WebSocket falló, intentando fallback a Firestore...');
+        try {
+          const startGameFunction = httpsCallable(functions, 'startGame');
+          await callAuthenticatedFunction(
+            () => startGameFunction({ gameId }),
+            'startGame'
+          );
+        } catch (fallbackError) {
+          console.error('❌ Error en fallback de startGame:', fallbackError);
+          Alert.alert(t('common.error'), 'Error al iniciar el juego. Intenta de nuevo.');
+        }
+      } else {
+        Alert.alert(t('common.error'), 'Error al iniciar el juego. Intenta de nuevo.');
+      }
     }
+  };
+
+  // Función para refrescar los datos del usuario y ranking
+  const refreshUserData = () => {
+    console.log('🔄 Refrescando datos del usuario y ranking...');
+    
+    if (getWebSocket().isConnected) {
+      // Solicitar actualización de datos del usuario
+      getWebSocket().emit('request_user_data', { gameId, userId });
+      
+      // Solicitar actualización del ranking
+      getWebSocket().emit('request_player_rankings', { gameId });
+      
+      console.log('✅ Solicitudes de actualización enviadas al WebSocket');
+    } else {
+      console.log('⚠️ WebSocket no conectado, no se puede refrescar datos');
+    }
+  };
+
+  // Función para actualizar datos del usuario inmediatamente (sin esperar Firebase)
+  const updateUserDataImmediately = (newUserName, newImageUrl) => {
+    console.log('🔄 Actualizando datos del usuario inmediatamente:', { newUserName, newImageUrl });
+    
+    // Actualizar userData
+    setUserData(prevData => ({
+      ...prevData,
+      userName: newUserName,
+      imageUrl: newImageUrl
+    }));
+    
+    // Actualizar en playerRankings
+    setPlayerRankings(prevRankings => 
+      prevRankings.map(player => 
+        player.userId === userId 
+          ? { ...player, userName: newUserName, imageUrl: newImageUrl }
+          : player
+      )
+    );
+    
+    // Actualizar en allPlayersData
+    setAllPlayersData(prevPlayers => 
+      prevPlayers.map(player => 
+        player.userId === userId 
+          ? { ...player, userName: newUserName, imageUrl: newImageUrl }
+          : player
+      )
+    );
+    
+    console.log('✅ Datos del usuario actualizados inmediatamente en el contexto');
   };
 
   // Protección contra ejecución múltiple
@@ -946,7 +1506,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     console.log('✅ [READY] Marcando como listo para siguiente ronda');
     const webSocketService = getWebSocket();
     if (webSocketService && webSocketService.isConnected) {
-      webSocketService.emit('round:ready', { gameId, userId });
+      webSocketService.emit('round:ready', { gameId, userId, round });
       // NO cambiar estado global aquí - solo enviar al servidor
       console.log('✅ [READY] Ready enviado al servidor');
     } else {
@@ -1035,7 +1595,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         } else {
           setGameStatus(newStatus);
         }
-        setRound(gameData.round || 0);
+        setRound(gameData.round || 1);
         setWinningIndustry(gameData.winningIndustry);
         setPlayerCount(gameData.players?.length || 0);
         setProductList(gameData.productList || []);
@@ -1161,14 +1721,31 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         const userData = userDoc.data();
         const gameData = userData.games?.[gameId] || {};
         
-        // Actualizar datos del usuario si es necesario
-        if (gameData.rockCoins !== undefined) {
-          // Los datos se actualizan automáticamente a través de WebSocket
-        }
+        console.log(`📝 Datos del usuario actualizados:`, {
+          userName: userData.userName,
+          imageUrl: userData.imageUrl,
+          gameData: gameData
+        });
         
-        // Actualizar otros datos del usuario si es necesario
-        if (gameData.rockCoins !== undefined) {
-          // Actualizar datos del usuario en el contexto si es necesario
+        // Actualizar datos del usuario en el contexto
+        setUserData({
+          userName: userData.userName || 'Player',
+          imageUrl: userData.imageUrl || null,
+          ...gameData
+        });
+        
+        // Si hay cambios en el perfil, solicitar actualización del ranking
+        if (userData.userName || userData.imageUrl) {
+          console.log(`🔄 Perfil actualizado, solicitando actualización del ranking`);
+          // Solicitar actualización del ranking al WebSocket
+          if (getWebSocket().isConnected) {
+            getWebSocket().emit('request_player_update', { 
+              gameId, 
+              userId, 
+              userName: userData.userName,
+              imageUrl: userData.imageUrl 
+            });
+          }
         }
       }
     });
@@ -1231,76 +1808,82 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
   // EFECTO PARA EL TEMPORIZADOR DE COUNTDOWN
   useEffect(() => {
-    console.log("🕒 [TIMER] roundTime:", roundTime);
-    console.log("🎮 [TIMER] gameStatus:", gameStatus);
-    console.log("📊 [TIMER] Estado del timer:", {
-      hasRoundTime: !!roundTime,
-      roundTimeValue: roundTime,
-      gameStatus,
-      intervalExists: !!intervalRef.current
-    });
+    console.log("🕒 roundTime:", roundTime);
+    console.log("🎮 gameStatus:", gameStatus);
 
     // Limpiar intervalo anterior si existe
     if (intervalRef.current) {
-      console.log("🧹 [TIMER] Limpiando intervalo anterior");
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
     
     if (!roundTime) {
-      console.log("⚠️ [TIMER] No hay roundTime, manteniendo countdown en 120");
+      console.log("⚠️ No hay roundTime, manteniendo countdown en 120");
       setCountdown(120);
       return;
     }
 
-    console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
+        console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
 
     intervalRef.current = setInterval(() => {
-      const now = new Date();
-      const diff = roundTime.getTime() - now.getTime();
-      const totalSecondsLeft = Math.max(0, Math.floor(diff / 1000));
+      // Usar estado autoritativo si está disponible, sino fallback a roundTime
+      const roundEndsAtMs = authoritativeState?.roundEndsAtMs || roundTime?.getTime();
+      
+      if (!roundEndsAtMs) {
+        setCountdown(120);
+        return;
+      }
+
+      // Calcular tiempo restante usando tiempo corregido
+      const remainingMs = calculateRemainingTime(roundEndsAtMs);
+      const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
       
       // Debug del timer (solo en casos críticos)
       if (gameStatus === 'in_progress' && totalSecondsLeft <= 5 && totalSecondsLeft > 0) {
-        console.log(`⏰ [TIMER] Últimos segundos: ${totalSecondsLeft}s`);
+        console.log(`⏰ [TIMER] Últimos segundos: ${totalSecondsLeft}s (drift: ${clockDrift}ms)`);
       }
       
-        // Activar loading cuando countdown llegue a 0 SOLO si estamos en in_progress
-        if (totalSecondsLeft <= 0 && !endRoundCalledRef.current && gameStatus === 'in_progress') {
-          console.log("🏁 [TIMER] Countdown llegó a 0 - activando loading de calculating rewards");
-          endRoundCalledRef.current = true;
-          setIsCalculatingRewards(true);
-          
-          // LIMPIAR EL TIMER INMEDIATAMENTE para evitar bucles
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-            console.log("🧹 [TIMER] Timer limpiado al llegar a 0");
-          }
-          
-          // Navegación automática a EndOfRound cuando timer llegue a 0
-          console.log('🧭 [TIMER] Navegando a EndOfRound (modo loader)');
-          console.log('🧭 [TIMER] safeNavigate disponible:', !!safeNavigate);
-          console.log('🧭 [TIMER] gameId:', gameId, 'userId:', userId);
-          
-          if (safeNavigate) {
-            console.log('🧭 [TIMER] Ejecutando safeNavigate("EndOfRound")');
-            safeNavigate('EndOfRound');
-            console.log('🧭 [TIMER] safeNavigate ejecutado');
-          } else {
-            console.error('❌ [TIMER] safeNavigate no disponible');
-          }
-          
-          // Solicitar al servidor que procese el final de ronda
+      // Activar loading cuando countdown llegue a 0 SOLO si estamos en in_progress
+      if (totalSecondsLeft <= 0 && !endRoundCalledRef.current && gameStatus === 'in_progress') {
+        console.log("🏁 [TIMER] Countdown llegó a 0 - activando loading de calculating rewards");
+        endRoundCalledRef.current = true;
+        setIsCalculatingRewards(true);
+        
+        // LIMPIAR EL TIMER INMEDIATAMENTE para evitar bucles
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+          console.log("🧹 [TIMER] Timer limpiado al llegar a 0");
+        }
+        
+        // Navegación automática a EndOfRound cuando timer llegue a 0
+        console.log('🧭 [TIMER] Navegando a EndOfRound (modo loader)');
+        console.log('🧭 [TIMER] safeNavigate disponible:', !!safeNavigate);
+        console.log('🧭 [TIMER] gameId:', gameId, 'userId:', userId);
+        
+        if (safeNavigate) {
+          console.log('🧭 [TIMER] Ejecutando safeNavigate("EndOfRound")');
+          safeNavigate('EndOfRound');
+          console.log('🧭 [TIMER] safeNavigate ejecutado');
+        } else {
+          console.error('❌ [TIMER] safeNavigate no disponible');
+        }
+        
+        // Solicitar al servidor que procese el final de ronda (solo una vez)
+        if (!roundEndedSent) {
           console.log("📡 [TIMER] Solicitando final de ronda al servidor");
           const webSocketService = getWebSocket();
           if (webSocketService.isConnected) {
-            console.log("📡 [TIMER] Emitiendo round_ended al servidor:", { gameId, userId });
-            webSocketService.emit('round_ended', { gameId, userId });
+            console.log("📡 [TIMER] Emitiendo round_ended al servidor:", { gameId, userId, round });
+            webSocketService.emit('round_ended', { gameId, userId, round });
+            setRoundEndedSent(true);
           } else {
             console.error("❌ [TIMER] WebSocket no conectado, no se puede emitir round_ended");
           }
+        } else {
+          console.log("📡 [TIMER] round_ended ya enviado, omitiendo");
         }
+      }
 
         if (gameStatus === 'in_progress') {
           setCountdown(prevCountdown => {
@@ -1335,7 +1918,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         intervalRef.current = null;
       }
     };
-  }, [roundTime, gameStatus]);
+  }, [roundTime, gameStatus, clockDrift, authoritativeState, endRoundCalledRef.current, roundEndedSent]);
 
   // EFECTO ADICIONAL PARA LIMPIAR TIMER AL DESMONTAJE
   useEffect(() => {
@@ -1534,6 +2117,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       roundTime,
       safeNavigate,
       safeReset,
+      refreshUserData,
+      updateUserDataImmediately,
       
               // Inventario del WebSocket
               webSocketInventory,
@@ -1555,9 +2140,11 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       
       // Funciones del juego
       startGame,
+      startNextRound,
       readyToPlay,
       endRound,
       markRoundReady,
+      leaveGame,
       
       // Estados para Next Round
       nextRoundWaiting,
@@ -1568,6 +2155,14 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       // WebSocket
       isWebSocketConnected,
       webSocketService: getWebSocket(),
+      
+      // Coordinación en tiempo real
+      clockDrift,
+      authoritativeState,
+      requestResync,
+      applyAuthoritativeState,
+      calculateRemainingTime,
+      getCorrectedTime,
       getWebSocket
     }}>
       {children}

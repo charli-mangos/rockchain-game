@@ -133,3 +133,5 @@ exports.updateProductPrices = async ({ gameId, round }) => {
     throw new Error('Failed to update product prices.');
   }
 };
+
+module.exports = { updateProductPrices };

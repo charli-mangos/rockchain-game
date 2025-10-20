@@ -28,13 +28,13 @@ exports.createGame = onCall({
     gameCode: gameCode,
     players: [userId],
     playerCount: 1,
-    maxPlayers: 5,
+    maxPlayers: 3,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     status: 'waiting',
     version: '1.0.0',
     hostId: userId,
     productList: [],
-    round: 0
+    round: 1
   };
 
   try {
