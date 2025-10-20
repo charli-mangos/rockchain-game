@@ -72,6 +72,24 @@ const styles = StyleSheet.create({
     color: '#1d3d39',
     fontStyle: 'italic',
   },
+  tutorialButton: {
+    backgroundColor: '#1d3d39',
+    marginTop: 10,
+  },
+  tutorialButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  progressButton: {
+    backgroundColor: '#9C27B0',
+    marginTop: 10,
+  },
+  progressButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
 
 export default styles;

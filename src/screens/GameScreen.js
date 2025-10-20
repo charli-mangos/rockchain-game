@@ -9,6 +9,11 @@ import { httpsCallable } from 'firebase/functions';
 import styles from '../styles/GameScreenStyles';
 import WelcomeHeader from '../components/WelcomeHeader';
 import RotatingCube from '../components/RotatingCube';
+import TutorialModal from '../components/TutorialModal';
+import { useTutorial } from '../hooks/useTutorial';
+import EducationalFeedback from '../components/EducationalFeedback';
+import LearningProgressModal from '../components/LearningProgressModal';
+import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const GameScreen = ({ route }) => {
   const { t } = useTranslation();
@@ -22,6 +27,30 @@ const GameScreen = ({ route }) => {
   const [loading, setLoading] = useState(false);
   const [gameStatus, setGameStatus] = useState('waiting');
   const [hostId, setHostId] = useState(null);
+  
+  // Sistema de tutoriales
+  const {
+    currentTutorial,
+    currentStep,
+    showTutorial,
+    startTutorial,
+    closeTutorial,
+    nextStep,
+    previousStep,
+    shouldShowTutorial,
+    getTutorialProgress
+  } = useTutorial(userId);
+  
+  // Sistema de feedback educativo
+  const {
+    educationalFeedback,
+    showEducationalFeedback,
+    dismissEducationalFeedback,
+    learningProgress
+  } = useGameContextHybridRobust();
+  
+  // Estados para el modal de progreso de aprendizaje
+  const [showLearningProgress, setShowLearningProgress] = useState(false);
   
   console.log('🎮 GameScreen - Montando con gameId:', gameId, 'userId:', userId);
 
@@ -295,8 +324,50 @@ const GameScreen = ({ route }) => {
             <TouchableOpacity style={styles.button} onPress={joinGame}>
                 <Text style={styles.buttonText}>{t('game.joinGame')}</Text>
             </TouchableOpacity>
+            
+            {/* Botón de tutoriales */}
+            <TouchableOpacity 
+              style={[styles.button, styles.tutorialButton]} 
+              onPress={() => startTutorial()}
+            >
+              <Text style={styles.tutorialButtonText}>📚 Learn About RockChain</Text>
+            </TouchableOpacity>
+            
+            {/* Botón de progreso de aprendizaje */}
+            <TouchableOpacity 
+              style={[styles.button, styles.progressButton]} 
+              onPress={() => setShowLearningProgress(true)}
+            >
+              <Text style={styles.progressButtonText}>🏆 My Progress</Text>
+            </TouchableOpacity>
           </View>
         )}
+        
+        {/* Modal de tutoriales */}
+        <TutorialModal
+          visible={showTutorial}
+          onClose={closeTutorial}
+          tutorial={currentTutorial}
+          onNext={nextStep}
+          onPrevious={previousStep}
+          currentStep={currentStep}
+          totalSteps={1}
+        />
+        
+        {/* Feedback educativo */}
+        <EducationalFeedback
+          feedback={educationalFeedback}
+          onDismiss={dismissEducationalFeedback}
+          autoHide={true}
+          duration={6000}
+        />
+        
+        {/* Modal de progreso de aprendizaje */}
+        <LearningProgressModal
+          visible={showLearningProgress}
+          onClose={() => setShowLearningProgress(false)}
+          learningProgress={learningProgress}
+        />
       </View>
     </TouchableWithoutFeedback>
   );

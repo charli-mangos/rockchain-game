@@ -7,6 +7,7 @@ import { db, functions, auth } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
 import { getWebSocketService } from '../services/WebSocketServiceUniversal';
+import { useLearningProgress } from '../hooks/useLearningProgress';
 
 export const GameContextHybridRobust = createContext();
 
@@ -25,6 +26,24 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
   // Helper para obtener la instancia del WebSocketService
   const getWebSocket = () => getWebSocketService();
+  
+  // Helper para obtener títulos de feedback
+  const getFeedbackTitle = (type) => {
+    switch (type) {
+      case 'mining_success':
+        return 'Block Mined Successfully!';
+      case 'waste_reduction_success':
+        return 'Circular Economy Achievement!';
+      case 'transaction_success':
+        return 'Transaction Completed!';
+      case 'industry_selection':
+        return 'Industry Selected!';
+      case 'blockchain_concept':
+        return 'Blockchain Concept Learned!';
+      default:
+        return 'Educational Tip';
+    }
+  };
   
   // Estados del juego
   const [countdown, setCountdown] = useState(120);
@@ -66,6 +85,13 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   
   // Estados para el sistema de Ready
   const [nextRoundWaiting, setNextRoundWaiting] = useState(false);
+  
+  // Estados para feedback educativo
+  const [educationalFeedback, setEducationalFeedback] = useState(null);
+  const [showEducationalFeedback, setShowEducationalFeedback] = useState(false);
+  
+  // Sistema de progreso de aprendizaje
+  const learningProgress = useLearningProgress(userId);
   const [roundReadyProgress, setRoundReadyProgress] = useState({ 
     readyCount: 0, 
     totalPlayers: 0, 
@@ -411,14 +437,84 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       }
     };
 
+    // Listener para feedback educativo
+    const handleEducationalFeedback = (data) => {
+      console.log('📚 [EDUCATIONAL_FEEDBACK] Recibido feedback educativo:', data);
+      
+      // Solo mostrar feedback si es para el usuario actual
+      if (data.userId === userId) {
+        setEducationalFeedback({
+          type: data.type,
+          title: getFeedbackTitle(data.type),
+          message: data.message,
+          explanation: data.explanation,
+          reward: data.reward,
+          industryEfficiency: data.industryEfficiency,
+          selectedIndustry: data.selectedIndustry
+        });
+        setShowEducationalFeedback(true);
+      }
+    };
+
     // Registrar listeners
     webSocketService.on('resync_state', handleResyncState);
     webSocketService.on('start_round', handleStartRound);
     webSocketService.on('game_status', handleGameStatus);
+    webSocketService.on('educational_feedback', handleEducationalFeedback);
     webSocketService.on('round_ended', handleRoundEnded);
     webSocketService.on('countdown_start', handleCountdownStart);
     webSocketService.on('economy:state', handleEconomyState);
     webSocketService.on('round_meta', handleRoundMeta);
+
+    // Funciones para manejar feedback educativo
+    const dismissEducationalFeedback = () => {
+      setShowEducationalFeedback(false);
+      setEducationalFeedback(null);
+    };
+
+    // Funciones para actualizar progreso de aprendizaje
+    const updateLearningProgress = async (type, data = {}) => {
+      try {
+        let result;
+        switch (type) {
+          case 'block_mined':
+            result = await learningProgress.recordBlockMined();
+            break;
+          case 'waste_reduced':
+            result = await learningProgress.recordWasteReduction(data.amount || 0);
+            break;
+          case 'correct_industry':
+            result = await learningProgress.recordCorrectIndustrySelection();
+            break;
+          case 'rockcoins_earned':
+            result = await learningProgress.recordRockcoinsEarned(data.amount || 0);
+            break;
+          case 'game_completed':
+            result = await learningProgress.recordGameCompleted();
+            break;
+          case 'transaction_completed':
+            result = await learningProgress.recordTransactionCompleted();
+            break;
+          default:
+            console.log('Unknown learning progress type:', type);
+            return;
+        }
+
+        // Mostrar notificación si hay nuevos logros
+        if (result.newAchievements.length > 0) {
+          console.log('🎉 New achievements unlocked:', result.newAchievements);
+          // Aquí podrías mostrar una notificación de logros desbloqueados
+        }
+
+        // Mostrar notificación si subió de nivel
+        if (result.levelUp) {
+          console.log('🎊 Level up! New level:', result.newProgress.level);
+          // Aquí podrías mostrar una notificación de subida de nivel
+        }
+      } catch (error) {
+        console.error('Error updating learning progress:', error);
+      }
+    };
 
     // Cleanup
     return () => {
@@ -426,6 +522,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       webSocketService.off('resync_state', handleResyncState);
       webSocketService.off('start_round', handleStartRound);
       webSocketService.off('game_status', handleGameStatus);
+      webSocketService.off('educational_feedback', handleEducationalFeedback);
       webSocketService.off('round_ended', handleRoundEnded);
       webSocketService.off('countdown_start', handleCountdownStart);
       webSocketService.off('economy:state', handleEconomyState);
@@ -2097,7 +2194,16 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       userId,
       
       // Estados
-      miningQueue, incrementMiningQueue, decrementMiningQueue,  
+      miningQueue, incrementMiningQueue, decrementMiningQueue,
+      
+      // Estados de feedback educativo
+      educationalFeedback,
+      showEducationalFeedback,
+      dismissEducationalFeedback,
+      
+      // Sistema de progreso de aprendizaje
+      learningProgress,
+      updateLearningProgress,  
       miningProblems, localPendingProblems, currentProblemIndex, setCurrentProblemIndex, nextProblem, hasMoreProblems,
       hasRespondedToProblem, markProblemAsResponded, getNextAvailableProblem,
       setMiningStartTimestamp, getMiningStartTimestamp, resetMiningStartTimestamp,

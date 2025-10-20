@@ -12,27 +12,51 @@ import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 const RecycleScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
   const { gameId, userId } = useGameContextHybridRobust();
-  // Industrias que utilizan residuos físicos para waste management
+  // Industrias que utilizan residuos de piedra natural para economía circular
   const industryData = {
     'Construction': {
       icon: 'construct',
       description: 'Building & Infrastructure',
-      color: '#FF9800'
+      color: '#FF9800',
+      wasteUsage: {
+        description: 'Uses stone waste as aggregate for concrete and road construction',
+        efficiency: 85, // % of waste that can be used
+        examples: ['Concrete aggregate', 'Road base material', 'Drainage systems'],
+        educationalMessage: 'The construction industry is the largest consumer of stone waste, using it to create stronger and more sustainable building materials.'
+      }
     },
     'Technology': {
       icon: 'hardware-chip',
       description: 'Software & Hardware',
-      color: '#2196F3'
+      color: '#2196F3',
+      wasteUsage: {
+        description: 'Uses stone dust in electronic components and manufacturing',
+        efficiency: 60,
+        examples: ['Electronic substrates', 'Manufacturing abrasives', 'Insulation materials'],
+        educationalMessage: 'Technology companies use processed stone waste in electronic components and manufacturing processes, promoting circular economy.'
+      }
     },
     'Healthcare': {
       icon: 'medical',
       description: 'Medical & Pharmaceutical',
-      color: '#1d3d39'
+      color: '#1d3d39',
+      wasteUsage: {
+        description: 'Uses purified stone materials in medical applications',
+        efficiency: 40,
+        examples: ['Surgical instruments', 'Dental materials', 'Pharmaceutical fillers'],
+        educationalMessage: 'Healthcare industry uses specially processed stone waste in medical devices and pharmaceutical applications.'
+      }
     },
     'Energy': {
       icon: 'flash',
       description: 'Power & Renewable Energy',
-      color: '#FFC107'
+      color: '#FFC107',
+      wasteUsage: {
+        description: 'Uses stone waste in energy storage and generation systems',
+        efficiency: 70,
+        examples: ['Battery components', 'Solar panel substrates', 'Geothermal systems'],
+        educationalMessage: 'Energy sector incorporates stone waste into renewable energy systems and energy storage solutions.'
+      }
     }
   };
   
@@ -90,6 +114,25 @@ const RecycleScreen = ({ navigation, route }) => {
             >
               {industry.description}
             </Text>
+            {/* Nueva información educativa */}
+            <View style={styles.efficiencyContainer}>
+              <Text style={styles.efficiencyText}>
+                Waste Efficiency: {industry.wasteUsage.efficiency}%
+              </Text>
+            </View>
+            {isSelected && (
+              <View style={styles.educationalInfo}>
+                <Text style={styles.educationalDescription}>
+                  {industry.wasteUsage.description}
+                </Text>
+                <Text style={styles.examplesTitle}>Examples:</Text>
+                {industry.wasteUsage.examples.map((example, index) => (
+                  <Text key={index} style={styles.exampleText}>
+                    • {example}
+                  </Text>
+                ))}
+              </View>
+            )}
           </View>
           {isSelected && (
             <Ionicons 

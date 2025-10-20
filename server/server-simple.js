@@ -398,10 +398,16 @@ const calculateRoundRewards = async (gameId, round) => {
       console.log(`🏭 [ROUND][WASTE] winningIndustry ya existe: ${room.winningIndustry}`);
     }
     
-    // 4. Calcular recompensas de waste
+    // Definir eficiencias de las industrias para economía circular
+    const industryEfficiencies = {
+      'Construction': 85,
+      'Technology': 60,
+      'Healthcare': 40,
+      'Energy': 70
+    };
+    
+    // 4. Calcular recompensas de waste basadas en eficiencia real
     const wasteWinners = [];
-    const wasteReduction = Math.floor(Math.random() * 41) + 40; // 40-80
-    console.log(`🗑️ [ROUND][WASTE] Valor de reducción de waste: ${wasteReduction}`);
     
     for (const player of room.players) {
       let selectedIndustry = null;
@@ -427,15 +433,24 @@ const calculateRoundRewards = async (gameId, round) => {
       const operationId = `rc:waste:${round}:${player.userId}`;
       
       if (didPlayerGuessCorrectly && !isOperationApplied(gameId, operationId)) {
+        // Calcular recompensa basada en eficiencia de la industria
+        const industryEfficiency = industryEfficiencies[selectedIndustry] || 50;
+        const baseWasteReduction = 30; // Base de 30
+        const efficiencyBonus = Math.floor(industryEfficiency * 0.5); // Bonus basado en eficiencia
+        const wasteReduction = baseWasteReduction + efficiencyBonus;
+        
         wasteWinners.push({
           userId: player.userId,
           userName: player.userName,
           operationId,
-          wasteReduction
+          wasteReduction,
+          industryEfficiency,
+          selectedIndustry,
+          educationalMessage: `Great choice! The ${selectedIndustry} industry has ${industryEfficiency}% efficiency in reusing stone waste, promoting circular economy.`
         });
-        console.log(`🗑️ [ROUND][WASTE] user=${player.userName} hit=true reward=${wasteReduction} opId=${operationId}`);
+        console.log(`🗑️ [ROUND][WASTE] user=${player.userName} hit=true reward=${wasteReduction} efficiency=${industryEfficiency}% opId=${operationId}`);
       } else if (didPlayerGuessCorrectly) {
-        console.log(`🗑️ [ROUND][WASTE] user=${player.userName} hit=true reward=${wasteReduction} opId=${operationId} (duplicate)`);
+        console.log(`🗑️ [ROUND][WASTE] user=${player.userName} hit=true opId=${operationId} (duplicate)`);
       } else {
         console.log(`🗑️ [ROUND][WASTE] user=${player.userName} hit=false (seleccionó: ${selectedIndustry})`);
       }
@@ -444,17 +459,29 @@ const calculateRoundRewards = async (gameId, round) => {
     // 5. Aplicar recompensas con operaciones atómicas
     console.log(`💰 [ROUND][CALC] Aplicando recompensas con operaciones atómicas...`);
     
-    // Aplicar recompensas de minado
+    // Aplicar recompensas de minado con explicación educativa
     for (const winner of miningWinners) {
       const rewardOperationId = createRewardOperationId(gameId, round, winner.winnerUserId, winner.blockId);
-      const applied = await applyAtomicReward(gameId, winner.winnerUserId, 50, rewardOperationId);
+      const miningReward = 50; // Base reward for mining
+      const applied = await applyAtomicReward(gameId, winner.winnerUserId, miningReward, rewardOperationId);
       if (applied) {
         markOperationApplied(gameId, winner.operationId);
-        console.log(`✅ [ROUND][MINING] Aplicado +50 RockCoins a ${winner.winnerName}`);
+        
+        // Emitir feedback educativo para minado
+        emitToGame(gameId, 'educational_feedback', {
+          type: 'mining_success',
+          userId: winner.winnerUserId,
+          userName: winner.winnerName,
+          reward: miningReward,
+          message: `Great job! You successfully mined a block by solving the mathematical problem. In real blockchain, this validates transactions and secures the network.`,
+          explanation: 'Mining rewards are given to players who solve computational problems to validate transactions and maintain blockchain security.'
+        });
+        
+        console.log(`✅ [ROUND][MINING] Aplicado +${miningReward} RockCoins a ${winner.winnerName}`);
       }
     }
     
-    // Aplicar recompensas de waste
+    // Aplicar recompensas de waste con explicación educativa
     for (const winner of wasteWinners) {
       const rewardOperationId = createRewardOperationId(gameId, round, winner.userId, `waste-${round}`);
       const applied = await applyAtomicReward(gameId, winner.userId, winner.wasteReduction, rewardOperationId);
@@ -465,6 +492,20 @@ const calculateRoundRewards = async (gameId, round) => {
         const newWaste = Math.max(0, currentWaste - winner.wasteReduction);
         inventory.waste = newWaste;
         markOperationApplied(gameId, winner.operationId);
+        
+        // Emitir feedback educativo para waste reduction
+        emitToGame(gameId, 'educational_feedback', {
+          type: 'waste_reduction_success',
+          userId: winner.userId,
+          userName: winner.userName,
+          reward: winner.wasteReduction,
+          industryEfficiency: winner.industryEfficiency,
+          selectedIndustry: winner.selectedIndustry,
+          wasteReduced: winner.wasteReduction,
+          message: winner.educationalMessage,
+          explanation: `You chose the ${winner.selectedIndustry} industry which has ${winner.industryEfficiency}% efficiency in reusing stone waste. This promotes circular economy by turning waste into valuable resources.`
+        });
+        
         console.log(`✅ [ROUND][WASTE] Aplicado -${winner.wasteReduction} waste a ${winner.userName} (${currentWaste} → ${newWaste})`);
       }
     }
@@ -479,31 +520,54 @@ const calculateRoundRewards = async (gameId, round) => {
       };
     }
     
-    // 7. Montar payload de salida
+    // 7. Montar payload de salida con información educativa
     const payload = {
       round: round,
       winningIndustry: room.winningIndustry,
-      mining: miningWinners.map(w => ({
-        blockId: w.blockId,
-        winnerUserId: w.winnerUserId,
-        winnerName: w.winnerName,
-        rewardApplied: 50
-      })),
+      mining: {
+        winners: miningWinners.map(w => ({
+          blockId: w.blockId,
+          winnerUserId: w.winnerUserId,
+          winnerName: w.winnerName,
+          rewardApplied: 50,
+          explanation: 'Mining rewards are earned by solving mathematical problems to validate blockchain transactions'
+        })),
+        totalRewards: miningWinners.length * 50,
+        educationalMessage: 'Mining is the process of validating transactions and securing the blockchain network through computational work.'
+      },
       waste: {
         winningIndustry: room.winningIndustry,
-        winners: wasteWinners.map(w => w.userId),
-        rewardAppliedPerUser: wasteReduction
+        winners: wasteWinners.map(w => ({
+          userId: w.userId,
+          userName: w.userName,
+          wasteReduction: w.wasteReduction,
+          industryEfficiency: w.industryEfficiency,
+          selectedIndustry: w.selectedIndustry,
+          educationalMessage: w.educationalMessage
+        })),
+        industryEfficiencies: industryEfficiencies,
+        totalWasteReduced: wasteWinners.reduce((sum, w) => sum + w.wasteReduction, 0),
+        educationalMessage: 'Circular economy rewards are earned by choosing industries that efficiently reuse stone waste, reducing environmental impact.'
       },
       balances: finalBalances,
-      operationsApplied: Array.from(gameState.operationsApplied)
+      operationsApplied: Array.from(gameState.operationsApplied),
+      educationalSummary: {
+        round: round,
+        totalMiningRewards: miningWinners.length * 50,
+        totalWasteReduction: wasteWinners.reduce((sum, w) => sum + w.wasteReduction, 0),
+        playersWhoMined: miningWinners.length,
+        playersWhoReducedWaste: wasteWinners.length,
+        message: `Round ${round} completed! ${miningWinners.length} players mined blocks and ${wasteWinners.length} players contributed to circular economy.`
+      }
     };
     
     console.log(`📊 [ROUND][END] Payload generado:`, {
       round: payload.round,
       winningIndustry: payload.winningIndustry,
-      miningWinners: payload.mining.length,
+      miningWinners: payload.mining.winners.length,
       wasteWinners: payload.waste.winners.length,
-      totalOperations: payload.operationsApplied.length
+      totalOperations: payload.operationsApplied.length,
+      educationalSummary: payload.educationalSummary
     });
     
     return payload;

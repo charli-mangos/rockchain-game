@@ -79,6 +79,45 @@ const styles = StyleSheet.create({
     checkIcon: {
       marginLeft: 8,
     },
+    efficiencyContainer: {
+      marginTop: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      backgroundColor: '#e8f5e8',
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    efficiencyText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#2e7d32',
+    },
+    educationalInfo: {
+      marginTop: 12,
+      padding: 12,
+      backgroundColor: '#f8f9fa',
+      borderRadius: 8,
+      borderLeftWidth: 3,
+      borderLeftColor: '#1d3d39',
+    },
+    educationalDescription: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: '#1d3d39',
+      marginBottom: 8,
+    },
+    examplesTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#1d3d39',
+      marginBottom: 4,
+    },
+    exampleText: {
+      fontSize: 12,
+      lineHeight: 16,
+      color: '#666',
+      marginLeft: 8,
+    },
     flatList: {
       flex: 1,
       width: '100%',
