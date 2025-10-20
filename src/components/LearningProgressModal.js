@@ -179,9 +179,11 @@ const LearningProgressModal = ({ visible, onClose, learningProgress }) => {
           </View>
 
           {/* Content */}
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {activeTab === 'overview' ? renderOverview() : renderAchievements()}
-          </ScrollView>
+          <View style={styles.content}>
+            <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              {activeTab === 'overview' ? renderOverview() : renderAchievements()}
+            </ScrollView>
+          </View>
         </View>
       </View>
     </Modal>
@@ -241,6 +243,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   content: {
+    flex: 1,
+  },
+  scrollContent: {
     flex: 1,
     padding: 20,
   },

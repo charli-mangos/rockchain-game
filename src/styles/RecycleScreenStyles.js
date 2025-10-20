@@ -104,19 +104,6 @@ const styles = StyleSheet.create({
       fontSize: 14,
       lineHeight: 20,
       color: '#1d3d39',
-      marginBottom: 8,
-    },
-    examplesTitle: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: '#1d3d39',
-      marginBottom: 4,
-    },
-    exampleText: {
-      fontSize: 12,
-      lineHeight: 16,
-      color: '#666',
-      marginLeft: 8,
     },
     flatList: {
       flex: 1,

@@ -125,12 +125,6 @@ const RecycleScreen = ({ navigation, route }) => {
                 <Text style={styles.educationalDescription}>
                   {industry.wasteUsage.description}
                 </Text>
-                <Text style={styles.examplesTitle}>Examples:</Text>
-                {industry.wasteUsage.examples.map((example, index) => (
-                  <Text key={index} style={styles.exampleText}>
-                    • {example}
-                  </Text>
-                ))}
               </View>
             )}
           </View>

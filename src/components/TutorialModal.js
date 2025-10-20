@@ -64,52 +64,54 @@ const TutorialModal = ({ visible, onClose, tutorial, onNext, onPrevious, current
           </View>
 
           {/* Content */}
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <View style={styles.iconContainer}>
-              <Ionicons 
-                name={tutorial.icon || "school"} 
-                size={60} 
-                color="#1d3d39" 
-              />
-            </View>
-            
-            <Text style={styles.title}>{tutorial.title}</Text>
-            
-            <Text style={styles.description}>{tutorial.content}</Text>
-            
-            {tutorial.example && (
-              <View style={styles.exampleContainer}>
-                <TouchableOpacity 
-                  style={styles.exampleButton}
-                  onPress={() => setShowExample(!showExample)}
-                >
-                  <Text style={styles.exampleButtonText}>
-                    {showExample ? 'Hide Example' : 'Show Example'}
-                  </Text>
-                  <Ionicons 
-                    name={showExample ? "chevron-up" : "chevron-down"} 
-                    size={20} 
-                    color="#1d3d39" 
-                  />
-                </TouchableOpacity>
-                
-                {showExample && (
-                  <View style={styles.exampleContent}>
-                    <Text style={styles.exampleText}>{tutorial.example}</Text>
-                  </View>
-                )}
+          <View style={styles.content}>
+            <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.iconContainer}>
+                <Ionicons 
+                  name={tutorial.icon || "school"} 
+                  size={60} 
+                  color="#1d3d39" 
+                />
               </View>
-            )}
+              
+              <Text style={styles.title}>{tutorial.title}</Text>
+              
+              <Text style={styles.description}>{tutorial.content}</Text>
+              
+              {tutorial.example && (
+                <View style={styles.exampleContainer}>
+                  <TouchableOpacity 
+                    style={styles.exampleButton}
+                    onPress={() => setShowExample(!showExample)}
+                  >
+                    <Text style={styles.exampleButtonText}>
+                      {showExample ? 'Hide Example' : 'Show Example'}
+                    </Text>
+                    <Ionicons 
+                      name={showExample ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color="#1d3d39" 
+                    />
+                  </TouchableOpacity>
+                  
+                  {showExample && (
+                    <View style={styles.exampleContent}>
+                      <Text style={styles.exampleText}>{tutorial.example}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
 
-            {tutorial.interactive && (
-              <View style={styles.interactiveContainer}>
-                <Ionicons name="hand-left" size={24} color="#FF9800" />
-                <Text style={styles.interactiveText}>
-                  This is an interactive tutorial - try it out in the game!
-                </Text>
-              </View>
-            )}
-          </ScrollView>
+              {tutorial.interactive && (
+                <View style={styles.interactiveContainer}>
+                  <Ionicons name="hand-left" size={24} color="#FF9800" />
+                  <Text style={styles.interactiveText}>
+                    This is an interactive tutorial - try it out in the game!
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -186,6 +188,9 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   content: {
+    flex: 1,
+  },
+  scrollContent: {
     flex: 1,
     padding: 20,
   },
