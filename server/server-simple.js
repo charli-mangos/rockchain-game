@@ -1309,8 +1309,8 @@ io.on('connection', (socket) => {
 
   // Inicio de partida (solo host)
   socket.on('start_game', ({ gameId, userId }) => {
-    console.log(`🚀 Host ${userId} iniciando juego ${gameId}`);
-    console.log(`🔌 Socket ID del host: ${socket.id}`);
+    console.log(`🚀 [SERVER-SIMPLE] Host ${userId} iniciando juego ${gameId}`);
+    console.log(`🔌 [SERVER-SIMPLE] Socket ID del host: ${socket.id}`);
     
     const room = getGameRoom(gameId);
     
@@ -1340,7 +1340,11 @@ io.on('connection', (socket) => {
       
       // Emitir economy:state para que el cliente reciba los productos
       console.log(`📡 [START_GAME] Emitiendo economy:state para Ronda 1...`);
+      const roundId = `${gameId}:1:${Date.now()}`;
+      const version = 1;
       emitToGame(gameId, 'economy:state', {
+        roundId: roundId,
+        version: version,
         round: 1,
         market: {
           products: marketData.products,
@@ -1596,7 +1600,11 @@ io.on('connection', (socket) => {
         console.log(`📡 [ROUND:READY] Emitiendo eventos de transición...`);
         
         // PRIMERO: economy:state (hidrata mercado en UI) CON ESTADO AUTORITATIVO
-        emitAuthoritativeState(gameId, 'economy:state', {
+        const roundId = `${gameId}:${nextRound}:${Date.now()}`;
+        const version = nextRound;
+        emitToGame(gameId, 'economy:state', {
+          roundId: roundId,
+          version: version,
           round: nextRound,
           market: newMarket
         });

@@ -33,7 +33,10 @@ const ChatScreen = ({ navigation, route }) => {
   };
 
   useEffect(() => {
+    console.log('🏪 [CHATSCREEN] marketData recibido:', marketData);
+    console.log('🏪 [CHATSCREEN] marketData.rounds:', marketData?.rounds);
     if (!marketData || !marketData.rounds) {
+      console.log('🏪 [CHATSCREEN] No hay marketData o rounds, usando fallback');
       // fallback vacío seguro
       setRound(0);
       setPriceHistory([]);

@@ -467,16 +467,24 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // Listener para economy:state (actualización de mercado de la ronda ACTIVA)
     // Importante: NO sobrescribir marketData histórico aquí; solo hidratar productList/round
     const handleEconomyState = (data) => {
+      console.log('🏪 [ECONOMY_STATE] ===== EVENTO RECIBIDO =====');
       console.log('🏪 [ECONOMY_STATE] Recibido evento autoritativo:', data);
+      console.log('🏪 [ECONOMY_STATE] applyAuthoritativeState result:', applyAuthoritativeState(data));
       if (applyAuthoritativeState(data)) {
-        if (data.round !== undefined) setRound(data.round);
+        if (data.round !== undefined) {
+          setRound(data.round);
+          console.log('🏪 [ECONOMY_STATE] Round actualizado a:', data.round);
+        }
         if (data.market) {
           console.log('🏪 [ECONOMY_STATE] data.market:', data.market);
           console.log('🏪 [ECONOMY_STATE] data.market.products:', data.market.products);
           console.log('🏪 [ECONOMY_STATE] data.market.products.length:', data.market.products?.length);
           setProductList(data.market.products || []);
           console.log('🏪 [ECONOMY_STATE] Productos actualizados para ronda:', data.round, 'count=', (data.market.products || []).length);
+          console.log('🏪 [ECONOMY_STATE] ===== PRODUCTOS ACTUALIZADOS =====');
         }
+      } else {
+        console.log('🏪 [ECONOMY_STATE] Evento rechazado por applyAuthoritativeState');
       }
     };
 
@@ -958,21 +966,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       }
     });
 
-    // Listener para nuevo estado de economía
-    getWebSocket().on('economy:state', (data) => {
-      console.log('🏪 [ECONOMY] Nuevo estado de economía recibido:', data);
-      if (data.round !== undefined) {
-        setRound(data.round);
-        console.log(`🏪 [ECONOMY] Ronda actualizada a: ${data.round}`);
-      }
-      if (data.market) {
-        console.log('🏪 [ECONOMY] data.market:', data.market);
-        console.log('🏪 [ECONOMY] data.market.products:', data.market.products);
-        console.log('🏪 [ECONOMY] data.market.products.length:', data.market.products?.length);
-        setProductList(data.market.products || []);
-        console.log(`🏪 [ECONOMY] Productos actualizados: ${data.market.products?.length || 0} productos`);
-      }
-    });
+    // Listener para nuevo estado de economía - ELIMINADO (duplicado con handleEconomyState)
 
     // Listener para transición a pantalla de espera
     getWebSocket().on('game_status', (data) => {
