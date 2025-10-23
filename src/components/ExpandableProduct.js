@@ -12,7 +12,7 @@ import styles from '../styles/ExpandableProductStyle';
 import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 
-const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
+const ExpandableProduct = ({ product, userId, gameId, screenType, productList = [] }) => {
   const [expanded, setExpanded] = useState(false);
   const [showSummary, setShowSummary] = useState(false); // Controla si se muestra el resumen de compra
   const navigation = useNavigation();
@@ -151,9 +151,7 @@ const ExpandableProduct = ({ product, userId, gameId, screenType }) => {
         return;
       }
       
-      console.log('Game data retrieved:', gameData);
-      const productList = gameData.productList || [];
-      console.log('Product list from game:', productList);
+      console.log('Using productList from context:', productList);
       console.log('Looking for product with ID:', product.id);
       
       // Si la lista de productos está vacía, esperar un poco y reintentar

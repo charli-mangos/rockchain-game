@@ -20,7 +20,7 @@ const getRandomQuality = () => {
   return getRandomElement(qualities);
 };
 
-exports.assignProductsToGame = async ({ gameId, round }) => {
+const assignProductsToGame = async ({ gameId, round }) => {
   const productsRef = admin.firestore().collection('products');
   const gameRef = admin.firestore().collection('games').doc(gameId);
   const marketRef = admin.firestore().collection('market').doc(gameId);

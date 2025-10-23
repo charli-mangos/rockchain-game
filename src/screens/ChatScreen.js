@@ -33,15 +33,22 @@ const ChatScreen = ({ navigation, route }) => {
   };
 
   useEffect(() => {
-    if (!marketData) return;
+    if (!marketData || !marketData.rounds) {
+      // fallback vacío seguro
+      setRound(0);
+      setPriceHistory([]);
+      setMarbleBasePrices([]);
+      return;
+    }
 
-    const roundsData = marketData.rounds || {};
-    setRound(Object.keys(roundsData).length);
+    const roundsData = marketData.rounds;
+    const roundKeys = Object.keys(roundsData);
+    setRound(roundKeys.length);
 
     const filteredData = generateFilteredData(roundsData, selectedType, selectedQuality);
     setPriceHistory(filteredData);
     updateMarbleBasePrices(roundsData, selectedType, selectedQuality);
-}, [marketData, selectedType, selectedQuality]);
+  }, [marketData, selectedType, selectedQuality]);
 
   // useEffect(() => {
   //   const fetchMarketData = async () => {
@@ -78,8 +85,10 @@ const ChatScreen = ({ navigation, route }) => {
   const updateMarbleBasePrices = (roundsData, typeFilter, qualityFilter) => {
     if (!roundsData || Object.keys(roundsData).length === 0) return;
 
-    // Obtener la última ronda disponible
-    const lastRound = Math.max(...Object.keys(roundsData).map(Number));
+    // Obtener la última ronda disponible de forma segura
+    const roundInts = Object.keys(roundsData).map((k) => parseInt(k, 10)).filter((n) => !Number.isNaN(n));
+    if (roundInts.length === 0) return;
+    const lastRound = Math.max(...roundInts);
     const currentRoundData = roundsData[lastRound];
 
     const filteredPrices = Object.entries(currentRoundData).map(([marbleType, productData]) => ({
@@ -97,8 +106,21 @@ const ChatScreen = ({ navigation, route }) => {
     const filteredData = [];
   
     // Obtener todos los tipos de mármol de la última ronda
-    const lastRound = Math.max(...Object.keys(roundsData).map(Number));
-    const marbleTypes = Object.keys(roundsData[lastRound] || {});
+    const roundInts = Object.keys(roundsData).map((k) => parseInt(k, 10)).filter((n) => !Number.isNaN(n));
+    if (roundInts.length === 0) return [];
+    const lastRound = Math.max(...roundInts);
+    // roundsData puede venir del doc legacy con estructura por mármol/Block/Slab/A,B,C
+    // o del per-round collection con { products: [...] }. Normalizamos aquí para extraer tipos.
+    let marbleTypes = [];
+    const lastRoundData = roundsData[lastRound] || {};
+    if (lastRoundData.products) {
+      // nueva forma: lista de productos planos con marbleType
+      const setTypes = new Set();
+      (lastRoundData.products || []).forEach(p => setTypes.add(p.marbleType));
+      marbleTypes = Array.from(setTypes);
+    } else {
+      marbleTypes = Object.keys(lastRoundData || {});
+    }
   
     // Agregar ronda 0 con valores en 0
     const roundZero = {
@@ -118,15 +140,26 @@ const ChatScreen = ({ navigation, route }) => {
     Object.entries(roundsData).forEach(([roundKey, roundData]) => {
       const prices = {};
       const waste = {};
-  
-      Object.entries(roundData).forEach(([marbleType, productData]) => {
-        const productInfo = productData[typeFilter]?.[qualityFilter];
-        if (productInfo) {
-          prices[marbleType] = productInfo.price;
-          waste[marbleType] = productInfo.waste;
-        }
-      });
-  
+
+      if (roundData && roundData.products) {
+        // nueva forma
+        (roundData.products || []).forEach(p => {
+          if (p.type === typeFilter && p.quality === qualityFilter) {
+            prices[p.marbleType] = p.currentPrice || 0;
+            waste[p.marbleType] = p.waste || 0;
+          }
+        });
+      } else {
+        // forma legacy
+        Object.entries(roundData || {}).forEach(([marbleType, productData]) => {
+          const productInfo = productData[typeFilter]?.[qualityFilter];
+          if (productInfo) {
+            prices[marbleType] = productInfo.price;
+            waste[marbleType] = productInfo.waste;
+          }
+        });
+      }
+
       filteredData.push({
         round: parseInt(roundKey, 10),
         prices,

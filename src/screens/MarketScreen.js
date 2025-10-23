@@ -11,10 +11,18 @@ const MarketScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
   const { productList, gameId, userId } = useGameContextHybridRobust();
   
-  // Agregar elemento invisible si el número de productos es impar
-  const dataWithSpacer = productList.length % 2 === 1 
-    ? [...productList, { isSpacer: true, id: 'spacer' }]
-    : productList;
+  console.log('🏪 [MarketScreen] productList recibido:', productList);
+  console.log('🏪 [MarketScreen] productList.length:', productList?.length || 0);
+  console.log('🏪 [MarketScreen] gameId:', gameId);
+  console.log('🏪 [MarketScreen] userId:', userId);
+  
+  // Filtrar productos válidos y agregar elemento invisible si el número de productos es impar
+  const validProducts = productList.filter(product => product && product.id);
+  console.log('🏪 [MarketScreen] validProducts después del filtro:', validProducts.length);
+  
+  const dataWithSpacer = validProducts.length % 2 === 1 
+    ? [...validProducts, { isSpacer: true, id: 'spacer' }]
+    : validProducts;
   
   // console.log('MarketScreen - productList:', productList);
   // console.log('MarketScreen - gameId:', gameId);
@@ -76,6 +84,12 @@ const MarketScreen = ({ navigation, route }) => {
       return <View style={{ flex: 1, margin: 5 }} />;
     }
     
+    // Verificación defensiva: si el item no es válido, no renderizar nada
+    if (!item || !item.id) {
+      console.warn('MarketScreen - Item inválido:', item);
+      return null;
+    }
+    
     // console.log('MarketScreen - rendering product:', item);
     return (
       <ExpandableProduct
@@ -83,6 +97,7 @@ const MarketScreen = ({ navigation, route }) => {
         gameId={gameId}
         userId={userId}
         screenType="MarketScreen"
+        productList={validProducts}
         onBuy={() => handleBuy(item)}
       />
     );

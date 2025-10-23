@@ -154,6 +154,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: width * 0.9,
     maxHeight: height * 0.9,
+    minHeight: height * 0.6, // asegurar alto útil del contenedor blanco
     backgroundColor: '#fff',
     borderRadius: 20,
     overflow: 'hidden',
@@ -197,6 +198,7 @@ const styles = StyleSheet.create({
   scrollContentContainer: {
     flexGrow: 1,
     justifyContent: 'flex-start',
+    paddingBottom: 16, // evitar colapso y que el footer tape contenido
   },
   iconContainer: {
     alignItems: 'center',

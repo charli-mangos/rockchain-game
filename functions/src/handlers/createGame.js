@@ -91,9 +91,9 @@ exports.createGame = onCall({
       console.log('✅ Productos globales encontrados');
     }
 
-    // Asignar productos al juego
-    await assignProductsToGame({ gameId: gameRef.id, round: 1 });
-    console.log('✅ Productos asignados al juego');
+    // NO asignar productos aquí - se generarán dinámicamente por el WebSocket Server
+    // await assignProductsToGame({ gameId: gameRef.id, round: 1 });
+    console.log('✅ Productos se generarán dinámicamente por el WebSocket Server');
 
     // Actualizar datos del usuario
     await db.collection('users').doc(userId).update({

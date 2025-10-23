@@ -33,7 +33,7 @@ async function retryOperation(operation, maxRetries = 3, initialDelay = 1000) {
   throw lastError;
 }
 
-exports.selectWinningIndustry = async ({ gameId }) => {
+const selectWinningIndustry = async ({ gameId }) => {
   console.log(`🔄 selectWinningIndustry llamado con gameId: ${gameId}`);
 
   if (!gameId) {

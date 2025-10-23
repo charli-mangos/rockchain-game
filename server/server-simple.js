@@ -787,6 +787,25 @@ const generateMarketForRound = async (gameId, round) => {
       });
       
       console.log(`✅ [MARKET] Mercado persistido en Firestore para ronda ${round}`);
+
+      // Además: actualizar documento agregado legacy para ChatScreen
+      const legacyRef = db.collection('market').doc(gameId);
+      // Transformar lista plana a estructura legacy
+      const legacyRound = {};
+      for (const p of products) {
+        legacyRound[p.marbleType] = legacyRound[p.marbleType] || {};
+        legacyRound[p.marbleType][p.type] = legacyRound[p.marbleType][p.type] || {};
+        legacyRound[p.marbleType][p.type][p.quality] = {
+          price: p.currentPrice,
+          waste: p.waste
+        };
+      }
+      await legacyRef.set({
+        rounds: {
+          [round]: legacyRound
+        }
+      }, { merge: true });
+      console.log(`✅ [MARKET] Legacy market agregado/actualizado para ronda ${round}`);
     } catch (error) {
       console.error(`❌ [MARKET] Error persistiendo mercado:`, error);
     }
@@ -800,6 +819,7 @@ const generateMarketForRound = async (gameId, round) => {
 };
 
 // FUNCIÓN AUXILIAR: Generar productos con semilla determinista
+// Estructura compatible con el frontend: type: 'Block'|'Slab', quality: 'A'|'B'|'C'
 const generateProductsWithSeed = (seed, round) => {
   // Crear generador pseudoaleatorio con semilla
   const seededRandom = (seed) => {
@@ -817,35 +837,50 @@ const generateProductsWithSeed = (seed, round) => {
   
   const random = seededRandom(seed);
   
-  // Tipos de productos disponibles
-  const productTypes = [
-    { type: 'Raw Material', marbleType: 'Gray', basePrice: 50, waste: 10 },
-    { type: 'Processed Material', marbleType: 'White', basePrice: 100, waste: 5 },
-    { type: 'Finished Product', marbleType: 'Cream', basePrice: 200, waste: 2 },
-    { type: 'Luxury Item', marbleType: 'Black', basePrice: 500, waste: 1 }
-  ];
+  // Mármol y base
+  const marbleTypes = ['Gray', 'White', 'Cream', 'Black', 'Red'];
+  const marbleBasePrice = { Gray: 90, White: 120, Cream: 150, Black: 200, Red: 110 };
+  const marbleBaseWaste = { Gray: 15, White: 12, Cream: 10, Black: 8, Red: 14 };
+  const productTypes = ['Block', 'Slab'];
+  const qualities = ['A', 'B', 'C'];
+  const qualityMultipliers = {
+    A: { price: 1.3, waste: 0.8 },
+    B: { price: 1.0, waste: 1.0 },
+    C: { price: 0.8, waste: 1.1 }
+  };
   
   const products = [];
-  const numProducts = Math.floor(random() * 8) + 5; // 5-12 productos
+  const numProducts = 20; // 20 productos por ronda
   
   for (let i = 0; i < numProducts; i++) {
-    const typeIndex = Math.floor(random() * productTypes.length);
-    const productType = productTypes[typeIndex];
+    const marble = marbleTypes[Math.floor(random() * marbleTypes.length)];
+    const pType = productTypes[Math.floor(random() * productTypes.length)];
+    const quality = qualities[Math.floor(random() * qualities.length)];
     
-    // Variación de precio ±20%
+    // Precio base según mármol y tipo
+    let basePrice = marbleBasePrice[marble];
+    if (pType === 'Slab') basePrice = Math.round(basePrice * 1.25);
+    // Waste base según mármol y tipo
+    let baseWaste = marbleBaseWaste[marble];
+    if (pType === 'Slab') baseWaste = Math.round(baseWaste * 1.1);
+    
+    // Variación ±20%
     const priceVariation = (random() - 0.5) * 0.4;
-    const currentPrice = Math.round(productType.basePrice * (1 + priceVariation));
+    const wasteVariation = (random() - 0.5) * 0.2;
     
-    const product = {
+    const mult = qualityMultipliers[quality] || qualityMultipliers['B']; // Fallback a calidad B
+    const currentPrice = Math.max(1, Math.round(basePrice * (1 + priceVariation) * mult.price));
+    const waste = Math.max(0, Math.round(baseWaste * (1 + wasteVariation) * mult.waste));
+    
+    products.push({
       id: `product-${seed}-${i}`,
-      type: productType.type,
-      marbleType: productType.marbleType,
-      currentPrice: currentPrice,
-      waste: productType.waste,
-      round: round
-    };
-    
-    products.push(product);
+      type: pType,
+      quality,
+      marbleType: marble,
+      currentPrice,
+      waste,
+      round
+    });
   }
   
   console.log(`🏪 [MARKET] Generados ${products.length} productos para semilla ${seed} (ronda ${round})`);
@@ -1297,6 +1332,26 @@ io.on('connection', (socket) => {
     room.status = 'starting';
     room.round = 1;
     room.readyPlayers.clear();
+    
+    // Generar productos para la Ronda 1
+    console.log(`🏪 [START_GAME] Generando productos para Ronda 1...`);
+    generateMarketForRound(gameId, 1).then(marketData => {
+      console.log(`✅ [START_GAME] Productos generados para Ronda 1: ${marketData.products.length} productos`);
+      
+      // Emitir economy:state para que el cliente reciba los productos
+      console.log(`📡 [START_GAME] Emitiendo economy:state para Ronda 1...`);
+      emitToGame(gameId, 'economy:state', {
+        round: 1,
+        market: {
+          products: marketData.products,
+          round: 1,
+          seed: marketData.seed
+        }
+      });
+      console.log(`✅ [START_GAME] economy:state emitido para Ronda 1`);
+    }).catch(error => {
+      console.error(`❌ [START_GAME] Error generando productos para Ronda 1:`, error);
+    });
     
     // Sincronizar con Firestore
     syncGameToFirestore(gameId, room);

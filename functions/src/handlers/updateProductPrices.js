@@ -22,7 +22,7 @@ const getRandomQuality = () => {
   return getRandomElement(qualities);
 };
 
-exports.updateProductPrices = async ({ gameId, round }) => {
+const updateProductPrices = async ({ gameId, round }) => {
   console.log(`🔄 updateProductPrices llamado con gameId: ${gameId}, round: ${round}`);
 
   if (!gameId || !round) {

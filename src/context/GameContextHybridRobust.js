@@ -62,6 +62,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   const [userData, setUserData] = useState(null);
   const [userProducts, setUserProducts] = useState([]);
   const [marketData, setMarketData] = useState(null);
+  const marketUnsubRef = useRef(null);
   const [webSocketInventory, setWebSocketInventory] = useState({
     products: [],
     rockCoins: 600,
@@ -463,14 +464,18 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       }
     };
 
-    // Listener para economy:state (actualización de mercado)
+    // Listener para economy:state (actualización de mercado de la ronda ACTIVA)
+    // Importante: NO sobrescribir marketData histórico aquí; solo hidratar productList/round
     const handleEconomyState = (data) => {
       console.log('🏪 [ECONOMY_STATE] Recibido evento autoritativo:', data);
       if (applyAuthoritativeState(data)) {
         if (data.round !== undefined) setRound(data.round);
         if (data.market) {
-          setMarketData(data.market);
-          console.log('🏪 [ECONOMY_STATE] Mercado actualizado para ronda:', data.round);
+          console.log('🏪 [ECONOMY_STATE] data.market:', data.market);
+          console.log('🏪 [ECONOMY_STATE] data.market.products:', data.market.products);
+          console.log('🏪 [ECONOMY_STATE] data.market.products.length:', data.market.products?.length);
+          setProductList(data.market.products || []);
+          console.log('🏪 [ECONOMY_STATE] Productos actualizados para ronda:', data.round, 'count=', (data.market.products || []).length);
         }
       }
     };
@@ -528,11 +533,76 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       webSocketService.off('countdown_start', handleCountdownStart);
       webSocketService.off('economy:state', handleEconomyState);
       webSocketService.off('round_meta', handleRoundMeta);
+      if (marketUnsubRef.current) {
+        marketUnsubRef.current();
+        marketUnsubRef.current = null;
+      }
     };
   }, [gameId, userId]);
 
   // RESINCRONIZACIÓN PERIÓDICA
   useEffect(() => {
+    // Suscripción al histórico de mercado en Firestore: games/{gameId}/market/*
+    // Construye un objeto marketHistory = { rounds: { [round]: { products: [...] } } }
+    if (!gameId) return;
+    try {
+      // limpiar subscripción previa si existiese
+      if (marketUnsubRef.current) {
+        marketUnsubRef.current();
+        marketUnsubRef.current = null;
+      }
+      
+      // 1) Preferir el documento agregado legacy: collection 'market' doc '{gameId}'
+      const legacyDocRef = doc(db, 'market', gameId);
+      const stopLegacy = onSnapshot(legacyDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data && data.rounds && Object.keys(data.rounds).length > 0) {
+            setMarketData({ rounds: data.rounds });
+            console.log('🏪 [MARKET_HISTORY] Legacy doc detected. Rondas:', Object.keys(data.rounds).length);
+          }
+        }
+      });
+
+      // 2) También escuchar la colección por-ronda nueva: 'games/{gameId}/market'
+      const roundsColRef = collection(db, 'games', gameId, 'market');
+      const stopPerRound = onSnapshot(roundsColRef, (snapshot) => {
+        const rounds = {};
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const r = parseInt(docSnap.id, 10);
+          if (!Number.isNaN(r)) {
+            rounds[r] = {
+              products: data.products || [],
+              seed: data.seed,
+            };
+          }
+        });
+        const count = Object.keys(rounds).length;
+        if (count > 0) {
+          // No transformamos a la forma de ChatScreen aquí (productos planos), solo proveemos respaldo si no existe legacy
+          // Mantener compatibilidad: si ya tenemos legacy.rounds, no sobreescribimos
+          setMarketData((prev) => {
+            if (prev && prev.rounds && Object.keys(prev.rounds).length > 0) return prev;
+            const ordered = Object.keys(rounds)
+              .map((k) => parseInt(k, 10))
+              .sort((a, b) => a - b)
+              .reduce((acc, r) => { acc[r] = rounds[r]; return acc; }, {});
+            console.log('🏪 [MARKET_HISTORY] Per-round collection detected. Docs:', count);
+            return { rounds: ordered };
+          });
+        }
+      });
+
+      // Guardar multi-cleanup
+      marketUnsubRef.current = () => {
+        stopLegacy && stopLegacy();
+        stopPerRound && stopPerRound();
+      };
+    } catch (e) {
+      console.error('❌ [MARKET_HISTORY] Error suscribiendo a histórico de mercado:', e);
+    }
+
     if (!isWebSocketConnected || !gameId || !userId) return;
 
     // Solicitar resincronización cada 30 segundos si no hemos sincronizado recientemente
@@ -896,6 +966,9 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         console.log(`🏪 [ECONOMY] Ronda actualizada a: ${data.round}`);
       }
       if (data.market) {
+        console.log('🏪 [ECONOMY] data.market:', data.market);
+        console.log('🏪 [ECONOMY] data.market.products:', data.market.products);
+        console.log('🏪 [ECONOMY] data.market.products.length:', data.market.products?.length);
         setProductList(data.market.products || []);
         console.log(`🏪 [ECONOMY] Productos actualizados: ${data.market.products?.length || 0} productos`);
       }
