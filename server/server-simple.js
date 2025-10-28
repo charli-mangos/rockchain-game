@@ -1709,7 +1709,7 @@ io.on('connection', (socket) => {
       gameId,
       round: round,
       winningIndustry: room.winningIndustry || 'Technology',
-      roundTime: new Date(gameAuthority.roundEndsAtMs).toISOString(),
+      roundTime: new Date(gameAuthority.roundStartAtMs).toISOString(), // FECHA DE INICIO, no fin
       message: `Round ${round} started!`
     });
     
