@@ -2356,6 +2356,29 @@ io.on('connection', (socket) => {
         }
       }, 120000); // 120 segundos (2 minutos)
       
+      // CRÍTICO: Emitir economy:state con productos si no se ha emitido antes o si el juego está en ronda 1
+      // Esto asegura que los clientes que se conectan tarde reciban los productos
+      if (room.round === 1 && room.productList && room.productList.length > 0) {
+        console.log(`🏪 [READY_TO_PLAY] Emitiendo economy:state para ronda 1 con ${room.productList.length} productos`);
+        let legacy = {};
+        try {
+          legacy = transformProductsToLegacy(room.productList, room.round);
+        } catch (error) {
+          console.error(`❌ [READY_TO_PLAY] Error generando legacy desde productList:`, error);
+        }
+        
+        emitToGame(gameId, 'economy:state', {
+          roundId: `${gameId}:${room.round}:${Date.now()}`,
+          version: room.round,
+          round: room.round,
+          market: {
+            products: room.productList,
+            legacy: legacy
+          }
+        });
+        console.log(`✅ [READY_TO_PLAY] economy:state emitido para ronda 1`);
+      }
+      
       // EMITIR ESTADO AUTORITATIVO
       emitAuthoritativeState(gameId, 'start_round', {
         gameId,
