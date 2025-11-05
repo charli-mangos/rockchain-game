@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, FlatList } from 'react-native';
+import { View, FlatList, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/MarketScreenStyles';
@@ -9,20 +9,37 @@ import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const MarketScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
-  const { productList, gameId, userId } = useGameContextHybridRobust();
+  const { productList, gameId, userId, round } = useGameContextHybridRobust();
   
-  console.log('🏪 [MarketScreen] productList recibido:', productList);
-  console.log('🏪 [MarketScreen] productList.length:', productList?.length || 0);
+  // Debug logs para diagnosticar problema de productos
+  console.log('🏪 [MarketScreen] productList recibido:', productList?.length || 0, 'productos');
+  console.log('🏪 [MarketScreen] productList:', productList);
   console.log('🏪 [MarketScreen] gameId:', gameId);
-  console.log('🏪 [MarketScreen] userId:', userId);
+  console.log('🏪 [MarketScreen] round:', round);
   
   // Filtrar productos válidos y agregar elemento invisible si el número de productos es impar
-  const validProducts = productList.filter(product => product && product.id);
+  const validProducts = productList ? productList.filter(product => product && product.id) : [];
   console.log('🏪 [MarketScreen] validProducts después del filtro:', validProducts.length);
   
   const dataWithSpacer = validProducts.length % 2 === 1 
     ? [...validProducts, { isSpacer: true, id: 'spacer' }]
     : validProducts;
+  
+  // Si no hay productos válidos, mostrar mensaje de carga
+  if (!validProducts || validProducts.length === 0) {
+    return (
+      <View style={styles.screenContainer}>
+        <GameHeader
+          title={t('market.title')}
+          subtitle={`Round ${round}`}
+          showBackButton={false}
+        />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Cargando productos...</Text>
+        </View>
+      </View>
+    );
+  }
   
   // console.log('MarketScreen - productList:', productList);
   // console.log('MarketScreen - gameId:', gameId);

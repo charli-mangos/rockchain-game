@@ -239,7 +239,15 @@ const emitAuthoritativeState = (gameId, eventName, additionalData = {}) => {
   };
   
   console.log(`📡 [AUTHORITY] Emitiendo ${eventName} con estado autoritativo:`, authoritativePayload);
+  console.log(`📡 [AUTHORITY] Payload incluye roundEndsAtMs:`, !!authoritativePayload.roundEndsAtMs);
+  console.log(`📡 [AUTHORITY] Payload incluye roundTime:`, !!authoritativePayload.roundTime);
+  if (authoritativePayload.roundEndsAtMs) {
+    console.log(`📡 [AUTHORITY] roundEndsAtMs valor:`, authoritativePayload.roundEndsAtMs, `(${new Date(authoritativePayload.roundEndsAtMs).toISOString()})`);
+  }
+  
   emitToGame(gameId, eventName, authoritativePayload);
+  
+  console.log(`✅ [AUTHORITY] ${eventName} emitido exitosamente a sala ${gameId}`);
   
   return authoritativePayload;
 };
@@ -297,18 +305,47 @@ const applyAtomicReward = async (gameId, userId, rewardAmount, operationId) => {
     const gameInventory = playerInventories.get(gameId) || new Map();
     const userInventory = gameInventory.get(userId) || { products: [], rockCoins: 600, waste: 0 };
     
+    // Validar valores antes de aplicar
+    const currentRockCoins = typeof userInventory.rockCoins === 'number' && !isNaN(userInventory.rockCoins) 
+      ? userInventory.rockCoins 
+      : 600;
+    
     // Aplicar recompensa
-    const newRockCoins = userInventory.rockCoins + rewardAmount;
+    const newRockCoins = currentRockCoins + rewardAmount;
     userInventory.rockCoins = newRockCoins;
     
-    // Actualizar inventario
+    // Asegurar que products es un array válido
+    if (!Array.isArray(userInventory.products)) {
+      userInventory.products = [];
+    }
+    
+    // Actualizar inventario en memoria
     gameInventory.set(userId, userInventory);
     playerInventories.set(gameId, gameInventory);
+    
+    // CRÍTICO: Persistir inmediatamente en Firestore
+    if (admin.apps.length) {
+      try {
+        const userRef = admin.firestore().collection('users').doc(userId);
+        await userRef.update({
+          [`games.${gameId}.rockCoins`]: newRockCoins,
+          [`games.${gameId}.waste`]: typeof userInventory.waste === 'number' && !isNaN(userInventory.waste) 
+            ? userInventory.waste 
+            : 0,
+          [`games.${gameId}.products`]: userInventory.products,
+          [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`💾 [ATOMIC] Inventario persistido en Firestore para ${userId}: rockCoins=${newRockCoins}`);
+      } catch (firestoreError) {
+        console.error(`❌ [ATOMIC] Error persistiendo en Firestore para ${userId}:`, firestoreError);
+        // Continuar aunque falle la persistencia (se persistirá más tarde)
+      }
+    }
     
     // Marcar operación como aplicada
     markRewardOperationApplied(gameId, operationId);
     
-    console.log(`💰 [ATOMIC] Recompensa aplicada: ${userId} +${rewardAmount} = ${newRockCoins} rockCoins`);
+    console.log(`💰 [ATOMIC] Recompensa aplicada y persistida: ${userId} +${rewardAmount} = ${newRockCoins} rockCoins`);
     return true;
   } catch (error) {
     console.error(`❌ [ATOMIC] Error aplicando recompensa ${operationId}:`, error);
@@ -364,6 +401,10 @@ const calculateRoundRewards = async (gameId, round) => {
   const gameState = getGameState(gameId);
   
   try {
+    // 0. CERRAR BLOQUES NO RESPONDIDOS Y ASIGNARLOS A EXTERNAL MINER
+    console.log(`🔍 [ROUND][CALC] Cerrando bloques no respondidos de la ronda ${round}...`);
+    closeUnansweredBlocks(gameId, round);
+    
     // 1. Cerrar bloques de minado y recopilar respuestas
     console.log(`🔍 [ROUND][CALC] Cerrando bloques de minado...`);
     const allMinedBlocks = getMinedBlocks(gameId).filter(block => block.round === round);
@@ -389,14 +430,11 @@ const calculateRoundRewards = async (gameId, round) => {
       }
     }
     
-    // 3. Elegir y persistir winningIndustry si no existe
-    if (!room.winningIndustry) {
-      const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
-      room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
-      console.log(`🏭 [ROUND][WASTE] winningIndustry=${room.winningIndustry}`);
-    } else {
-      console.log(`🏭 [ROUND][WASTE] winningIndustry ya existe: ${room.winningIndustry}`);
-    }
+    // 3. Elegir y persistir winningIndustry (SIEMPRE se resetea para cada ronda)
+    // CRÍTICO: Reseteamos winningIndustry para cada ronda para que sea diferente
+    const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
+    room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
+    console.log(`🏭 [ROUND][WASTE] winningIndustry seleccionado para ronda ${round}: ${room.winningIndustry}`);
     
     // Definir eficiencias de las industrias para economía circular
     const industryEfficiencies = {
@@ -488,9 +526,33 @@ const calculateRoundRewards = async (gameId, round) => {
       if (applied) {
         // También reducir waste
         const inventory = getPlayerInventory(gameId, winner.userId);
-        const currentWaste = inventory.waste || 0;
+        const currentWaste = typeof inventory.waste === 'number' && !isNaN(inventory.waste) ? inventory.waste : 0;
         const newWaste = Math.max(0, currentWaste - winner.wasteReduction);
         inventory.waste = newWaste;
+        
+        // CRÍTICO: Actualizar inventario en memoria
+        const gameInventory = playerInventories.get(gameId) || new Map();
+        gameInventory.set(winner.userId, inventory);
+        playerInventories.set(gameId, gameInventory);
+        
+        // CRÍTICO: Persistir inmediatamente en Firestore
+        if (admin.apps.length) {
+          try {
+            const userRef = admin.firestore().collection('users').doc(winner.userId);
+            await userRef.update({
+              [`games.${gameId}.waste`]: newWaste,
+              [`games.${gameId}.rockCoins`]: typeof inventory.rockCoins === 'number' && !isNaN(inventory.rockCoins) 
+                ? inventory.rockCoins 
+                : 600,
+              [`games.${gameId}.products`]: Array.isArray(inventory.products) ? inventory.products : [],
+              [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`💾 [ROUND][WASTE] Waste persistido en Firestore para ${winner.userId}: waste=${newWaste}`);
+          } catch (firestoreError) {
+            console.error(`❌ [ROUND][WASTE] Error persistiendo waste en Firestore para ${winner.userId}:`, firestoreError);
+          }
+        }
+        
         markOperationApplied(gameId, winner.operationId);
         
         // Emitir feedback educativo para waste reduction
@@ -520,18 +582,203 @@ const calculateRoundRewards = async (gameId, round) => {
       };
     }
     
+    // 6.5. CRÍTICO: Verificar y normalizar valores antes de persistir
+    console.log(`🔍 [ROUND][CALC] Verificando y normalizando inventarios después de aplicar todos los rewards...`);
+    const normalizedInventories = new Map();
+    for (const player of room.players) {
+      const inventory = getPlayerInventory(gameId, player.userId);
+      
+      // Normalizar y validar valores
+      const rockCoins = typeof inventory.rockCoins === 'number' && !isNaN(inventory.rockCoins) && isFinite(inventory.rockCoins)
+        ? Math.max(0, Math.round(inventory.rockCoins))
+        : 600;
+      const waste = typeof inventory.waste === 'number' && !isNaN(inventory.waste) && isFinite(inventory.waste)
+        ? Math.max(0, Math.round(inventory.waste))
+        : 0;
+      const products = Array.isArray(inventory.products) ? inventory.products : [];
+      
+      // Actualizar inventario en memoria con valores normalizados
+      inventory.rockCoins = rockCoins;
+      inventory.waste = waste;
+      inventory.products = products;
+      
+      const gameInventory = playerInventories.get(gameId) || new Map();
+      gameInventory.set(player.userId, inventory);
+      playerInventories.set(gameId, gameInventory);
+      
+      normalizedInventories.set(player.userId, { rockCoins, waste, products });
+      
+      console.log(`🔍 [ROUND][CALC] Inventario normalizado para ${player.userName} (${player.userId}):`, {
+        rockCoins: rockCoins,
+        waste: waste,
+        productsCount: products.length
+      });
+    }
+    
+    // 6.5.1. CRÍTICO: Persistir inventarios normalizados en Firestore en batch
+    console.log(`💾 [ROUND][CALC] Persistiendo inventarios normalizados en Firestore en batch...`);
+    if (admin.apps.length) {
+      try {
+        const db = admin.firestore();
+        const batch = db.batch();
+        
+        for (const player of room.players) {
+          const normalized = normalizedInventories.get(player.userId);
+          if (!normalized) {
+            console.warn(`⚠️ [ROUND][CALC] No se encontró inventario normalizado para ${player.userId}`);
+            continue;
+          }
+          
+          const userRef = db.collection('users').doc(player.userId);
+          
+          console.log(`💾 [ROUND][CALC] Agregando a batch para ${player.userName} (${player.userId}):`, {
+            rockCoins: normalized.rockCoins,
+            waste: normalized.waste,
+            productsCount: normalized.products.length
+          });
+          
+          batch.update(userRef, {
+            [`games.${gameId}.rockCoins`]: normalized.rockCoins,
+            [`games.${gameId}.waste`]: normalized.waste,
+            [`games.${gameId}.products`]: normalized.products,
+            [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        
+        await batch.commit();
+        console.log(`✅ [ROUND][CALC] Batch de inventarios persistido en Firestore exitosamente`);
+        
+        // Verificar que los valores se guardaron correctamente
+        console.log(`🔍 [ROUND][CALC] Verificando valores guardados en Firestore...`);
+        for (const player of room.players) {
+          try {
+            const normalized = normalizedInventories.get(player.userId);
+            const userRef = db.collection('users').doc(player.userId);
+            const userDoc = await userRef.get();
+            if (userDoc.exists) {
+              const gameData = userDoc.data()?.games?.[gameId];
+              console.log(`🔍 [ROUND][CALC] Verificación para ${player.userName}:`, {
+                enMemoria: {
+                  rockCoins: normalized.rockCoins,
+                  waste: normalized.waste
+                },
+                enFirestore: {
+                  rockCoins: gameData?.rockCoins,
+                  waste: gameData?.waste
+                },
+                coinciden: normalized.rockCoins === gameData?.rockCoins && normalized.waste === gameData?.waste
+              });
+              
+              // Si no coinciden, corregir
+              if (normalized.rockCoins !== gameData?.rockCoins || normalized.waste !== gameData?.waste) {
+                console.warn(`⚠️ [ROUND][CALC] Valores no coinciden, corrigiendo Firestore para ${player.userId}...`);
+                await userRef.update({
+                  [`games.${gameId}.rockCoins`]: normalized.rockCoins,
+                  [`games.${gameId}.waste`]: normalized.waste,
+                  [`games.${gameId}.products`]: normalized.products,
+                  [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+                });
+                console.log(`✅ [ROUND][CALC] Valores corregidos en Firestore para ${player.userId}`);
+              }
+            }
+          } catch (verifyError) {
+            console.error(`❌ [ROUND][CALC] Error verificando Firestore para ${player.userId}:`, verifyError);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ [ROUND][CALC] Error persistiendo batch en Firestore:`, error);
+        // Fallback: persistir individualmente
+        console.log(`🔄 [ROUND][CALC] Intentando persistir individualmente como fallback...`);
+        for (const player of room.players) {
+          try {
+            const normalized = normalizedInventories.get(player.userId);
+            if (!normalized) continue;
+            
+            const userRef = admin.firestore().collection('users').doc(player.userId);
+            await userRef.update({
+              [`games.${gameId}.rockCoins`]: normalized.rockCoins,
+              [`games.${gameId}.waste`]: normalized.waste,
+              [`games.${gameId}.products`]: normalized.products,
+              [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`✅ [ROUND][CALC] Inventario persistido individualmente para ${player.userId}`);
+          } catch (individualError) {
+            console.error(`❌ [ROUND][CALC] Error persistiendo individualmente para ${player.userId}:`, individualError);
+          }
+        }
+      }
+    } else {
+      console.warn(`⚠️ [ROUND][CALC] Firebase Admin no disponible, saltando persistencia`);
+    }
+    
+    // 6.6. CRÍTICO: Enviar inventarios normalizados a todos los jugadores vía WebSocket
+    console.log(`📦 [ROUND][CALC] Enviando inventarios normalizados a todos los jugadores vía WebSocket...`);
+    for (const player of room.players) {
+      const normalized = normalizedInventories.get(player.userId);
+      if (!normalized) {
+        console.warn(`⚠️ [ROUND][CALC] No se encontró inventario normalizado para enviar a ${player.userId}`);
+        continue;
+      }
+      
+      const playerSocketId = playerSockets.get(player.userId);
+      
+      if (playerSocketId) {
+        const inventoryData = {
+          gameId,
+          userId: player.userId,
+          inventory: {
+            rockCoins: normalized.rockCoins,
+            waste: normalized.waste,
+            products: normalized.products,
+            miningQueue: (getPlayerInventory(gameId, player.userId).miningQueue || 0)
+          }
+        };
+        
+        console.log(`📦 [ROUND][CALC] Enviando inventory_data a ${player.userName} (${player.userId}):`, {
+          rockCoins: inventoryData.inventory.rockCoins,
+          waste: inventoryData.inventory.waste,
+          productsCount: inventoryData.inventory.products.length,
+          socketId: playerSocketId
+        });
+        
+        // Enviar a través del socket específico del jugador
+        io.to(playerSocketId).emit('inventory_data', inventoryData);
+        
+        // También enviar a través de la sala del juego para asegurar que llegue
+        io.to(gameId).emit('inventory_data', inventoryData);
+        
+        console.log(`✅ [ROUND][CALC] inventory_data enviado a ${player.userName} (${player.userId})`);
+      } else {
+        console.warn(`⚠️ [ROUND][CALC] No se encontró socketId para ${player.userId}, enviando a sala del juego...`);
+        // Enviar a la sala del juego como fallback
+        io.to(gameId).emit('inventory_data', {
+          gameId,
+          userId: player.userId,
+          inventory: {
+            rockCoins: normalized.rockCoins,
+            waste: normalized.waste,
+            products: normalized.products,
+            miningQueue: 0
+          }
+        });
+      }
+    }
+    
+    // Actualizar ranking después de aplicar rewards
+    updateAndEmitPlayerRankings(gameId);
+    
     // 7. Montar payload de salida con información educativa
     const payload = {
       round: round,
       winningIndustry: room.winningIndustry,
       mining: {
         winners: miningWinners.map(w => ({
-          blockId: w.blockId,
-          winnerUserId: w.winnerUserId,
-          winnerName: w.winnerName,
+        blockId: w.blockId,
+        winnerUserId: w.winnerUserId,
+        winnerName: w.winnerName,
           rewardApplied: 50,
           explanation: 'Mining rewards are earned by solving mathematical problems to validate blockchain transactions'
-        })),
+      })),
         totalRewards: miningWinners.length * 50,
         educationalMessage: 'Mining is the process of validating transactions and securing the blockchain network through computational work.'
       },
@@ -638,28 +885,26 @@ const syncGameToFirestore = async (gameId, room) => {
     const gameRef = admin.firestore().collection('games').doc(gameId);
     
     // Sincronizar estado del juego
-    await gameRef.update({
+    const updateData = {
       status: room.status,
       round: Math.max(1, room.round || 1),
       roundTime: room.roundTime ? admin.firestore.Timestamp.fromMillis(room.roundTime) : null,
       winningIndustry: room.winningIndustry,
       lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
     
-    // Sincronizar inventarios de todos los jugadores
-    const gameInventory = playerInventories.get(gameId);
-    if (gameInventory) {
-      for (const [userId, inventory] of gameInventory.entries()) {
-        const userRef = admin.firestore().collection('users').doc(userId);
-        await userRef.update({
-          [`games.${gameId}.products`]: inventory.products,
-          [`games.${gameId}.rockCoins`]: inventory.rockCoins,
-          [`games.${gameId}.waste`]: inventory.waste,
-          [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
-        });
-        console.log(`📦 Inventario sincronizado para ${userId}:`, inventory);
-      }
+    // CRÍTICO: Incluir productList si está disponible en el room
+    if (room.productList && Array.isArray(room.productList) && room.productList.length > 0) {
+      updateData.productList = room.productList;
+      console.log(`📦 [SYNC] Incluyendo productList en sincronización: ${room.productList.length} productos`);
     }
+    
+    await gameRef.update(updateData);
+    
+    // NOTA: Los inventarios ya fueron persistidos en calculateRoundRewards después de aplicar rewards
+    // No es necesario sincronizarlos aquí nuevamente para evitar conflictos
+    // Solo sincronizar si no se ha hecho antes (por seguridad, pero no debería ser necesario)
+    console.log(`📦 [SYNC] Inventarios ya persistidos en calculateRoundRewards, saltando sincronización duplicada`);
     
     console.log(`✅ Estado del juego ${gameId} sincronizado con Firestore: ${room.status}`);
   } catch (error) {
@@ -669,8 +914,11 @@ const syncGameToFirestore = async (gameId, room) => {
 
 // Función helper para emitir a todos en una sala
 const emitToGame = (gameId, event, data) => {
-  console.log(`📡 Emitiendo ${event} a sala ${gameId}:`, data);
+  const room = io.sockets.adapter.rooms.get(gameId);
+  const clientCount = room ? room.size : 0;
+  console.log(`📡 Emitiendo ${event} a sala ${gameId} (${clientCount} clientes conectados):`, data);
   io.to(gameId).emit(event, data);
+  console.log(`✅ [EMIT] ${event} emitido a sala ${gameId}`);
 };
 
 // NUEVA FUNCIÓN: Persistir datos de la ronda en Firestore (ATÓMICO)
@@ -708,13 +956,36 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
       }
     };
     
-    // Agregar balances finales de todos los jugadores
+    // CRÍTICO: Obtener inventarios DESPUÉS de aplicar rewards (deben estar ya actualizados)
+    // Los rewards ya fueron aplicados en calculateRoundRewards, así que estos valores deben incluir los rewards
+    const inventoriesSnapshot = new Map();
     for (const player of room.players) {
       const inventory = getPlayerInventory(gameId, player.userId);
+      const rockCoins = typeof inventory.rockCoins === 'number' && !isNaN(inventory.rockCoins) ? inventory.rockCoins : 600;
+      const waste = typeof inventory.waste === 'number' && !isNaN(inventory.waste) ? inventory.waste : 0;
+      const products = Array.isArray(inventory.products) ? inventory.products : [];
+      
+      inventoriesSnapshot.set(player.userId, {
+        rockCoins: rockCoins,
+        waste: waste,
+        products: products
+      });
+      
+      console.log(`💾 [PERSIST] Inventario snapshot para ${player.userId} (DESPUÉS de rewards):`, {
+        rockCoins: rockCoins,
+        waste: waste,
+        productsCount: products.length,
+        inventory: inventory
+      });
+    }
+    
+    // Agregar balances finales de todos los jugadores desde snapshot
+    for (const player of room.players) {
+      const inventorySnapshot = inventoriesSnapshot.get(player.userId);
       roundData.results.balances[player.userId] = {
-        rockCoins: inventory.rockCoins,
-        waste: inventory.waste,
-        products: inventory.products?.length || 0
+        rockCoins: inventorySnapshot.rockCoins,
+        waste: inventorySnapshot.waste,
+        products: inventorySnapshot.products?.length || 0
       };
     }
     
@@ -740,13 +1011,29 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
     });
     
     // 4. Actualizar inventarios de todos los jugadores
+    // CRÍTICO: Los inventarios YA fueron persistidos en calculateRoundRewards después de aplicar rewards
+    // Aquí solo los actualizamos si hay diferencias (por seguridad, pero no debería ser necesario)
     for (const player of room.players) {
-      const inventory = getPlayerInventory(gameId, player.userId);
+      const currentInventory = getPlayerInventory(gameId, player.userId);
+      const inventorySnapshot = inventoriesSnapshot.get(player.userId);
+      
+      // Usar los valores actuales en memoria (que ya incluyen rewards) como autoritativos
+      const finalRockCoins = currentInventory.rockCoins;
+      const finalWaste = currentInventory.waste;
+      const finalProducts = Array.isArray(currentInventory.products) ? currentInventory.products : [];
+      
+      console.log(`💾 [PERSIST] Actualizando inventario en Firestore para ${player.userId}:`, {
+        rockCoins: finalRockCoins,
+        waste: finalWaste,
+        productsCount: finalProducts.length,
+        note: 'Valores desde memoria (ya incluyen rewards aplicados)'
+      });
+      
       const userRef = db.collection('users').doc(player.userId);
       batch.update(userRef, {
-        [`games.${gameId}.products`]: inventory.products,
-        [`games.${gameId}.rockCoins`]: inventory.rockCoins,
-        [`games.${gameId}.waste`]: inventory.waste,
+        [`games.${gameId}.products`]: finalProducts,
+        [`games.${gameId}.rockCoins`]: finalRockCoins,
+        [`games.${gameId}.waste`]: finalWaste,
         [`games.${gameId}.readyForNextRound`]: false,
         [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -773,6 +1060,9 @@ const generateMarketForRound = async (gameId, round) => {
   // Generar productos con semilla determinista
   const products = generateProductsWithSeed(seed, round);
   
+  // Inicializar legacyRound desde el principio para que siempre esté disponible
+  let legacyRound = {};
+  
   // Persistir mercado en Firestore si está disponible
   if (admin.apps.length) {
     try {
@@ -790,57 +1080,231 @@ const generateMarketForRound = async (gameId, round) => {
 
       // Además: actualizar documento agregado legacy para ChatScreen
       const legacyRef = db.collection('market').doc(gameId);
-      // Transformar lista plana a estructura legacy
-      const legacyRound = {};
-      for (const p of products) {
-        legacyRound[p.marbleType] = legacyRound[p.marbleType] || {};
-        legacyRound[p.marbleType][p.type] = legacyRound[p.marbleType][p.type] || {};
-        legacyRound[p.marbleType][p.type][p.quality] = {
-          price: p.currentPrice,
-          waste: p.waste
-        };
-      }
+      
+      // Primero obtener el documento existente para preservar rondas anteriores
+      const legacyDoc = await legacyRef.get();
+      const existingRounds = legacyDoc.exists ? (legacyDoc.data().rounds || {}) : {};
+      
+      // Transformar lista plana a estructura legacy usando función auxiliar
+      legacyRound = transformProductsToLegacy(products, round);
+
+      // Agregar la nueva ronda a las existentes
+      existingRounds[round] = legacyRound;
+      
       await legacyRef.set({
-        rounds: {
-          [round]: legacyRound
-        }
+        rounds: existingRounds
       }, { merge: true });
       console.log(`✅ [MARKET] Legacy market agregado/actualizado para ronda ${round}`);
     } catch (error) {
       console.error(`❌ [MARKET] Error persistiendo mercado:`, error);
+      // Si hay error, aún generamos legacyRound desde los productos
+      legacyRound = transformProductsToLegacy(products, round);
     }
+  } else {
+    // Si Firestore no está disponible, aún generamos legacyRound desde los productos
+    legacyRound = transformProductsToLegacy(products, round);
   }
   
   return {
     products: products,
     round: round,
-    seed: seed
+    seed: seed,
+    legacy: legacyRound
   };
+};
+
+// Función auxiliar para transformar productos a estructura legacy
+const transformProductsToLegacy = (products, round) => {
+  const legacyRound = {};
+  let validProductsCount = 0;
+  let skippedProductsCount = 0;
+  
+  for (const p of products) {
+    // Validar que el producto tenga todos los campos necesarios y valores válidos
+    if (!p.marbleType || !p.type || !p.quality) {
+      console.warn(`⚠️ [MARKET] Producto sin campos requeridos:`, p);
+      skippedProductsCount++;
+      continue;
+    }
+    
+    const price = typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) ? p.currentPrice : 0;
+    const waste = typeof p.waste === 'number' && !isNaN(p.waste) ? p.waste : 0;
+    
+    if (price <= 0 || waste <= 0) {
+      console.warn(`⚠️ [MARKET] Producto con valores inválidos (price=${price}, waste=${waste}):`, p);
+      skippedProductsCount++;
+      continue;
+    }
+    
+    // Inicializar estructura si no existe
+    if (!legacyRound[p.marbleType]) {
+      legacyRound[p.marbleType] = {};
+    }
+    if (!legacyRound[p.marbleType][p.type]) {
+      legacyRound[p.marbleType][p.type] = {};
+    }
+    
+    // USAR VALOR EXACTO - NO PROMEDIAR para garantizar consistencia con MarketScreen
+    // Si ya existe una entrada, usar el primer valor encontrado (no promedio)
+    // Esto garantiza que legacy tenga los mismos valores que aparecen en productList
+    if (!legacyRound[p.marbleType][p.type][p.quality]) {
+      legacyRound[p.marbleType][p.type][p.quality] = {
+        price: price,
+        waste: waste
+      };
+    }
+    // Si ya existe, mantener el primero (ya fue asignado antes)
+    // NO promediar para mantener consistencia
+    
+    validProductsCount++;
+  }
+  
+  // Log de depuración: mostrar algunos ejemplos de la estructura creada
+  if (validProductsCount > 0) {
+    const sampleEntries = Object.entries(legacyRound).slice(0, 3);
+    console.log(`🔍 [MARKET] Estructura legacy creada para ronda ${round}:`, JSON.stringify(sampleEntries, null, 2).substring(0, 500));
+    console.log(`✅ [MARKET] ${validProductsCount} productos válidos transformados, ${skippedProductsCount} saltados`);
+  } else {
+    console.error(`❌ [MARKET] No se generó estructura legacy válida para ronda ${round}`);
+  }
+  
+  // Clamp valores existentes a rangos válidos
+  const minPrice = 80;
+  const maxPrice = 200;
+  const minWaste = 30;
+  const maxWaste = 70;
+  
+  for (const marble in legacyRound) {
+    for (const pType in legacyRound[marble]) {
+      for (const q in legacyRound[marble][pType]) {
+        if (legacyRound[marble][pType][q]) {
+          legacyRound[marble][pType][q].price = Math.min(maxPrice, Math.max(minPrice, legacyRound[marble][pType][q].price));
+          legacyRound[marble][pType][q].waste = Math.min(maxWaste, Math.max(minWaste, legacyRound[marble][pType][q].waste));
+        }
+      }
+    }
+  }
+  
+  // RELLENAR combinaciones faltantes con valores calculados basados en precios base
+  // Esto evita que ChatScreen muestre 0 para combinaciones que no se generaron aleatoriamente
+  const marbleTypes = ['Red', 'Black', 'White', 'Gray', 'Cream'];
+  const productTypes = ['Block', 'Slab'];
+  const qualities = ['A', 'B', 'C'];
+  
+  // Precios base para cálculo de valores faltantes
+  const marbleBasePrice = {
+    'Red': 150,
+    'Black': 140,
+    'White': 130,
+    'Gray': 100,
+    'Cream': 160
+  };
+  
+  const marbleBaseWaste = {
+    'Red': 50,
+    'Black': 45,
+    'White': 40,
+    'Gray': 35,
+    'Cream': 55
+  };
+  
+  // Multiplicadores por calidad
+  const qualityMultipliers = {
+    'A': { price: 1.3, waste: 0.9 },
+    'B': { price: 1.0, waste: 1.0 },
+    'C': { price: 0.8, waste: 1.1 }
+  };
+  
+  let filledCount = 0;
+  for (const marble of marbleTypes) {
+    if (!legacyRound[marble]) {
+      legacyRound[marble] = {};
+    }
+    for (const pType of productTypes) {
+      if (!legacyRound[marble][pType]) {
+        legacyRound[marble][pType] = {};
+      }
+      for (const quality of qualities) {
+        // Solo rellenar si la combinación no existe
+        if (!legacyRound[marble][pType][quality]) {
+          // Calcular precio base
+          let basePrice = marbleBasePrice[marble] || 100;
+          if (pType === 'Slab') basePrice = Math.round(basePrice * 1.25);
+          
+          // Aplicar multiplicador de calidad
+          const mult = qualityMultipliers[quality];
+          let calculatedPrice = Math.round(basePrice * mult.price);
+          
+          // Calcular waste base
+          let baseWaste = marbleBaseWaste[marble] || 40;
+          if (pType === 'Slab') baseWaste = Math.round(baseWaste * 1.1);
+          
+          // Aplicar multiplicador de calidad
+          let calculatedWaste = Math.round(baseWaste * mult.waste);
+          
+          // Clamp a rangos válidos
+          calculatedPrice = Math.min(maxPrice, Math.max(minPrice, calculatedPrice));
+          calculatedWaste = Math.min(maxWaste, Math.max(minWaste, calculatedWaste));
+          
+          legacyRound[marble][pType][quality] = {
+            price: calculatedPrice,
+            waste: calculatedWaste
+          };
+          filledCount++;
+        }
+      }
+    }
+  }
+  
+  if (filledCount > 0) {
+    console.log(`🔧 [MARKET] ${filledCount} combinaciones faltantes rellenadas con valores calculados para ronda ${round}`);
+  }
+  
+  return legacyRound;
 };
 
 // FUNCIÓN AUXILIAR: Generar productos con semilla determinista
 // Estructura compatible con el frontend: type: 'Block'|'Slab', quality: 'A'|'B'|'C'
 const generateProductsWithSeed = (seed, round) => {
+  console.log(`🔍 [GENERATE] Iniciando generación para seed=${seed}, round=${round}`);
+  
   // Crear generador pseudoaleatorio con semilla
-  const seededRandom = (seed) => {
+  // Inicializar hash una sola vez
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
       const char = seed.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convertir a 32bit integer
     }
-    return () => {
+  
+  console.log(`🔍 [GENERATE] Hash inicial: ${hash}`);
+  
+  // Asegurar que hash es un número válido
+  if (isNaN(hash) || !isFinite(hash)) {
+    console.error(`❌ [GENERATE] Hash inválido: ${hash}, usando fallback`);
+    hash = Math.abs(hash) || 12345; // Fallback si hash es inválido
+  }
+  
+  // Función que mantiene el estado de hash entre llamadas
+  const random = () => {
       hash = (hash * 9301 + 49297) % 233280;
-      return hash / 233280;
-    };
+    const result = hash / 233280;
+    // Validar que el resultado es un número válido
+    if (isNaN(result) || !isFinite(result)) {
+      console.error(`❌ [GENERATE] random() devolvió valor inválido: ${result}, hash=${hash}`);
+      return 0.5; // Fallback seguro
+    }
+    return result;
   };
   
-  const random = seededRandom(seed);
+  // Probar la función random
+  const testRandom = random();
+  console.log(`🔍 [GENERATE] Test random(): ${testRandom}`);
   
-  // Mármol y base
+  // Mármol y base - VALORES MÍNIMOS GARANTIZADOS
   const marbleTypes = ['Gray', 'White', 'Cream', 'Black', 'Red'];
   const marbleBasePrice = { Gray: 90, White: 120, Cream: 150, Black: 200, Red: 110 };
-  const marbleBaseWaste = { Gray: 15, White: 12, Cream: 10, Black: 8, Red: 14 };
+  const marbleBaseWaste = { Gray: 15, White: 12, Cream: 25, Black: 30, Red: 14 }; // Aumentar valores mínimos
   const productTypes = ['Block', 'Slab'];
   const qualities = ['A', 'B', 'C'];
   const qualityMultipliers = {
@@ -852,39 +1316,223 @@ const generateProductsWithSeed = (seed, round) => {
   const products = [];
   const numProducts = 20; // 20 productos por ronda
   
+  console.log(`🔍 [GENERATE] Generando ${numProducts} productos...`);
+  
+  // Cache para garantizar que productos con la misma combinación tengan valores idénticos
+  // Key: "marbleType:type:quality" -> { priceVariation, wasteVariation }
+  const combinationCache = new Map();
+  
+  // Offsets derivados de la semilla para evitar sesgos repetitivos por ronda
+  const marbleOffset = Math.floor(random() * marbleTypes.length);
+  const typeOffset = Math.floor(random() * productTypes.length);
+  const qualityOffset = Math.floor(random() * qualities.length);
+  
   for (let i = 0; i < numProducts; i++) {
-    const marble = marbleTypes[Math.floor(random() * marbleTypes.length)];
-    const pType = productTypes[Math.floor(random() * productTypes.length)];
-    const quality = qualities[Math.floor(random() * qualities.length)];
+    console.log(`🔍 [GENERATE] Generando producto ${i + 1}/${numProducts}`);
+    // Selección estratificada con offsets dependientes de la semilla.
+    // Garantiza variedad entre mármoles, tipos y calidades en cada ronda.
+    const marbleIndex = (i + marbleOffset) % marbleTypes.length; // cicla 5 mármoles
+    const typeIndex = (Math.floor(i / marbleTypes.length) + typeOffset) % productTypes.length; // 10 Block, 10 Slab intercalados
+    const qualityIndex = (i + qualityOffset) % qualities.length; // mezcla A, B, C
+    
+    console.log(`🔍 [GENERATE] Producto ${i + 1} - índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}`);
+    
+    let marble = marbleTypes[marbleIndex];
+    let pType = productTypes[typeIndex];
+    let quality = qualities[qualityIndex];
+    
+    console.log(`🔍 [GENERATE] Producto ${i + 1} - valores: marble=${marble}, pType=${pType}, quality=${quality}`);
+    
+    // Validar que los valores son válidos
+    if (!marble || !pType || !quality) {
+      console.error(`❌ [GENERATE] Producto ${i + 1} tiene valores inválidos: marble=${marble}, pType=${pType}, quality=${quality}`);
+      console.error(`❌ [GENERATE] Índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}`);
+      console.error(`❌ [GENERATE] Offsets: marbleOffset=${marbleOffset}, typeOffset=${typeOffset}, qualityOffset=${qualityOffset}`);
+      // Usar valores por defecto en lugar de saltar
+      marble = 'Gray';
+      pType = 'Block';
+      quality = 'B';
+      console.log(`🔍 [GENERATE] Producto ${i + 1} - usando valores por defecto: marble=${marble}, pType=${pType}, quality=${quality}`);
+    }
+    
+    // CLAVE: Crear clave única para la combinación
+    const combinationKey = `${marble}:${pType}:${quality}`;
     
     // Precio base según mármol y tipo
     let basePrice = marbleBasePrice[marble];
+    if (typeof basePrice !== 'number' || isNaN(basePrice)) {
+      console.error(`❌ [DEBUG] Producto ${i} tiene basePrice inválido para marble ${marble}: ${basePrice}`);
+      basePrice = 100; // Fallback seguro
+    }
     if (pType === 'Slab') basePrice = Math.round(basePrice * 1.25);
+    
     // Waste base según mármol y tipo
     let baseWaste = marbleBaseWaste[marble];
+    if (typeof baseWaste !== 'number' || isNaN(baseWaste)) {
+      console.error(`❌ [DEBUG] Producto ${i} tiene baseWaste inválido para marble ${marble}: ${baseWaste}`);
+      baseWaste = 15; // Fallback seguro
+    }
     if (pType === 'Slab') baseWaste = Math.round(baseWaste * 1.1);
     
-    // Variación ±20%
-    const priceVariation = (random() - 0.5) * 0.4;
-    const wasteVariation = (random() - 0.5) * 0.2;
+    // DEBUG: Verificar valores base
+    if (i < 3) { // Solo log para los primeros 3 productos
+      console.log(`🔍 [DEBUG] Producto ${i}: marble=${marble}, pType=${pType}, quality=${quality}`);
+      console.log(`🔍 [DEBUG] basePrice=${basePrice}, baseWaste=${baseWaste}`);
+    }
+    
+    // VARIACIÓN DETERMINISTA POR COMBINACIÓN: productos con la misma combinación tienen la misma variación
+    let priceVariation, wasteVariation;
+    if (combinationCache.has(combinationKey)) {
+      // Reutilizar variación existente para esta combinación
+      const cached = combinationCache.get(combinationKey);
+      priceVariation = cached.priceVariation;
+      wasteVariation = cached.wasteVariation;
+      console.log(`🔄 [GENERATE] Producto ${i + 1} reutiliza variación para combinación: ${combinationKey}`);
+    } else {
+      // Generar variación determinista basada en la combinación + seed
+      // Esto garantiza que la misma combinación siempre tenga la misma variación
+      const variationSeed = `${seed}:${combinationKey}`;
+      let variationHash = 0;
+      for (let j = 0; j < variationSeed.length; j++) {
+        const char = variationSeed.charCodeAt(j);
+        variationHash = ((variationHash << 5) - variationHash) + char;
+        variationHash = variationHash & variationHash;
+      }
+      
+      // Generador de variación determinista independiente
+      let varHash = variationHash;
+      const varRandom = () => {
+        varHash = (varHash * 9301 + 49297) % 233280;
+        return varHash / 233280;
+      };
+      
+      // Variación ±20% determinista basada en la combinación
+      priceVariation = (varRandom() - 0.5) * 0.4;
+      wasteVariation = (varRandom() - 0.5) * 0.2;
+      
+      // Guardar en cache para reutilizar
+      combinationCache.set(combinationKey, { priceVariation, wasteVariation });
+      console.log(`✨ [GENERATE] Producto ${i + 1} genera nueva variación para combinación: ${combinationKey}`);
+    }
+    
+    // Validar variaciones
+    if (isNaN(priceVariation) || !isFinite(priceVariation)) {
+      console.error(`❌ [DEBUG] Producto ${i} tiene priceVariation inválido: ${priceVariation}`);
+      continue;
+    }
+    if (isNaN(wasteVariation) || !isFinite(wasteVariation)) {
+      console.error(`❌ [DEBUG] Producto ${i} tiene wasteVariation inválido: ${wasteVariation}`);
+      continue;
+    }
     
     const mult = qualityMultipliers[quality] || qualityMultipliers['B']; // Fallback a calidad B
-    const currentPrice = Math.max(1, Math.round(basePrice * (1 + priceVariation) * mult.price));
-    const waste = Math.max(0, Math.round(baseWaste * (1 + wasteVariation) * mult.waste));
+    if (!mult || typeof mult.price !== 'number' || typeof mult.waste !== 'number') {
+      console.error(`❌ [DEBUG] Producto ${i} tiene multiplier inválido para quality ${quality}:`, mult);
+      continue;
+    }
     
-    products.push({
+    const currentPriceRaw = basePrice * (1 + priceVariation) * mult.price;
+    const wasteRaw = baseWaste * (1 + wasteVariation) * mult.waste;
+    
+    let currentPrice = Math.max(1, Math.round(currentPriceRaw));
+    let waste = Math.max(1, Math.round(wasteRaw)); // Mínimo 1 waste
+    
+    // DEBUG: Verificar cálculos finales
+    if (i < 3) { // Solo log para los primeros 3 productos
+      console.log(`🔍 [DEBUG] Producto ${i}: marble=${marble}, pType=${pType}, quality=${quality}`);
+      console.log(`🔍 [DEBUG] basePrice=${basePrice}, baseWaste=${baseWaste}`);
+      console.log(`🔍 [DEBUG] priceVariation=${priceVariation}, wasteVariation=${wasteVariation}`);
+      console.log(`🔍 [DEBUG] mult.price=${mult.price}, mult.waste=${mult.waste}`);
+      console.log(`🔍 [DEBUG] currentPriceRaw=${currentPriceRaw}, wasteRaw=${wasteRaw}`);
+      console.log(`🔍 [DEBUG] currentPrice=${currentPrice}, waste=${waste}`);
+    }
+    
+    // Validar valores antes de agregar - usar valores por defecto si hay error
+    if (isNaN(currentPrice) || !isFinite(currentPrice) || currentPrice <= 0) {
+      console.error(`❌ [GENERATE] Producto ${i + 1} tiene currentPrice inválido: ${currentPrice}, usando 100`);
+      currentPrice = 100;
+    }
+    if (isNaN(waste) || !isFinite(waste) || waste <= 0) {
+      console.error(`❌ [GENERATE] Producto ${i + 1} tiene waste inválido: ${waste}, usando 20`);
+      waste = 20;
+    }
+    
+    const product = {
       id: `product-${seed}-${i}`,
       type: pType,
       quality,
       marbleType: marble,
-      currentPrice,
-      waste,
+      currentPrice: Math.max(1, Math.round(currentPrice)), // Asegurar valor válido
+      waste: Math.max(1, Math.round(waste)), // Asegurar valor válido
       round
+    };
+    
+    // Validar producto final antes de agregar - usar valores por defecto si hay error
+    if (!product.marbleType || !product.type || !product.quality) {
+      console.error(`❌ [GENERATE] Producto ${i + 1} tiene campos inválidos, usando valores por defecto:`, product);
+      product.marbleType = product.marbleType || 'Gray';
+      product.type = product.type || 'Block';
+      product.quality = product.quality || 'B';
+    }
+    
+    if (!product.currentPrice || product.currentPrice <= 0) {
+      console.error(`❌ [GENERATE] Producto ${i + 1} tiene currentPrice inválido, usando 100:`, product.currentPrice);
+      product.currentPrice = 100;
+    }
+    
+    if (!product.waste || product.waste <= 0) {
+      console.error(`❌ [GENERATE] Producto ${i + 1} tiene waste inválido, usando 20:`, product.waste);
+      product.waste = 20;
+    }
+    
+    console.log(`🔍 [GENERATE] Producto ${i + 1} final:`, {
+      id: product.id,
+      marbleType: product.marbleType,
+      type: product.type,
+      quality: product.quality,
+      currentPrice: product.currentPrice,
+      waste: product.waste
     });
+    
+    products.push(product);
   }
   
+  console.log(`🔍 [GENERATE] Generados ${products.length} productos totales`);
+  
   console.log(`🏪 [MARKET] Generados ${products.length} productos para semilla ${seed} (ronda ${round})`);
+  console.log(`🏪 [MARKET] Primer producto de ejemplo:`, products[0] ? {
+    id: products[0].id,
+    marbleType: products[0].marbleType,
+    type: products[0].type,
+    quality: products[0].quality,
+    currentPrice: products[0].currentPrice,
+    waste: products[0].waste
+  } : 'NO PRODUCTOS');
   return products;
+};
+
+// Función helper para obtener número de productos en inventario de cada jugador
+const getProductsCountByPlayer = (gameId) => {
+  const gameInventory = playerInventories.get(gameId);
+  const productsCountByPlayer = new Map();
+  
+  console.log(`📦 [PRODUCTS_COUNT] Obteniendo conteo de productos para juego ${gameId}`);
+  
+  if (gameInventory) {
+    // Contar productos en inventario de cada jugador
+    gameInventory.forEach((inventory, userId) => {
+      const productsCount = Array.isArray(inventory.products) ? inventory.products.length : 0;
+      console.log(`📦 [PRODUCTS_COUNT] Jugador ${userId}: ${productsCount} productos`, {
+        products: inventory.products,
+        productsArray: Array.isArray(inventory.products)
+      });
+      productsCountByPlayer.set(userId, productsCount);
+    });
+  } else {
+    console.log(`⚠️ [PRODUCTS_COUNT] No hay inventario para juego ${gameId}`);
+  }
+  
+  return productsCountByPlayer;
 };
 
 // Función para actualizar y emitir el ranking de jugadores
@@ -895,17 +1543,23 @@ const updateAndEmitPlayerRankings = (gameId) => {
   console.log(`🏆 Actualizando ranking para juego ${gameId}`);
   console.log(`🏆 Jugadores en la sala:`, room.players.map(p => ({ userId: p.userId, userName: p.userName })));
   
+  // Obtener número de productos en inventario de cada jugador
+  const productsCountByPlayer = getProductsCountByPlayer(gameId);
+  
   // Crear lista completa de jugadores con sus datos actualizados
   const playerData = room.players.map(player => {
     const ranking = gameRanking.get(player.userId) || { blocksMined: 0, totalRewards: 0 };
     const inventory = getPlayerInventory(gameId, player.userId);
+    
+    // Usar el número de productos en inventario
+    const productsCount = productsCountByPlayer.get(player.userId) || 0;
     
     const playerInfo = {
       userId: player.userId,
       userName: player.userName,
       rockCoins: inventory.rockCoins,
       waste: inventory.waste,
-      blocksMined: ranking.blocksMined,
+      blocksMined: productsCount, // Número de productos en inventario
       totalRewards: ranking.totalRewards,
       readyForNextRound: player.readyForNextRound || false
     };
@@ -913,6 +1567,7 @@ const updateAndEmitPlayerRankings = (gameId) => {
     console.log(`🏆 Datos del jugador ${player.userName}:`, {
       rockCoins: playerInfo.rockCoins,
       waste: playerInfo.waste,
+      blocksMined: playerInfo.blocksMined,
       balance: playerInfo.rockCoins - playerInfo.waste
     });
     
@@ -929,7 +1584,14 @@ const updateAndEmitPlayerRankings = (gameId) => {
     return a.userName.localeCompare(b.userName); // Orden alfabético si empatan
   });
   
-  console.log(`📡 Emitiendo player_rankings_data actualizado a ${gameId}:`, { gameId, playerData });
+  console.log(`📡 [RANKING] Emitiendo player_rankings_data actualizado a ${gameId}`);
+  console.log(`📡 [RANKING] Resumen de blocksMined por jugador:`, playerData.map(p => ({
+    userName: p.userName,
+    userId: p.userId,
+    blocksMined: p.blocksMined,
+    rockCoins: p.rockCoins,
+    waste: p.waste
+  })));
   emitToGame(gameId, 'player_rankings_data', { gameId, playerData });
 };
 
@@ -958,8 +1620,27 @@ const getPlayerInventory = (gameId, userId) => {
 // Función helper para actualizar el inventario de un jugador
 const updatePlayerInventory = (gameId, userId, updates) => {
   const inventory = getPlayerInventory(gameId, userId);
+  
+  // Asegurar que products siempre sea un array
+  if (updates.products !== undefined) {
+    updates.products = Array.isArray(updates.products) ? updates.products : [];
+  }
+  
   Object.assign(inventory, updates);
-  console.log(`📦 Inventario actualizado para ${userId} en ${gameId}:`, inventory);
+  
+  // Asegurar que el inventario actualizado esté guardado en el Map
+  const gameInventory = playerInventories.get(gameId);
+  if (gameInventory) {
+    gameInventory.set(userId, inventory);
+  }
+  
+  console.log(`📦 [INVENTORY] Inventario actualizado para ${userId} en ${gameId}:`, {
+    productsCount: inventory.products?.length || 0,
+    products: inventory.products,
+    rockCoins: inventory.rockCoins,
+    waste: inventory.waste
+  });
+  
   return inventory;
 };
 
@@ -1164,6 +1845,133 @@ const getPendingCountForUser = (userId) => {
   return pendingCount;
 };
 
+// Función para cerrar bloques no respondidos y asignarlos a external miner
+const closeUnansweredBlocks = (gameId, round) => {
+  console.log(`🔒 [ROUND][CLEANUP] Cerrando bloques no respondidos de ronda ${round} para juego ${gameId}`);
+  
+  const room = getGameRoom(gameId);
+  const blocksToClose = [];
+  
+  // Buscar todos los problemas activos de este juego que no tienen ganador
+  for (const [blockId, blockData] of miningResponses.entries()) {
+    // Verificar que el bloque pertenece a este juego
+    if (!blockId.startsWith(gameId + '-')) continue;
+    
+    // Verificar que el bloque está activo y no completado
+    if (blockData.state === 'active' || (!blockData.isCompleted && blockData.responses.length === 0)) {
+      // Obtener el problema
+      const problemData = miningProblems.get(blockId);
+      if (problemData) {
+        // Verificar si el bloque pertenece a esta ronda
+        const block = getMinedBlocks(gameId).find(b => b.id === blockId);
+        const blockRound = block?.round;
+        
+        // Si no existe en minedBlocks (problema pendiente sin minar), pertenece a la ronda actual
+        // Si existe y pertenece a esta ronda, también cerrarlo
+        if (!block || blockRound === round) {
+          blocksToClose.push({ blockId, blockData, problemData });
+        }
+      }
+    }
+  }
+  
+  console.log(`🔒 [ROUND][CLEANUP] ${blocksToClose.length} bloques no respondidos encontrados`);
+  
+  // Cerrar cada bloque y asignarlo a external miner
+  for (const { blockId, blockData, problemData } of blocksToClose) {
+    console.log(`🔒 [ROUND][CLEANUP] Cerrando bloque ${blockId} y asignándolo a external miner`);
+    
+    // Verificar si el bloque ya existe en minedBlocks
+    const existingBlock = getMinedBlocks(gameId).find(b => b.id === blockId);
+    
+    if (!existingBlock) {
+      // Crear bloque minado por external miner
+      const externalMinerBlock = {
+        id: blockId,
+        winner: {
+          userId: 'external_miner',
+          userName: 'External Miner',
+          response: null,
+          isCorrect: true, // External miner siempre tiene razón
+          elapsed: null,
+          responseTime: null,
+          timestamp: Date.now()
+        },
+        round: round, // Usar la ronda actual
+        timestamp: Date.now(),
+        responses: [],
+        isExternalMiner: true
+      };
+      
+      addMinedBlock(gameId, externalMinerBlock);
+      console.log(`✅ [ROUND][CLEANUP] Bloque ${blockId} añadido como external miner para ronda ${round}`);
+    }
+    
+    // Marcar como completado en miningResponses
+    blockData.state = 'completed';
+    blockData.isCompleted = true;
+    blockData.completedAt = Date.now();
+    
+    // Limpiar de miningProblems y miningResponses (no se acumulan para siguiente ronda)
+    miningProblems.delete(blockId);
+    miningResponses.delete(blockId);
+    
+    console.log(`🧹 [ROUND][CLEANUP] Bloque ${blockId} limpiado de miningProblems y miningResponses`);
+  }
+  
+  // Limpiar problemas activos de la ronda anterior que puedan quedar
+  cleanupOldRoundProblems(gameId, round);
+};
+
+// Función para limpiar problemas de rondas anteriores
+const cleanupOldRoundProblems = (gameId, currentRound) => {
+  console.log(`🧹 [ROUND][CLEANUP] Limpiando problemas de rondas anteriores a ${currentRound}`);
+  
+  const blocksToRemove = [];
+  
+  // Buscar todos los problemas que pertenecen a rondas anteriores
+  for (const [blockId, problemData] of miningProblems.entries()) {
+    if (!blockId.startsWith(gameId + '-')) continue;
+    
+    const block = getMinedBlocks(gameId).find(b => b.id === blockId);
+    const blockData = miningResponses.get(blockId);
+    
+    if (block && block.round < currentRound) {
+      // Bloque de ronda anterior, eliminarlo
+      blocksToRemove.push(blockId);
+    } else if (!block && blockData) {
+      // Si no existe en minedBlocks y está activo, es un problema pendiente viejo, limpiarlo
+      if (blockData.state === 'active' || !blockData.isCompleted) {
+        blocksToRemove.push(blockId);
+      }
+    }
+  }
+  
+  // También limpiar problemas en miningResponses que no tienen problema asociado
+  for (const [blockId, blockData] of miningResponses.entries()) {
+    if (!blockId.startsWith(gameId + '-')) continue;
+    
+    const problemData = miningProblems.get(blockId);
+    const block = getMinedBlocks(gameId).find(b => b.id === blockId);
+    
+    // Si no tiene problema asociado y no está en minedBlocks, eliminarlo
+    if (!problemData && !block && (blockData.state === 'active' || !blockData.isCompleted)) {
+      if (!blocksToRemove.includes(blockId)) {
+        blocksToRemove.push(blockId);
+      }
+    }
+  }
+  
+  // Eliminar problemas de rondas anteriores
+  for (const blockId of blocksToRemove) {
+    miningProblems.delete(blockId);
+    miningResponses.delete(blockId);
+    console.log(`🧹 [ROUND][CLEANUP] Problema ${blockId} eliminado (ronda anterior)`);
+  }
+  
+  console.log(`🧹 [ROUND][CLEANUP] ${blocksToRemove.length} problemas de rondas anteriores eliminados`);
+};
+
 // Función helper para obtener bloques minados
 const getMinedBlocks = (gameId) => {
   if (!minedBlocks.has(gameId)) {
@@ -1335,42 +2143,133 @@ io.on('connection', (socket) => {
     
     // Generar productos para la Ronda 1
     console.log(`🏪 [START_GAME] Generando productos para Ronda 1...`);
-    generateMarketForRound(gameId, 1).then(marketData => {
-      console.log(`✅ [START_GAME] Productos generados para Ronda 1: ${marketData.products.length} productos`);
+    generateMarketForRound(gameId, 1).then(async (marketData) => {
+      if (!marketData) {
+        console.error(`❌ [START_GAME] marketData es null/undefined`);
+        return;
+      }
       
-      // Emitir economy:state para que el cliente reciba los productos
+      if (!marketData.products || !Array.isArray(marketData.products)) {
+        console.error(`❌ [START_GAME] marketData.products no es válido:`, marketData);
+        return;
+      }
+      
+      if (!marketData.legacy) {
+        console.error(`❌ [START_GAME] marketData.legacy no está disponible:`, marketData);
+      }
+      
+      console.log(`✅ [START_GAME] Productos generados para Ronda 1: ${marketData.products.length} productos`);
+      console.log(`✅ [START_GAME] Legacy disponible:`, !!marketData.legacy);
+      
+      // PRIMERO: Enviar inventario actualizado a todos los jugadores
+      console.log(`📦 [START_GAME] Enviando inventarios actualizados a todos los jugadores...`);
+      for (const player of room.players) {
+        const inventory = getPlayerInventory(gameId, player.userId);
+        const playerSocketId = playerSockets.get(player.userId);
+        
+        if (playerSocketId) {
+          console.log(`📦 [START_GAME] Enviando inventario a ${player.userName} (${player.userId}):`, {
+            rockCoins: inventory.rockCoins,
+            waste: inventory.waste,
+            products: inventory.products?.length || 0
+          });
+          io.to(playerSocketId).emit('inventory_data', {
+            gameId,
+            userId: player.userId,
+            inventory: {
+              rockCoins: inventory.rockCoins,
+              waste: inventory.waste,
+              products: inventory.products || []
+            }
+          });
+        }
+      }
+      console.log(`✅ [START_GAME] Inventarios enviados a todos los jugadores`);
+      
+      // Pequeña pausa para asegurar que el frontend recibe el inventario
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // DESPUÉS: Emitir economy:state para que el cliente reciba los productos
       console.log(`📡 [START_GAME] Emitiendo economy:state para Ronda 1...`);
       const roundId = `${gameId}:1:${Date.now()}`;
       const version = 1;
+      
+      // Validar productos antes de emitir (MISMO MECANISMO QUE RONDA 2+)
+      const validProducts = (marketData.products || []).filter(p => 
+        p && 
+        typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) && p.currentPrice > 0 &&
+        typeof p.waste === 'number' && !isNaN(p.waste) && p.waste > 0 &&
+        p.marbleType && p.type && p.quality
+      );
+      
+      if (validProducts.length === 0 && marketData.products && marketData.products.length > 0) {
+        console.error(`❌ [START_GAME] Todos los productos tienen valores inválidos!`);
+        console.error(`❌ [START_GAME] Primeros 3 productos:`, marketData.products.slice(0, 3));
+        // Aún así emitir los productos originales para no bloquear el juego
+      }
+      
+      console.log(`🔍 [START_GAME] Productos válidos: ${validProducts.length}/${marketData.products?.length || 0}`);
+      
+      // CRÍTICO: Guardar productList en el room ANTES de emitir
+      const finalProducts = validProducts.length > 0 ? validProducts : marketData.products;
+      room.productList = finalProducts;
+      console.log(`💾 [START_GAME] productList guardado en room: ${room.productList.length} productos`);
+      
+      // Sincronizar productList con Firestore INMEDIATAMENTE
+      if (admin.apps.length) {
+        try {
+          const gameRef = admin.firestore().collection('games').doc(gameId);
+          await gameRef.update({
+            productList: finalProducts,
+            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          });
+          console.log(`✅ [START_GAME] productList sincronizado con Firestore: ${finalProducts.length} productos`);
+        } catch (error) {
+          console.error(`❌ [START_GAME] Error sincronizando productList con Firestore:`, error);
+        }
+      }
+      
+      // MISMA ESTRUCTURA QUE RONDA 2+ - SIN campos extra (round, seed)
       emitToGame(gameId, 'economy:state', {
         roundId: roundId,
         version: version,
         round: 1,
         market: {
-          products: marketData.products,
-          round: 1,
-          seed: marketData.seed
+          products: finalProducts, // Usar productos válidos si hay, sino originales
+          legacy: marketData.legacy || {} // Incluir legacy (vacío si no está disponible)
         }
       });
-      console.log(`✅ [START_GAME] economy:state emitido para Ronda 1`);
+      console.log(`✅ [START_GAME] economy:state emitido para Ronda 1 con ${validProducts.length || marketData.products?.length || 0} productos`);
+      
+      // EMITIR game_status DESPUÉS de que economy:state se haya enviado
+      console.log(`📡 [START_GAME] Emitiendo game_status después de economy:state...`);
+    emitToGame(gameId, 'game_status', {
+      status: 'starting',
+      round: 1,
+      message: 'Game starting in 3 seconds...'
+      });
+      console.log(`✅ [START_GAME] game_status emitido`);
     }).catch(error => {
       console.error(`❌ [START_GAME] Error generando productos para Ronda 1:`, error);
+      console.error(`❌ [START_GAME] Stack trace:`, error.stack);
+      // Emitir game_status incluso si hay error para no bloquear el juego
+      emitToGame(gameId, 'game_status', {
+        status: 'starting',
+        round: 1,
+        message: 'Game starting in 3 seconds...'
+      });
     });
     
     // Sincronizar con Firestore
     syncGameToFirestore(gameId, room);
     
-    console.log(`📡 Emitiendo game_status a sala ${gameId} con ${room.players.length} jugadores`);
+    console.log(`📡 [START_GAME] Sincronizado con Firestore`);
     console.log(`👥 Jugadores en la sala:`, room.players.map(p => ({ userId: p.userId, socketId: p.socketId })));
     
-    // Emitir a todos los jugadores
-    emitToGame(gameId, 'game_status', {
-      status: 'starting',
-      round: 1,
-      message: 'Game starting in 3 seconds...'
-    });
+    // NOTA: game_status se emite dentro del .then() de generateMarketForRound
+    // para asegurar que se envía después de economy:state
     
-    console.log(`✅ Juego ${gameId} iniciado por host ${userId}`);
+    console.log(`✅ [START_GAME] Handler completado para juego ${gameId} iniciado por host ${userId}`);
   });
 
   // Jugador listo para jugar (después del countdown de 3s)
@@ -1409,6 +2308,10 @@ io.on('connection', (socket) => {
       room.roundTime = new Date(authority.roundEndsAtMs); // Mantener compatibilidad
       room.readyPlayers.clear();
       
+      // CRÍTICO: Establecer estado del juego a PLAYING para que handleRoundEnd funcione
+      setGameState(gameId, GAME_STATES.PLAYING, room.round);
+      console.log(`🎮 [READY_TO_PLAY] Estado del juego establecido a PLAYING para ronda ${room.round}`);
+      
       // Marcar operación como aplicada
       markOperationApplied(gameId, operationId);
       
@@ -1433,6 +2336,7 @@ io.on('connection', (socket) => {
         round: room.round,
         winningIndustry: room.winningIndustry,
         roundTime: new Date(authority.roundEndsAtMs).toISOString(),
+        roundEndsAtMs: authority.roundEndsAtMs, // CRÍTICO: Incluir explícitamente para que el timer funcione
         message: 'Ronda iniciada'
       });
       
@@ -1518,12 +2422,130 @@ io.on('connection', (socket) => {
     }
     
     // Marcar jugador como listo
-    const player = room.players.find(p => p.userId === userId);
+    let player = room.players.find(p => p.userId === userId);
+    
+    // Si el jugador no está en la sala pero el juego está en progreso, intentar restaurarlo desde Firestore
+    if (!player && room.status !== 'waiting') {
+      console.log(`🔄 [ROUND:READY] Jugador ${userId} no encontrado en sala, intentando restaurar desde Firestore...`);
+      
+      try {
+        // PRIMERO: Asegurarse de que el socket está unido a la sala
+        socket.join(gameId);
+        
+        // Guardar referencia del socket
+        playerSockets.set(userId, socket.id);
+        
+        // Intentar obtener datos del jugador desde Firestore
+        if (admin.apps.length) {
+          // Primero intentar obtener desde el documento del juego directamente
+          const gameRef = admin.firestore().collection('games').doc(gameId);
+          const gameDoc = await gameRef.get();
+          
+          let userName = 'Unknown';
+          let userImageUrl = null;
+          
+          if (gameDoc.exists) {
+            const gameData = gameDoc.data();
+            const playerData = gameData?.players?.find(p => p.userId === userId);
+            if (playerData) {
+              userName = playerData.userName || 'Unknown';
+              userImageUrl = playerData.imageUrl;
+            }
+          }
+          
+          // Si no encontramos en el juego, buscar en el documento del usuario
+          if (userName === 'Unknown') {
+            const userRef = admin.firestore().collection('users').doc(userId);
+            const userDoc = await userRef.get();
+            
+            if (userDoc.exists) {
+              const userData = userDoc.data();
+              const gameUserData = userData?.games?.[gameId];
+              if (gameUserData) {
+                userName = gameUserData.userName || userData.userName || 'Unknown';
+                userImageUrl = userData.imageUrl;
+              } else {
+                userName = userData.userName || 'Unknown';
+                userImageUrl = userData.imageUrl;
+              }
+            }
+          }
+          
+          // Crear jugador restaurado
+          const restoredPlayer = {
+            userId: userId,
+            userName: userName,
+            socketId: socket.id,
+            imageUrl: userImageUrl,
+            readyForNextRound: false
+          };
+          
+          room.players.push(restoredPlayer);
+          
+          // CRÍTICO: NO restaurar inventario desde Firestore aquí porque puede tener valores antiguos
+          // El inventario en memoria (si existe) ya tiene los rewards aplicados
+          // Solo inicializar si NO existe en memoria
+          if (!playerInventories.has(gameId)) {
+            playerInventories.set(gameId, new Map());
+          }
+          const gameInventory = playerInventories.get(gameId);
+          
+          // Solo inicializar inventario si NO existe en memoria
+          if (!gameInventory.has(userId)) {
+            // Si no existe en memoria, intentar restaurar desde Firestore como último recurso
+            const userRef = admin.firestore().collection('users').doc(userId);
+            const userDoc = await userRef.get();
+            if (userDoc.exists) {
+              const userData = userDoc.data();
+              const gameData = userData?.games?.[gameId];
+              
+              if (gameData) {
+                const restoredInventory = {
+                  products: Array.isArray(gameData.products) ? gameData.products : [],
+                  rockCoins: typeof gameData.rockCoins === 'number' ? gameData.rockCoins : 600,
+                  waste: typeof gameData.waste === 'number' ? gameData.waste : 0
+                };
+                
+                gameInventory.set(userId, restoredInventory);
+                console.log(`⚠️ [ROUND:READY] Inventario inicializado desde Firestore para ${userId} (no existía en memoria):`, restoredInventory);
+              } else {
+                // Si no hay datos en Firestore, inicializar con defaults
+                gameInventory.set(userId, { products: [], rockCoins: 600, waste: 0 });
+                console.log(`⚠️ [ROUND:READY] Inventario inicializado con defaults para ${userId} (no existía en memoria ni Firestore)`);
+              }
+            } else {
+              // Si no existe el usuario en Firestore, inicializar con defaults
+              gameInventory.set(userId, { products: [], rockCoins: 600, waste: 0 });
+              console.log(`⚠️ [ROUND:READY] Inventario inicializado con defaults para ${userId} (usuario no existe en Firestore)`);
+            }
+          } else {
+            // Inventario ya existe en memoria - NO sobrescribir (tiene rewards aplicados)
+            const existingInventory = gameInventory.get(userId);
+            console.log(`✅ [ROUND:READY] Inventario en memoria ya existe para ${userId} (NO restaurando desde Firestore):`, {
+              rockCoins: existingInventory?.rockCoins,
+              waste: existingInventory?.waste,
+              productsCount: existingInventory?.products?.length || 0
+            });
+          }
+          
+          player = restoredPlayer;
+          console.log(`✅ [ROUND:READY] Jugador ${userId} restaurado desde Firestore: ${userName}`);
+        } else {
+          console.error(`❌ [ROUND:READY] Firebase Admin no inicializado`);
+        }
+      } catch (error) {
+        console.error(`❌ [ROUND:READY] Error restaurando jugador desde Firestore:`, error);
+        console.error(`❌ [ROUND:READY] Stack trace:`, error.stack);
+      }
+    }
+    
     if (player) {
+      // Actualizar socketId por si cambió
+      player.socketId = socket.id;
       player.readyForNextRound = true;
       console.log(`✅ [ROUND:READY] Jugador ${userId} marcado como listo`);
     } else {
-      console.error(`❌ [ROUND:READY] Jugador ${userId} no encontrado en la sala`);
+      console.error(`❌ [ROUND:READY] Jugador ${userId} no encontrado en la sala y no se pudo restaurar`);
       socket.emit('round:ready:error', { 
         message: 'Jugador no encontrado en la sala',
         currentStatus: room.status
@@ -1583,6 +2605,11 @@ io.on('connection', (socket) => {
         room.round = nextRound;
         room.status = 'starting';
         
+        // CRÍTICO: Resetear winningIndustry para la nueva ronda (aleatorio)
+        const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
+        room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
+        console.log(`🏭 [ROUND:READY] winningIndustry reseteado para ronda ${nextRound}: ${room.winningIndustry}`);
+        
         // CREAR ESTADO AUTORITATIVO PARA LA NUEVA RONDA (countdown de 3s)
         const authority = createAuthoritativeRoundData(gameId, nextRound, 3000);
         room.roundTime = new Date(authority.roundEndsAtMs); // Mantener compatibilidad
@@ -1596,19 +2623,234 @@ io.on('connection', (socket) => {
         // 4. SINCRONIZAR CON FIRESTORE
         await syncGameToFirestore(gameId, room);
         
-        // 5. EMITIR EVENTOS EN ORDEN CORRECTO
+        // 5. ENVIAR INVENTARIO ACTUALIZADO A TODOS LOS JUGADORES PRIMERO
+        // CRÍTICO: Los inventarios en memoria ya tienen los rewards aplicados (de calculateRoundRewards)
+        // NO debemos restaurar desde Firestore porque puede tener valores antiguos
+        // Usar los valores en memoria como fuente de verdad
+        console.log(`📦 [ROUND:READY] Enviando inventarios actualizados a todos los jugadores (valores en memoria con rewards)...`);
+        for (const player of room.players) {
+          let inventory = getPlayerInventory(gameId, player.userId);
+          
+          // CRÍTICO: Verificar que el inventario en memoria tenga valores válidos
+          console.log(`🔍 [ROUND:READY] Inventario RAW en memoria para ${player.userId}:`, {
+            rockCoins: inventory?.rockCoins,
+            waste: inventory?.waste,
+            productsCount: inventory?.products?.length || 0,
+            type: typeof inventory?.rockCoins
+          });
+          
+          // Validar y normalizar valores en memoria (que ya incluyen rewards)
+          let rockCoins = typeof inventory.rockCoins === 'number' && !isNaN(inventory.rockCoins) && isFinite(inventory.rockCoins)
+            ? Math.max(0, Math.round(inventory.rockCoins))
+            : 600;
+          let waste = typeof inventory.waste === 'number' && !isNaN(inventory.waste) && isFinite(inventory.waste)
+            ? Math.max(0, Math.round(inventory.waste))
+            : 0;
+          let products = Array.isArray(inventory.products) ? inventory.products : [];
+          
+          // CRÍTICO: Si el valor normalizado es 600 (default) en una ronda > 1, podría significar que los rewards no se aplicaron
+          // Verificar en Firestore para confirmar y corregir
+          if (rockCoins === 600 && currentRound > 1) {
+            console.warn(`⚠️ [ROUND:READY] VALOR POR DEFECTO DETECTADO para ${player.userId} en ronda ${currentRound}! Verificando Firestore...`);
+            try {
+              if (admin.apps.length) {
+                const userRef = admin.firestore().collection('users').doc(player.userId);
+                const userDoc = await userRef.get();
+                if (userDoc.exists) {
+                  const userData = userDoc.data();
+                  const gameData = userData?.games?.[gameId];
+                  if (gameData && typeof gameData.rockCoins === 'number' && gameData.rockCoins !== 600) {
+                    console.warn(`⚠️ [ROUND:READY] Firestore tiene ${gameData.rockCoins} pero memoria tiene ${rockCoins}. Usando Firestore como corrección...`);
+                    // Usar valor de Firestore si es diferente y parece más actualizado
+                    rockCoins = gameData.rockCoins;
+                    waste = typeof gameData.waste === 'number' ? gameData.waste : waste;
+                    products = Array.isArray(gameData.products) ? gameData.products : products;
+                    
+                    // Actualizar inventario en memoria con valores corregidos
+                    inventory.rockCoins = rockCoins;
+                    inventory.waste = waste;
+                    inventory.products = products;
+                    
+                    const gameInventory = playerInventories.get(gameId) || new Map();
+                    gameInventory.set(player.userId, inventory);
+                    playerInventories.set(gameId, gameInventory);
+                    
+                    console.log(`✅ [ROUND:READY] Inventario corregido desde Firestore para ${player.userId}:`, {
+                      rockCoins: rockCoins,
+                      waste: waste,
+                      productsCount: products.length
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              console.error(`❌ [ROUND:READY] Error verificando Firestore para corrección:`, error);
+            }
+          }
+          
+          // Actualizar inventario en memoria con valores normalizados (o corregidos)
+          inventory.rockCoins = rockCoins;
+          inventory.waste = waste;
+          inventory.products = products;
+          
+          const gameInventory = playerInventories.get(gameId) || new Map();
+          gameInventory.set(player.userId, inventory);
+          playerInventories.set(gameId, gameInventory);
+          
+          console.log(`📦 [ROUND:READY] Inventario FINAL en memoria para ${player.userId} (con rewards aplicados):`, {
+            rockCoins: rockCoins,
+            waste: waste,
+            productsCount: products.length,
+            note: 'Valores que se enviarán al cliente'
+          });
+          
+          // Verificar Firestore para logging/debugging, pero NO sobrescribir memoria
+          try {
+            if (admin.apps.length) {
+              const userRef = admin.firestore().collection('users').doc(player.userId);
+              const userDoc = await userRef.get();
+              if (userDoc.exists) {
+                const userData = userDoc.data();
+                const gameData = userData?.games?.[gameId];
+                
+                if (gameData) {
+                  const firestoreRockCoins = typeof gameData.rockCoins === 'number' ? gameData.rockCoins : null;
+                  const firestoreWaste = typeof gameData.waste === 'number' ? gameData.waste : null;
+                  
+                  console.log(`🔍 [ROUND:READY] Comparación para ${player.userId}:`, {
+                    enMemoria: { rockCoins, waste },
+                    enFirestore: { rockCoins: firestoreRockCoins, waste: firestoreWaste },
+                    coinciden: firestoreRockCoins === rockCoins && firestoreWaste === waste
+                  });
+                  
+                  // Si Firestore tiene valores diferentes, actualizar Firestore con los valores de memoria (autoritativos)
+                  if (firestoreRockCoins !== rockCoins || firestoreWaste !== waste) {
+                    console.warn(`⚠️ [ROUND:READY] Firestore desincronizado para ${player.userId}, actualizando Firestore con valores de memoria...`);
+                    await userRef.update({
+                      [`games.${gameId}.rockCoins`]: rockCoins,
+                      [`games.${gameId}.waste`]: waste,
+                      [`games.${gameId}.products`]: products,
+                      [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log(`✅ [ROUND:READY] Firestore actualizado con valores de memoria para ${player.userId}`);
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`❌ [ROUND:READY] Error verificando Firestore para ${player.userId}:`, error);
+          }
+          
+          const playerSocketId = playerSockets.get(player.userId);
+          
+          if (playerSocketId) {
+            console.log(`📦 [ROUND:READY] Enviando inventario actualizado a ${player.userName} (${player.userId}):`, {
+              rockCoins: rockCoins,
+              waste: waste,
+              productsCount: products.length,
+              note: 'Valores normalizados de memoria (con rewards aplicados)'
+            });
+            
+            // Enviar valores normalizados (que ya incluyen rewards)
+            io.to(playerSocketId).emit('inventory_data', {
+              gameId,
+              userId: player.userId,
+              inventory: {
+                rockCoins: rockCoins,
+                waste: waste,
+                products: products,
+                miningQueue: inventory.miningQueue || 0
+              }
+            });
+            
+            // También enviar a la sala del juego como backup
+            io.to(gameId).emit('inventory_data', {
+              gameId,
+              userId: player.userId,
+              inventory: {
+                rockCoins: rockCoins,
+                waste: waste,
+                products: products,
+                miningQueue: inventory.miningQueue || 0
+              }
+            });
+            
+            console.log(`✅ [ROUND:READY] inventory_data enviado a ${player.userName} (${player.userId}) con valores:`, {
+              rockCoins: rockCoins,
+              waste: waste,
+              productsCount: products.length
+            });
+          } else {
+            console.warn(`⚠️ [ROUND:READY] No se encontró socketId para ${player.userId}, enviando a sala del juego...`);
+            // Enviar a la sala del juego como fallback
+            io.to(gameId).emit('inventory_data', {
+              gameId,
+              userId: player.userId,
+              inventory: {
+                rockCoins: rockCoins,
+                waste: waste,
+                products: products,
+                miningQueue: 0
+              }
+            });
+          }
+        }
+        console.log(`✅ [ROUND:READY] Inventarios enviados a todos los jugadores`);
+        
+        // Pequeña pausa para asegurar que el frontend recibe el inventario antes de iniciar
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 6. EMITIR EVENTOS EN ORDEN CORRECTO
         console.log(`📡 [ROUND:READY] Emitiendo eventos de transición...`);
         
         // PRIMERO: economy:state (hidrata mercado en UI) CON ESTADO AUTORITATIVO
         const roundId = `${gameId}:${nextRound}:${Date.now()}`;
         const version = nextRound;
+        
+        // Validar productos antes de emitir
+        const validProducts = (newMarket.products || []).filter(p => 
+          p && 
+          typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) && p.currentPrice > 0 &&
+          typeof p.waste === 'number' && !isNaN(p.waste) && p.waste > 0 &&
+          p.marbleType && p.type && p.quality
+        );
+        
+        if (validProducts.length === 0 && newMarket.products && newMarket.products.length > 0) {
+          console.error(`❌ [ROUND:READY] Todos los productos tienen valores inválidos!`);
+          console.error(`❌ [ROUND:READY] Primeros 3 productos:`, newMarket.products.slice(0, 3));
+        }
+        
+        console.log(`🔍 [ROUND:READY] Productos válidos: ${validProducts.length}/${newMarket.products?.length || 0}`);
+        
+        // CRÍTICO: Guardar productList en el room ANTES de emitir
+        const finalProducts = validProducts.length > 0 ? validProducts : newMarket.products;
+        room.productList = finalProducts;
+        console.log(`💾 [ROUND:READY] productList guardado en room: ${room.productList.length} productos`);
+        
+        // Sincronizar productList con Firestore INMEDIATAMENTE
+        if (admin.apps.length) {
+          try {
+            const gameRef = admin.firestore().collection('games').doc(gameId);
+            await gameRef.update({
+              productList: finalProducts,
+              lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`✅ [ROUND:READY] productList sincronizado con Firestore: ${finalProducts.length} productos`);
+          } catch (error) {
+            console.error(`❌ [ROUND:READY] Error sincronizando productList con Firestore:`, error);
+          }
+        }
+        
         emitToGame(gameId, 'economy:state', {
           roundId: roundId,
           version: version,
           round: nextRound,
-          market: newMarket
+          market: {
+            products: finalProducts, // Usar productos válidos si hay, sino originales
+            legacy: newMarket.legacy // SIEMPRE incluir legacy para ChatScreen
+          }
         });
-        console.log(`✅ [ROUND:READY] EMIT economy:state autoritativo (${nextRound})`);
+        console.log(`✅ [ROUND:READY] EMIT economy:state autoritativo (${nextRound}) con ${finalProducts.length} productos`);
         
         // SEGUNDO: game_status starting (dispara countdown) CON ESTADO AUTORITATIVO
         emitAuthoritativeState(gameId, 'game_status', {
@@ -1641,6 +2883,120 @@ io.on('connection', (socket) => {
           message: `Starting round ${nextRound} in 3 seconds...`
         });
         
+        // PROGRAMAR EMISIÓN AUTOMÁTICA DE start_round DESPUÉS DEL COUNTDOWN
+        // Esto asegura que el evento se emita incluso si el cliente no envía start_round_request
+        console.log(`⏰ [ROUND:READY] Programando emisión automática de start_round después de 3 segundos para ronda ${nextRound}...`);
+        const autoStartTimeout = setTimeout(() => {
+          console.log(`⏰ [ROUND:READY] ===== TIMEOUT AUTOMÁTICO EJECUTADO =====`);
+          const currentRoom = getGameRoom(gameId);
+          const currentAuthority = getGameAuthority(gameId);
+          
+          console.log(`⏰ [ROUND:READY] Verificando estado antes de emitir automáticamente:`, {
+            roomExists: !!currentRoom,
+            currentRound: currentRoom?.round,
+            expectedRound: nextRound,
+            status: currentRoom?.status
+          });
+          
+          // Verificar que aún estamos en el estado correcto
+          if (!currentRoom) {
+            console.error(`❌ [ROUND:READY] Sala no encontrada durante emisión automática`);
+            return;
+          }
+          
+          if (currentRoom.round !== nextRound) {
+            console.log(`⚠️ [ROUND:READY] Ronda cambió durante el countdown (${currentRoom.round} vs ${nextRound}), cancelando emisión automática`);
+            return;
+          }
+          
+          // CRÍTICO: Siempre emitir si estamos en 'starting' o 'waiting'
+          // Si el cliente ya envió start_round_request, el estado será 'in_progress' y no emitiremos
+          if (currentRoom.status === 'starting' || currentRoom.status === 'waiting') {
+            console.log(`🚀 [ROUND:READY] ===== INICIANDO RONDA ${nextRound} (IGUAL QUE RONDA 1) =====`);
+            console.log(`🚀 [ROUND:READY] Emitiendo start_round automáticamente después del countdown para ronda ${nextRound}`);
+            console.log(`🚀 [ROUND:READY] Estado actual: ${currentRoom.status}, cambiando a 'in_progress'`);
+            
+            // CREAR ESTADO AUTORITATIVO PARA LA RONDA (IGUAL QUE RONDA 1)
+            const authority = createAuthoritativeRoundData(gameId, nextRound, 120000);
+            console.log(`🚀 [ROUND:READY] Estado autoritativo creado (igual que ronda 1):`, {
+              roundEndsAtMs: authority.roundEndsAtMs,
+              roundTime: new Date(authority.roundEndsAtMs).toISOString(),
+              roundId: authority.roundId,
+              version: authority.version
+            });
+            
+            // Verificar idempotencia para evitar duplicados (IGUAL QUE RONDA 1)
+            const operationId = createOperationId(gameId, 'start_round', authority.roundId, authority.version);
+            if (isOperationApplied(gameId, operationId)) {
+              console.log(`🔄 [IDEMPOTENCY] start_round ya aplicado para ${gameId}, omitiendo`);
+              return;
+            }
+            
+            // Actualizar estado de la sala con datos autoritativos (IGUAL QUE RONDA 1)
+            currentRoom.status = 'in_progress';
+            currentRoom.roundTime = new Date(authority.roundEndsAtMs); // Mantener compatibilidad
+            currentRoom.readyPlayers.clear();
+            
+            // CRÍTICO: Establecer estado del juego a PLAYING para que handleRoundEnd funcione (IGUAL QUE RONDA 1)
+            setGameState(gameId, GAME_STATES.PLAYING, nextRound);
+            console.log(`🎮 [ROUND:READY] Estado del juego establecido a PLAYING para ronda ${nextRound}`);
+            
+            // Marcar operación como aplicada (IGUAL QUE RONDA 1)
+            markOperationApplied(gameId, operationId);
+            
+            // Timer automático para terminar la ronda cuando se acabe el tiempo (IGUAL QUE RONDA 1)
+            // NOTA: setTimeout no puede ser async directamente, pero el callback puede serlo
+            setTimeout(() => {
+              (async () => {
+                console.log(`⏰ [ROUND] Timer ended → preparing results for round=${nextRound} gameId=${gameId}`);
+                
+                // Verificar que la ronda aún esté activa
+                const currentRoomCheck = getGameRoom(gameId);
+                const currentAuthorityCheck = getGameAuthority(gameId);
+                if (currentRoomCheck && currentRoomCheck.status === 'in_progress' && 
+                    currentRoomCheck.round === nextRound && 
+                    currentAuthorityCheck.roundId === authority.roundId) {
+                  // Llamar directamente a la lógica de fin de ronda
+                  await handleRoundEnd(gameId, currentRoomCheck.round);
+                }
+              })();
+            }, 120000); // 120 segundos (2 minutos) - IGUAL QUE RONDA 1
+            
+            // EMITIR ESTADO AUTORITATIVO (IGUAL QUE RONDA 1)
+            const startRoundPayload = {
+              gameId,
+              round: nextRound,
+              winningIndustry: currentRoom.winningIndustry || 'Technology',
+              roundTime: new Date(authority.roundEndsAtMs).toISOString(),
+              roundEndsAtMs: authority.roundEndsAtMs, // CRÍTICO: Incluir explícitamente para que el timer funcione
+              message: `Round ${nextRound} started!`
+            };
+            
+            console.log(`🚀 [ROUND:READY] Emitiendo start_round con payload (igual que ronda 1):`, startRoundPayload);
+            emitAuthoritativeState(gameId, 'start_round', startRoundPayload);
+            
+            // Track round start (IGUAL QUE RONDA 1)
+            trackRoundStart(gameId, nextRound);
+            
+            console.log(`✅ [ROUND:READY] start_round autoritativo emitido exitosamente a juego ${gameId} (igual que ronda 1)`);
+            
+            // Sincronizar con Firestore al terminar la ronda (IGUAL QUE RONDA 1)
+            // NOTA: syncGameToFirestore es async, pero estamos en un setTimeout, así que lo hacemos sin await
+            syncGameToFirestore(gameId, currentRoom).catch(err => {
+              console.error(`❌ [ROUND:READY] Error sincronizando con Firestore:`, err);
+            });
+            
+            console.log(`✅ [ROUND:READY] Ronda ${nextRound} iniciada para juego ${gameId}`);
+            console.log(`⏰ [ROUND:READY] ===== FIN TIMEOUT AUTOMÁTICO =====`);
+          } else {
+            console.log(`ℹ️ [ROUND:READY] Estado ya cambió a '${currentRoom.status}', emisión automática no necesaria`);
+            console.log(`ℹ️ [ROUND:READY] Esto significa que el cliente ya envió start_round_request y se procesó`);
+          }
+        }, 3500); // 3.5 segundos (ligeramente después del countdown para dar tiempo al cliente y asegurar que se ejecute)
+        
+        // Guardar el timeout para poder cancelarlo si el cliente envía start_round_request antes
+        room.autoStartTimeout = autoStartTimeout;
+        
       } catch (error) {
         console.error(`❌ [ROUND:READY] Error en transición de ronda:`, error);
         console.error(`❌ [ROUND:READY] Error details:`, {
@@ -1669,62 +3025,169 @@ io.on('connection', (socket) => {
 
   // NUEVO: Cliente solicita inicio de ronda después del countdown
   socket.on('start_round_request', async ({ gameId, userId, round }) => {
+    console.log(`🚀 [START_ROUND_REQUEST] ===== EVENTO RECIBIDO EN SERVIDOR =====`);
     console.log(`🚀 [START_ROUND_REQUEST] Cliente ${userId} solicita inicio de ronda ${round} en juego ${gameId}`);
+    console.log(`🚀 [START_ROUND_REQUEST] Parámetros recibidos:`, { gameId, userId, round });
+    console.log(`🚀 [START_ROUND_REQUEST] Socket ID: ${socket.id}`);
     
     const room = getGameRoom(gameId);
+    console.log(`🚀 [START_ROUND_REQUEST] Sala encontrada:`, !!room);
     if (!room) {
       console.error(`❌ [START_ROUND_REQUEST] Sala no encontrada para ${gameId}`);
+      console.error(`❌ [START_ROUND_REQUEST] Salas disponibles:`, Array.from(gameRooms.keys()));
       return;
     }
+    
+    console.log(`🚀 [START_ROUND_REQUEST] Estado de la sala:`, {
+      round: room.round,
+      roundSolicitada: round,
+      status: room.status,
+      playersCount: room.players?.length || 0
+    });
     
     // Verificar que la ronda solicitada es correcta
     if (room.round !== round) {
       console.error(`❌ [START_ROUND_REQUEST] Ronda incorrecta: solicitada ${round}, actual ${room.round}`);
+      console.error(`❌ [START_ROUND_REQUEST] Ignorando solicitud - ronda no coincide`);
       return;
     }
     
-    // Verificar que estamos en estado 'starting'
-    if (room.status !== 'starting') {
-      console.error(`❌ [START_ROUND_REQUEST] Estado incorrecto: ${room.status}, esperado 'starting'`);
+    // Verificar que estamos en estado válido para iniciar ronda
+    // Permitir 'starting' (normal) o 'waiting' (si el estado cambió)
+    const validStatesForStart = ['starting', 'waiting'];
+    if (!validStatesForStart.includes(room.status)) {
+      console.error(`❌ [START_ROUND_REQUEST] Estado incorrecto: ${room.status}, esperado 'starting' o 'waiting'`);
+      console.error(`❌ [START_ROUND_REQUEST] Ignorando solicitud - estado no es válido para iniciar ronda`);
+      console.error(`❌ [START_ROUND_REQUEST] Estado actual completo:`, {
+        status: room.status,
+        round: room.round,
+        roundSolicitada: round
+      });
       return;
     }
     
+    // Si el estado es 'waiting', cambiarlo a 'starting' para continuar
+    if (room.status === 'waiting') {
+      console.log(`⚠️ [START_ROUND_REQUEST] Estado era 'waiting', cambiando a 'starting'`);
+      room.status = 'starting';
+    }
+    
+    console.log(`✅ [START_ROUND_REQUEST] Todas las validaciones pasaron - procesando inicio de ronda`);
+    
+    // Cancelar emisión automática si el cliente envió start_round_request
+    if (room.autoStartTimeout) {
+      console.log(`✅ [START_ROUND_REQUEST] Cancelando emisión automática - cliente envió request`);
+      clearTimeout(room.autoStartTimeout);
+      room.autoStartTimeout = null;
+    }
+    
+    console.log(`🚀 [START_ROUND_REQUEST] ===== INICIANDO RONDA ${round} (IGUAL QUE RONDA 1) =====`);
     console.log(`🚀 [START_ROUND_REQUEST] Iniciando ronda ${round} para juego ${gameId}`);
     
-    // CREAR NUEVO ESTADO AUTORITATIVO PARA LA RONDA DE JUEGO (120s)
-    const gameAuthority = createAuthoritativeRoundData(gameId, round, 120000);
-    console.log(`🎯 [START_ROUND_REQUEST] Estado autoritativo creado para ronda ${round}:`, {
-      round: gameAuthority.round,
-      roundEndsAtMs: gameAuthority.roundEndsAtMs,
-      roundTime: new Date(gameAuthority.roundEndsAtMs).toISOString()
+    // CREAR ESTADO AUTORITATIVO PARA LA RONDA (IGUAL QUE RONDA 1)
+    const authority = createAuthoritativeRoundData(gameId, round, 120000);
+    console.log(`🎯 [START_ROUND_REQUEST] Estado autoritativo creado (igual que ronda 1):`, {
+      round: authority.round,
+      roundEndsAtMs: authority.roundEndsAtMs,
+      roundTime: new Date(authority.roundEndsAtMs).toISOString(),
+      roundId: authority.roundId,
+      version: authority.version
     });
     
-    // Actualizar estado de la sala
+    // Verificar idempotencia para evitar duplicados (IGUAL QUE RONDA 1)
+    const operationId = createOperationId(gameId, 'start_round', authority.roundId, authority.version);
+    if (isOperationApplied(gameId, operationId)) {
+      console.log(`🔄 [IDEMPOTENCY] start_round ya aplicado para ${gameId}, omitiendo`);
+      return;
+    }
+    
+    // Actualizar estado de la sala con datos autoritativos (IGUAL QUE RONDA 1)
     room.status = 'in_progress';
-    room.roundTime = new Date(gameAuthority.roundEndsAtMs);
+    room.roundTime = new Date(authority.roundEndsAtMs); // Mantener compatibilidad
+    room.readyPlayers.clear();
     
-    // EMITIR ESTADO AUTORITATIVO DE INICIO DE RONDA
-    console.log(`📡 [START_ROUND_REQUEST] Emitiendo start_round para ronda ${round}`);
-    emitAuthoritativeState(gameId, 'start_round', {
-      gameId,
-      round: round,
-      winningIndustry: room.winningIndustry || 'Technology',
-      roundTime: new Date(gameAuthority.roundStartAtMs).toISOString(), // FECHA DE INICIO, no fin
-      message: `Round ${round} started!`
-    });
+    // CRÍTICO: Establecer estado del juego a PLAYING para que handleRoundEnd funcione (IGUAL QUE RONDA 1)
+    setGameState(gameId, GAME_STATES.PLAYING, round);
+    console.log(`🎮 [START_ROUND_REQUEST] Estado del juego establecido a PLAYING para ronda ${round}`);
     
-    // Timer automático para terminar la ronda
+    // Marcar operación como aplicada (IGUAL QUE RONDA 1)
+    markOperationApplied(gameId, operationId);
+    
+    // Timer automático para terminar la ronda cuando se acabe el tiempo (IGUAL QUE RONDA 1)
     setTimeout(async () => {
       console.log(`⏰ [ROUND] Timer ended → preparing results for round=${round} gameId=${gameId}`);
       
+      // Verificar que la ronda aún esté activa
       const currentRoom = getGameRoom(gameId);
       const currentAuthority = getGameAuthority(gameId);
       if (currentRoom && currentRoom.status === 'in_progress' && 
           currentRoom.round === round && 
-          currentAuthority.roundId === gameAuthority.roundId) {
-        await handleRoundEnd(gameId, round);
+          currentAuthority.roundId === authority.roundId) {
+        // Llamar directamente a la lógica de fin de ronda
+        await handleRoundEnd(gameId, currentRoom.round);
       }
-    }, 120000); // 120 segundos
+    }, 120000); // 120 segundos (2 minutos) - IGUAL QUE RONDA 1
+    
+    // EMITIR ESTADO AUTORITATIVO DE INICIO DE RONDA
+    console.log(`📡 [START_ROUND_REQUEST] Emitiendo start_round para ronda ${round}`);
+    console.log(`📡 [START_ROUND_REQUEST] Datos que se enviarán (igual que ronda 1):`, {
+      gameId,
+      round: round,
+      roundEndsAtMs: authority.roundEndsAtMs,
+      roundTime: new Date(authority.roundEndsAtMs).toISOString(),
+      winningIndustry: room.winningIndustry || 'Technology',
+      roundId: authority.roundId,
+      version: authority.version
+    });
+    
+    // EMITIR ESTADO AUTORITATIVO (IGUAL QUE RONDA 1)
+    const startRoundPayload = {
+      gameId,
+      round: round,
+      winningIndustry: room.winningIndustry || 'Technology',
+      roundTime: new Date(authority.roundEndsAtMs).toISOString(), // FECHA DE FIN (correcto)
+      roundEndsAtMs: authority.roundEndsAtMs, // CRÍTICO: Incluir explícitamente para que el timer funcione
+      message: `Round ${round} started!`
+    };
+    
+    // Verificar que el socket está en la sala antes de emitir
+    const socketRoom = io.sockets.adapter.rooms.get(gameId);
+    const clientCount = socketRoom ? socketRoom.size : 0;
+    const socketInRoom = socketRoom && socketRoom.has(socket.id);
+    
+    console.log(`🔍 [START_ROUND_REQUEST] Verificación de sala:`, {
+      gameId,
+      clientCount,
+      socketInRoom,
+      socketId: socket.id
+    });
+    
+    if (!socketInRoom) {
+      console.error(`❌ [START_ROUND_REQUEST] Socket ${socket.id} NO está en la sala ${gameId}`);
+      console.error(`❌ [START_ROUND_REQUEST] Re-uniendo socket a la sala...`);
+      socket.join(gameId);
+      console.log(`✅ [START_ROUND_REQUEST] Socket re-unido a la sala`);
+    }
+    
+    console.log(`🚀 [START_ROUND_REQUEST] Emitiendo start_round con payload (igual que ronda 1):`, startRoundPayload);
+    emitAuthoritativeState(gameId, 'start_round', startRoundPayload);
+    
+    // Track round start (IGUAL QUE RONDA 1)
+    trackRoundStart(gameId, round);
+    
+    console.log(`✅ [START_ROUND_REQUEST] start_round autoritativo emitido exitosamente a juego ${gameId} (igual que ronda 1)`);
+    
+    // Sincronizar con Firestore al terminar la ronda (IGUAL QUE RONDA 1)
+    await syncGameToFirestore(gameId, room);
+    
+    console.log(`✅ [START_ROUND_REQUEST] Ronda ${round} iniciada para juego ${gameId}`);
+    
+    // Verificar que el evento se emitió correctamente
+    const socketRoomAfterEmit = io.sockets.adapter.rooms.get(gameId);
+    console.log(`✅ [START_ROUND_REQUEST] Sala después de emitir:`, {
+      clientCount: socketRoomAfterEmit ? socketRoomAfterEmit.size : 0,
+      socketInRoom: socketRoomAfterEmit && socketRoomAfterEmit.has(socket.id)
+    });
   });
 
   // LEGACY: Mantener compatibilidad con el sistema anterior
@@ -1780,6 +3243,7 @@ io.on('connection', (socket) => {
 
   // FUNCIÓN PRINCIPAL: MANEJAR FIN DE RONDA (ORDEN CORRECTO)
   const handleRoundEnd = async (gameId, round) => {
+    console.log(`🏁 [ROUND] ===== HANDLE ROUND END INICIADO =====`);
     console.log(`🏁 [ROUND] Timer ended → preparing results for round=${round} gameId=${gameId}`);
     
     const room = getGameRoom(gameId);
@@ -1789,43 +3253,58 @@ io.on('connection', (socket) => {
     }
     
     console.log(`🏁 [ROUND] Sala encontrada: ${gameId}, ronda: ${room.round}, estado: ${room.status}`);
+    console.log(`🏁 [ROUND] room.roundTime:`, room.roundTime);
+    console.log(`🏁 [ROUND] room.players.length:`, room.players?.length);
     
     // IDEMPOTENCIA: Verificar si las recompensas ya fueron asignadas
     const rewardsKey = `${gameId}:${round}`;
     if (rewardsCommitted.has(rewardsKey)) {
       console.log(`[SERVER] rewards already committed for round=${round} → skip`);
+      console.log(`🏁 [ROUND] ===== HANDLE ROUND END FIN (YA PROCESADO) =====`);
       return;
     }
     
     // Verificar estado actual y adquirir lock
     const gameState = getGameState(gameId);
     console.log(`🏁 [ROUND] Estado actual del juego: ${gameState.state}, esperado: ${GAME_STATES.PLAYING}`);
+    console.log(`🏁 [ROUND] gameState.round: ${gameState.round}, round solicitado: ${round}`);
     if (gameState.state !== GAME_STATES.PLAYING) {
       console.log(`⚠️ [ROUND] Estado actual ${gameState.state} no permite transición a ROUND_CALCULATING`);
+      console.log(`⚠️ [ROUND] Estado esperado: ${GAME_STATES.PLAYING}`);
+      console.log(`🏁 [ROUND] ===== HANDLE ROUND END FIN (ESTADO INCORRECTO) =====`);
       return;
     }
     
     // Adquirir lock para esta ronda
     if (!acquireRoundLock(gameId, round)) {
       console.log(`⚠️ [ROUND] Lock ya adquirido para ${gameId}:${round}`);
+      console.log(`🏁 [ROUND] ===== HANDLE ROUND END FIN (LOCK YA ADQUIRIDO) =====`);
       return;
     }
     
     try {
       console.log(`🏁 [ROUND] Iniciando try block para ${gameId}`);
+      console.log(`🏁 [ROUND] Lock adquirido exitosamente para ${gameId}:${round}`);
       
       // Transición a ROUND_CALCULATING
-      console.log(`🏁 [ROUND] Transición a ROUND_CALCULATING para ${gameId}`);
+      console.log(`🏁 [ROUND] ===== TRANSICIÓN A ROUND_CALCULATING =====`);
+      console.log(`🏁 [ROUND] Estado anterior: ${gameState.state}, nuevo: ${GAME_STATES.ROUND_CALCULATING}`);
       setGameState(gameId, GAME_STATES.ROUND_CALCULATING, round);
       room.status = 'roundEnd';
       room.readyPlayers.clear();
       console.log(`🏁 [ROUND] Estado actualizado a ROUND_CALCULATING para ${gameId}`);
+      console.log(`🏁 [ROUND] room.status actualizado a: ${room.status}`);
     
       // Emitir ROUND_CALCULATING para mostrar loader
+      console.log(`🔄 [ROUND] ===== EMITIENDO ROUND_CALCULATING =====`);
       console.log(`🔄 [ROUND] Emitiendo ROUND_CALCULATING para ronda ${round}`);
-      console.log(`[SERVER] ROUND_CALCULATING emitted for round=${round}`);
+      console.log(`🔄 [ROUND] gameId: ${gameId}`);
+      console.log(`🔄 [ROUND] Sala tiene ${room.players?.length || 0} jugadores`);
+      const socketRoom = io.sockets.adapter.rooms.get(gameId);
+      console.log(`🔄 [ROUND] Clientes en sala: ${socketRoom ? socketRoom.size : 0}`);
       emitToGame(gameId, 'ROUND_CALCULATING', { round: round });
-      console.log(`🏁 [ROUND] ROUND_CALCULATING emitido para ${gameId}`);
+      console.log(`✅ [ROUND] ROUND_CALCULATING emitido exitosamente para ${gameId}`);
+      console.log(`🔄 [ROUND] ===== FIN EMISIÓN ROUND_CALCULATING =====`);
       
       // GENERAR Y EMITIR ROUND_META CON ESTADO AUTORITATIVO
       const winningIndustry = room.winningIndustry || 'Technology';
@@ -1900,7 +3379,8 @@ io.on('connection', (socket) => {
       });
       console.log(`🏁 [ROUND] round_ended autoritativo emitido para ${gameId}`);
       
-      // Sincronizar con Firestore
+      // NOTA: Los inventarios ya fueron persistidos en calculateRoundRewards después de aplicar rewards
+      // syncGameToFirestore solo sincroniza el estado del juego, no los inventarios
       await syncGameToFirestore(gameId, room);
       console.log(`[ROUND] firestore commit done for round=${round}`);
       console.log(`[SERVER] firestore batch commit OK`);
@@ -1921,21 +3401,33 @@ io.on('connection', (socket) => {
 
   // NUEVA MÁQUINA DE ESTADOS: Fin de ronda robusto
   socket.on('round_ended', async ({ gameId, userId, round }) => {
-    console.log(`🏁 [ROUND] Ronda terminada por jugador ${userId} en juego ${gameId}`);
+    console.log(`🏁 [ROUND_ENDED] ===== EVENTO RECIBIDO DEL CLIENTE =====`);
+    console.log(`🏁 [ROUND_ENDED] Ronda terminada por jugador ${userId} en juego ${gameId}`);
+    console.log(`🏁 [ROUND_ENDED] round recibido: ${round}`);
+    console.log(`🏁 [ROUND_ENDED] socket.id: ${socket.id}`);
     
     const room = getGameRoom(gameId);
     if (!room) {
-      console.error(`❌ [ROUND] Sala no encontrada para ${gameId}`);
+      console.error(`❌ [ROUND_ENDED] Sala no encontrada para ${gameId}`);
+      console.log(`🏁 [ROUND_ENDED] ===== FIN EVENTO (SALA NO ENCONTRADA) =====`);
       return;
     }
     
     const currentRound = (round && round > 0) ? round : room.round;
-    console.log(`🏁 [ROUND] Ronda actual: ${currentRound}, Estado: ${room.status}`);
+    console.log(`🏁 [ROUND_ENDED] Ronda actual de sala: ${room.round}`);
+    console.log(`🏁 [ROUND_ENDED] Ronda a procesar: ${currentRound}`);
+    console.log(`🏁 [ROUND_ENDED] Estado de sala: ${room.status}`);
+    console.log(`🏁 [ROUND_ENDED] room.roundTime:`, room.roundTime);
+    
+    const gameState = getGameState(gameId);
+    console.log(`🏁 [ROUND_ENDED] Estado del juego: ${gameState.state}`);
+    console.log(`🏁 [ROUND_ENDED] gameState.round: ${gameState.round}`);
     
     // Llamar a la función centralizada de manejo de fin de ronda
-    console.log(`🏁 [ROUND] Llamando a handleRoundEnd para ${gameId}, ronda ${currentRound}`);
+    console.log(`🏁 [ROUND_ENDED] Llamando a handleRoundEnd para ${gameId}, ronda ${currentRound}`);
     await handleRoundEnd(gameId, currentRound);
-    console.log(`🏁 [ROUND] handleRoundEnd completado para ${gameId}`);
+    console.log(`🏁 [ROUND_ENDED] handleRoundEnd completado para ${gameId}`);
+    console.log(`🏁 [ROUND_ENDED] ===== FIN EVENTO =====`);
   });
   // Asignar recompensas de ronda (DEPRECATED - ahora se procesa en round_ended)
   socket.on('assign_round_rewards', async ({ gameId }) => {
@@ -1954,15 +3446,17 @@ io.on('connection', (socket) => {
       
       // Re-enviar los datos actualizados por si acaso
       const gameRanking = playerRankings.get(gameId) || new Map();
+      const productsCountByPlayer = getProductsCountByPlayer(gameId);
       const playerData = room.players.map(player => {
         const ranking = gameRanking.get(player.userId) || { blocksMined: 0, totalRewards: 0 };
         const inventory = getPlayerInventory(gameId, player.userId);
+        const productsCount = productsCountByPlayer.get(player.userId) || 0;
         return {
           userId: player.userId,
           userName: player.userName,
           rockCoins: inventory.rockCoins,
           waste: inventory.waste,
-          blocksMined: ranking.blocksMined,
+          blocksMined: productsCount,
           totalRewards: ranking.totalRewards
         };
       });
@@ -1993,14 +3487,20 @@ io.on('connection', (socket) => {
 
   });
 
-  // Nuevo problema de minado generado
+  // Nuevo problema de minado generado (legacy - mantener por compatibilidad)
   socket.on('new_mining_problem', ({ gameId, blockId, problemData }) => {
-    console.log(`⛏️ Nuevo problema de minado generado en juego ${gameId}, bloque ${blockId}`);
+    console.log(`⛏️ Nuevo problema de minado generado (legacy) en juego ${gameId}, bloque ${blockId}`);
+    
+    const room = getGameRoom(gameId);
     
     // Notificar a todos los jugadores en el juego
     emitToGame(gameId, 'new_mining_problem', {
       blockId,
-      problemData,
+      problemData: {
+        ...problemData,
+        round: room.round || 1
+      },
+      round: room.round || 1,
       timestamp: Date.now()
     });
     
@@ -2177,8 +3677,16 @@ io.on('connection', (socket) => {
   });
 
   // Compra/Venta de productos
-  socket.on('product_transaction', async ({ gameId, userId, product, transactionType }) => {
-    console.log(`🛒 Transacción de producto: ${transactionType} por ${userId} en ${gameId}`);
+  socket.on('product_transaction', async ({ gameId, userId, product, transactionType, transformedProduct, wasteExtra }) => {
+    console.log(`🛒 [TRANSACTION] Transacción de producto: ${transactionType} por ${userId} en ${gameId}`);
+    console.log(`🛒 [TRANSACTION] Datos recibidos:`, {
+      gameId,
+      userId,
+      product: product ? { id: product.id, type: product.type } : null,
+      transactionType,
+      hasTransformedProduct: !!transformedProduct,
+      wasteExtra
+    });
     
     const inventory = getPlayerInventory(gameId, userId);
     
@@ -2193,14 +3701,21 @@ io.on('connection', (socket) => {
       }
       
       // Procesar compra
+      const productsArray = Array.isArray(inventory.products) ? inventory.products : [];
+      const updatedProducts = [...productsArray, product];
       const updatedInventory = updatePlayerInventory(gameId, userId, {
-        products: [...inventory.products, product],
+        products: updatedProducts,
         rockCoins: inventory.rockCoins - product.currentPrice,
         waste: inventory.waste + product.waste,
         miningQueue: (inventory.miningQueue || 0) + 1
       });
       
-      console.log(`✅ Compra procesada para ${userId}:`, updatedInventory);
+      console.log(`✅ [PURCHASE] Compra procesada para ${userId}:`, {
+        productsCount: updatedInventory.products.length,
+        products: updatedInventory.products,
+        rockCoins: updatedInventory.rockCoins,
+        waste: updatedInventory.waste
+      });
       
       // ELIMINAR PRODUCTO DEL MERCADO
       const room = getGameRoom(gameId);
@@ -2219,7 +3734,7 @@ io.on('connection', (socket) => {
         }
       }
       
-      // Notificar al jugador
+      // Notificar al jugador con transaction_success Y inventory_data
       console.log(`📡 Enviando transaction_success a ${userId}:`, {
         type: 'purchase',
         inventory: updatedInventory,
@@ -2228,8 +3743,31 @@ io.on('connection', (socket) => {
       socket.emit('transaction_success', {
         type: 'purchase',
         inventory: updatedInventory,
-        product: product
+        product: product,
+        userId: userId // IMPORTANTE: Incluir userId para que el listener pueda validar
       });
+      
+      // CRÍTICO: También enviar inventory_data para asegurar sincronización en frontend
+      const playerSocketId = playerSockets.get(userId);
+      if (playerSocketId) {
+        console.log(`📦 [TRANSACTION] Enviando inventory_data actualizado a ${userId}:`, {
+          rockCoins: updatedInventory.rockCoins,
+          waste: updatedInventory.waste,
+          products: updatedInventory.products?.length || 0
+        });
+        io.to(playerSocketId).emit('inventory_data', {
+          gameId,
+          userId: userId,
+          inventory: {
+            rockCoins: updatedInventory.rockCoins,
+            waste: updatedInventory.waste,
+            products: updatedInventory.products || [],
+            miningQueue: updatedInventory.miningQueue || 0
+          }
+        });
+      } else {
+        console.warn(`⚠️ [TRANSACTION] No se encontró socketId para ${userId}, no se puede enviar inventory_data`);
+      }
       
       // Actualizar ranking y notificar a todos
       updateAndEmitPlayerRankings(gameId);
@@ -2248,15 +3786,21 @@ io.on('connection', (socket) => {
       const miningProblem = generateMiningProblem(gameId, transactionDetails);
       
       // Notificar a todos los jugadores del juego
+      const roomPurchase = getGameRoom(gameId);
       console.log('📡 Enviando problema de minado (COMPRA) con timestamp:', {
         blockId: miningProblem.id,
         miningStartTime: miningProblem.activeProblem.miningStartTime,
-        timestamp: miningProblem.timestamp
+        timestamp: miningProblem.timestamp,
+        round: roomPurchase.round || 1
       });
       
       emitToGame(gameId, 'new_mining_problem', {
         blockId: miningProblem.id,
-        problemData: miningProblem.activeProblem,
+        problemData: {
+          ...miningProblem.activeProblem,
+          round: roomPurchase.round || 1
+        },
+        round: roomPurchase.round || 1,
         timestamp: miningProblem.timestamp
       });
       
@@ -2273,9 +3817,17 @@ io.on('connection', (socket) => {
       }
       
     } else if (transactionType === 'sell') {
+      console.log(`💰 [SELL] Iniciando venta para ${userId}`);
+      console.log(`💰 [SELL] Producto a vender:`, product);
+      console.log(`💰 [SELL] Inventario actual:`, inventory);
+      
       // Verificar si tiene el producto
-      const productIndex = inventory.products.findIndex(p => p.id === product.id);
+      const productsArray = Array.isArray(inventory.products) ? inventory.products : [];
+      const productIndex = productsArray.findIndex(p => p.id === product.id);
+      
       if (productIndex === -1) {
+        console.error(`❌ [SELL] Producto ${product.id} no encontrado en inventario`);
+        console.error(`❌ [SELL] Productos en inventario:`, productsArray.map(p => ({ id: p.id, type: p.type })));
         socket.emit('transaction_failed', { 
           reason: 'product_not_found',
           message: 'No tienes este producto'
@@ -2284,7 +3836,7 @@ io.on('connection', (socket) => {
       }
       
       // Procesar venta
-      const updatedProducts = [...inventory.products];
+      const updatedProducts = [...productsArray];
       updatedProducts.splice(productIndex, 1);
       
       const updatedInventory = updatePlayerInventory(gameId, userId, {
@@ -2294,10 +3846,15 @@ io.on('connection', (socket) => {
         miningQueue: (inventory.miningQueue || 0) + 1
       });
       
-      console.log(`✅ Venta procesada para ${userId}:`, updatedInventory);
+      console.log(`✅ [SELL] Venta procesada para ${userId}:`, {
+        productsCount: updatedInventory.products.length,
+        products: updatedInventory.products,
+        rockCoins: updatedInventory.rockCoins,
+        waste: updatedInventory.waste
+      });
       
-      // Notificar al jugador
-      console.log(`📡 Enviando transaction_success a ${userId}:`, {
+      // Notificar al jugador con transaction_success Y inventory_data
+      console.log(`📡 [SELL] Enviando transaction_success a ${userId}:`, {
         type: 'sell',
         inventory: updatedInventory,
         product: product
@@ -2305,8 +3862,31 @@ io.on('connection', (socket) => {
       socket.emit('transaction_success', {
         type: 'sell',
         inventory: updatedInventory,
-        product: product
+        product: product,
+        userId: userId // IMPORTANTE: Incluir userId para que el listener pueda validar
       });
+      
+      // CRÍTICO: También enviar inventory_data para asegurar sincronización en frontend
+      const playerSocketId = playerSockets.get(userId);
+      if (playerSocketId) {
+        console.log(`📦 [SELL] Enviando inventory_data actualizado a ${userId}:`, {
+          rockCoins: updatedInventory.rockCoins,
+          waste: updatedInventory.waste,
+          products: updatedInventory.products?.length || 0
+        });
+        io.to(playerSocketId).emit('inventory_data', {
+          gameId,
+          userId: userId,
+          inventory: {
+            rockCoins: updatedInventory.rockCoins,
+            waste: updatedInventory.waste,
+            products: updatedInventory.products || [],
+            miningQueue: updatedInventory.miningQueue || 0
+          }
+        });
+      } else {
+        console.warn(`⚠️ [SELL] No se encontró socketId para ${userId}, no se puede enviar inventory_data`);
+      }
       
       // Actualizar ranking y notificar a todos
       updateAndEmitPlayerRankings(gameId);
@@ -2325,9 +3905,14 @@ io.on('connection', (socket) => {
       const miningProblem = generateMiningProblem(gameId, transactionDetails);
       
       // Notificar a todos los jugadores del juego
+      const room = getGameRoom(gameId);
       emitToGame(gameId, 'new_mining_problem', {
         blockId: miningProblem.id,
-        problemData: miningProblem.activeProblem,
+        problemData: {
+          ...miningProblem.activeProblem,
+          round: room.round || 1 // AÑADIR: Ronda actual al problema
+        },
+        round: room.round || 1, // AÑADIR: Ronda actual
         timestamp: miningProblem.timestamp
       });
       
@@ -2343,9 +3928,38 @@ io.on('connection', (socket) => {
         });
       }
     } else if (transactionType === 'transform') {
+      console.log(`🔄 [TRANSFORM] Iniciando transformación para ${userId}`);
+      console.log(`🔄 [TRANSFORM] Producto original:`, product);
+      console.log(`🔄 [TRANSFORM] Producto transformado:`, transformedProduct);
+      console.log(`🔄 [TRANSFORM] wasteExtra:`, wasteExtra);
+      console.log(`🔄 [TRANSFORM] Inventario actual:`, inventory);
+      
+      // VALIDACIÓN: Verificar que transformedProduct y wasteExtra están presentes
+      if (!transformedProduct) {
+        console.error(`❌ [TRANSFORM] transformedProduct no proporcionado`);
+        socket.emit('transaction_failed', { 
+          reason: 'invalid_data',
+          message: 'Datos de transformación incompletos'
+        });
+        return;
+      }
+      
+      if (wasteExtra === undefined || wasteExtra === null) {
+        console.error(`❌ [TRANSFORM] wasteExtra no proporcionado`);
+        socket.emit('transaction_failed', { 
+          reason: 'invalid_data',
+          message: 'Datos de transformación incompletos'
+        });
+        return;
+      }
+      
       // Verificar si tiene el producto
-      const productIndex = inventory.products.findIndex(p => p.id === product.id);
+      const productsArray = Array.isArray(inventory.products) ? inventory.products : [];
+      const productIndex = productsArray.findIndex(p => p.id === product.id);
+      
       if (productIndex === -1) {
+        console.error(`❌ [TRANSFORM] Producto ${product.id} no encontrado en inventario`);
+        console.error(`❌ [TRANSFORM] Productos en inventario:`, productsArray.map(p => ({ id: p.id, type: p.type })));
         socket.emit('transaction_failed', { 
           reason: 'product_not_found',
           message: 'No tienes este producto'
@@ -2354,7 +3968,7 @@ io.on('connection', (socket) => {
       }
       
       // Procesar transformación
-      const updatedProducts = [...inventory.products];
+      const updatedProducts = [...productsArray];
       updatedProducts.splice(productIndex, 1);
       updatedProducts.push(transformedProduct);
       
@@ -2365,9 +3979,14 @@ io.on('connection', (socket) => {
         miningQueue: (inventory.miningQueue || 0) + 1
       });
       
-      console.log(`✅ Transformación procesada para ${userId}:`, updatedInventory);
+      console.log(`✅ [TRANSFORM] Transformación procesada para ${userId}:`, {
+        productsCount: updatedInventory.products.length,
+        products: updatedInventory.products,
+        waste: updatedInventory.waste,
+        wasteExtra: wasteExtra
+      });
       
-      // Notificar al jugador
+      // Notificar al jugador con transaction_success Y inventory_data
       console.log(`📡 Enviando transaction_success a ${userId}:`, {
         type: 'transform',
         inventory: updatedInventory,
@@ -2376,8 +3995,31 @@ io.on('connection', (socket) => {
       socket.emit('transaction_success', {
         type: 'transform',
         inventory: updatedInventory,
-        product: transformedProduct
+        product: transformedProduct,
+        userId: userId // IMPORTANTE: Incluir userId para que el listener pueda validar
       });
+      
+      // CRÍTICO: También enviar inventory_data para asegurar sincronización en frontend
+      const playerSocketId = playerSockets.get(userId);
+      if (playerSocketId) {
+        console.log(`📦 [TRANSFORM] Enviando inventory_data actualizado a ${userId}:`, {
+          rockCoins: updatedInventory.rockCoins,
+          waste: updatedInventory.waste,
+          products: updatedInventory.products?.length || 0
+        });
+        io.to(playerSocketId).emit('inventory_data', {
+          gameId,
+          userId: userId,
+          inventory: {
+            rockCoins: updatedInventory.rockCoins,
+            waste: updatedInventory.waste,
+            products: updatedInventory.products || [],
+            miningQueue: updatedInventory.miningQueue || 0
+          }
+        });
+      } else {
+        console.warn(`⚠️ [TRANSFORM] No se encontró socketId para ${userId}, no se puede enviar inventory_data`);
+      }
       
       // Actualizar ranking y notificar a todos
       updateAndEmitPlayerRankings(gameId);
@@ -2396,9 +4038,14 @@ io.on('connection', (socket) => {
       const miningProblem = generateMiningProblem(gameId, transactionDetails);
       
       // Notificar a todos los jugadores del juego
+      const room = getGameRoom(gameId);
       emitToGame(gameId, 'new_mining_problem', {
         blockId: miningProblem.id,
-        problemData: miningProblem.activeProblem,
+        problemData: {
+          ...miningProblem.activeProblem,
+          round: room.round || 1 // AÑADIR: Ronda actual al problema
+        },
+        round: room.round || 1, // AÑADIR: Ronda actual
         timestamp: miningProblem.timestamp
       });
       
@@ -2448,18 +4095,20 @@ io.on('connection', (socket) => {
     console.log(`🏆 Solicitando ranking de jugadores para ${gameId}`);
     const room = getGameRoom(gameId);
     const gameRanking = playerRankings.get(gameId) || new Map();
+    const productsCountByPlayer = getProductsCountByPlayer(gameId);
     
     // Crear lista completa de jugadores con sus datos
     const playerData = room.players.map(player => {
       const ranking = gameRanking.get(player.userId) || { blocksMined: 0, totalRewards: 0 };
       const inventory = getPlayerInventory(gameId, player.userId);
+      const productsCount = productsCountByPlayer.get(player.userId) || 0;
       
       return {
         userId: player.userId,
         userName: player.userName,
         rockCoins: inventory.rockCoins,
         waste: inventory.waste,
-        blocksMined: ranking.blocksMined,
+        blocksMined: productsCount,
         totalRewards: ranking.totalRewards,
         readyForNextRound: player.readyForNextRound || false
       };
@@ -2506,13 +4155,17 @@ io.on('connection', (socket) => {
     }
 
     // Preparar datos del ranking
-    const playerData = room.players.map(player => ({
-      userId: player.userId,
-      userName: player.userName,
-      imageUrl: player.imageUrl,
-      totalRewards: playerRankings.get(gameId)?.get(player.userId)?.totalRewards || 0,
-      blocksMined: playerRankings.get(gameId)?.get(player.userId)?.blocksMined || 0
-    }));
+    const productsCountByPlayer = getProductsCountByPlayer(gameId);
+    const playerData = room.players.map(player => {
+      const productsCount = productsCountByPlayer.get(player.userId) || 0;
+      return {
+        userId: player.userId,
+        userName: player.userName,
+        imageUrl: player.imageUrl,
+        totalRewards: playerRankings.get(gameId)?.get(player.userId)?.totalRewards || 0,
+        blocksMined: productsCount
+      };
+    });
 
     // Ordenar por recompensas totales
     const sortedPlayers = playerData.sort((a, b) => (b.totalRewards || 0) - (a.totalRewards || 0));
@@ -2612,6 +4265,7 @@ io.on('connection', (socket) => {
       round: room.round,
       status: 'starting',
       roundTimeISO: new Date(Date.now() + 3000).toISOString(), // 3 segundos de preparación
+      winningIndustry: room.winningIndustry, // CRÍTICO: Incluir winningIndustry reseteado
       roundMeta: {
         totalRounds: 3,
         currentRound: room.round
