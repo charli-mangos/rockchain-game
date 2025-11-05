@@ -25,7 +25,7 @@ const MarketScreen = ({ navigation, route }) => {
     ? [...validProducts, { isSpacer: true, id: 'spacer' }]
     : validProducts;
   
-  // Si no hay productos válidos, mostrar mensaje de carga
+  // Si no hay productos válidos, mostrar mensaje de carga pero con NavigationBar
   if (!validProducts || validProducts.length === 0) {
     return (
       <View style={styles.screenContainer}>
@@ -37,6 +37,7 @@ const MarketScreen = ({ navigation, route }) => {
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Cargando productos...</Text>
         </View>
+        <NavigationBar navigation={navigation} />
       </View>
     );
   }

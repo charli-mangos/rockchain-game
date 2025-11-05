@@ -2356,27 +2356,68 @@ io.on('connection', (socket) => {
         }
       }, 120000); // 120 segundos (2 minutos)
       
-      // CRÍTICO: Emitir economy:state con productos si no se ha emitido antes o si el juego está en ronda 1
-      // Esto asegura que los clientes que se conectan tarde reciban los productos
-      if (room.round === 1 && room.productList && room.productList.length > 0) {
-        console.log(`🏪 [READY_TO_PLAY] Emitiendo economy:state para ronda 1 con ${room.productList.length} productos`);
-        let legacy = {};
-        try {
-          legacy = transformProductsToLegacy(room.productList, room.round);
-        } catch (error) {
-          console.error(`❌ [READY_TO_PLAY] Error generando legacy desde productList:`, error);
+      // CRÍTICO: Emitir economy:state con productos para ronda 1
+      // Si room.productList está vacío, intentar obtener desde Firestore
+      if (room.round === 1) {
+        let productsToEmit = room.productList || [];
+        
+        // Si no hay productos en el room, intentar obtener desde Firestore
+        if (!productsToEmit || productsToEmit.length === 0) {
+          console.log(`⚠️ [READY_TO_PLAY] room.productList vacío, obteniendo desde Firestore...`);
+          if (admin.apps.length) {
+            try {
+              const gameRef = admin.firestore().collection('games').doc(gameId);
+              const gameDoc = await gameRef.get();
+              if (gameDoc.exists()) {
+                const gameData = gameDoc.data();
+                productsToEmit = gameData.productList || [];
+                if (productsToEmit.length > 0) {
+                  room.productList = productsToEmit; // Actualizar room
+                  console.log(`✅ [READY_TO_PLAY] Productos obtenidos desde Firestore: ${productsToEmit.length}`);
+                }
+              }
+            } catch (error) {
+              console.error(`❌ [READY_TO_PLAY] Error obteniendo productos desde Firestore:`, error);
+            }
+          }
         }
         
-        emitToGame(gameId, 'economy:state', {
-          roundId: `${gameId}:${room.round}:${Date.now()}`,
-          version: room.round,
-          round: room.round,
-          market: {
-            products: room.productList,
-            legacy: legacy
+        // Si aún no hay productos, generar nuevos
+        if (!productsToEmit || productsToEmit.length === 0) {
+          console.log(`⚠️ [READY_TO_PLAY] No hay productos, generando nuevos...`);
+          try {
+            const marketData = await generateMarketForRound(gameId, 1);
+            productsToEmit = marketData.products || [];
+            room.productList = productsToEmit;
+            console.log(`✅ [READY_TO_PLAY] Productos generados: ${productsToEmit.length}`);
+          } catch (error) {
+            console.error(`❌ [READY_TO_PLAY] Error generando productos:`, error);
           }
-        });
-        console.log(`✅ [READY_TO_PLAY] economy:state emitido para ronda 1`);
+        }
+        
+        // Emitir economy:state si hay productos
+        if (productsToEmit && productsToEmit.length > 0) {
+          console.log(`🏪 [READY_TO_PLAY] Emitiendo economy:state para ronda 1 con ${productsToEmit.length} productos`);
+          let legacy = {};
+          try {
+            legacy = transformProductsToLegacy(productsToEmit, room.round);
+          } catch (error) {
+            console.error(`❌ [READY_TO_PLAY] Error generando legacy desde productList:`, error);
+          }
+          
+          emitToGame(gameId, 'economy:state', {
+            roundId: `${gameId}:${room.round}:${Date.now()}`,
+            version: room.round,
+            round: room.round,
+            market: {
+              products: productsToEmit,
+              legacy: legacy
+            }
+          });
+          console.log(`✅ [READY_TO_PLAY] economy:state emitido para ronda 1`);
+        } else {
+          console.error(`❌ [READY_TO_PLAY] No se pueden emitir productos - array vacío`);
+        }
       }
       
       // EMITIR ESTADO AUTORITATIVO
