@@ -4400,6 +4400,11 @@ io.on('connection', (socket) => {
 });
 
 // Endpoint de estado del servidor
+// Health check endpoint para Cloud Run
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
+
 app.get('/status', (req, res) => {
   res.json({
     status: 'running',
