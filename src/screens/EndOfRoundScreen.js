@@ -557,14 +557,14 @@ const EndOfRoundScreen = ({ route }) => {
             {/* Señalización visual para acertar industria */}
             {userSelectedIndustry === winningIndustry && winningIndustry && (
               <View style={styles.successBannerContainer}>
-                <View style={styles.successBanner}>
-                  <Text style={styles.successBannerIcon}>✓</Text>
-                  <View style={styles.successBannerText}>
-                    <Text style={styles.successBannerTitle}>Industry guessed!</Text>
-                    <Text style={styles.successBannerSubtitle}>
-                      Your waste it's been reduced
-                    </Text>
-                  </View>
+              <View style={styles.successBanner}>
+                <Text style={styles.successBannerIcon}>✓</Text>
+                <View style={styles.successBannerText}>
+                  <Text style={styles.successBannerTitle}>Industry guessed!</Text>
+                  <Text style={styles.successBannerSubtitle}>
+                    Your waste it's been reduced
+                  </Text>
+                </View>
                 </View>
                   {/* Cartelito de recompensa de waste similar al de minado */}
                  {/* CRÍTICO: Solo mostrar si wasteRemoved > 0 Y el waste actual del usuario es > 0 */}

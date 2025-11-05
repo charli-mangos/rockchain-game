@@ -275,8 +275,24 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
     // Actualizar estado del juego
     if (state.round !== undefined) setRound(state.round);
+    
+    // CRÍTICO: Actualizar roundTime y roundEndsAtMs
+    // Según ANALISIS_CONTADOR_120_SEGUNDOS.md: "Si roundEndsAtMs no existe pero roundTime (string ISO) existe, convertirlo"
     if (state.roundEndsAtMs) {
+      // Si viene roundEndsAtMs directamente, usarlo
       setRoundTime(new Date(state.roundEndsAtMs));
+      // Asegurar que authoritativeState también tenga roundEndsAtMs
+      state.roundEndsAtMs = state.roundEndsAtMs;
+    } else if (state.roundTime) {
+      // Si no viene roundEndsAtMs pero viene roundTime (string ISO), convertirlo
+      const roundTimeDate = new Date(state.roundTime);
+      const roundTimeMs = roundTimeDate.getTime();
+      if (!isNaN(roundTimeMs)) {
+        setRoundTime(roundTimeDate);
+        // Agregar roundEndsAtMs al estado para que el timer funcione
+        state.roundEndsAtMs = roundTimeMs;
+        console.log(`🔄 [AUTHORITY] Convertido roundTime (${state.roundTime}) a roundEndsAtMs (${roundTimeMs})`);
+      }
     }
 
     // Actualizar tracking de idempotencia
@@ -360,30 +376,59 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   useEffect(() => {
     if (!isWebSocketConnected || !gameId) return;
     
-    // Si no hay productos después de 3 segundos de conectarse, obtener desde Firestore
+    // Si no hay productos después de 3 segundos de conectarse, intentar obtener desde Firestore
     const timeoutId = setTimeout(() => {
       if (!productList || productList.length === 0) {
-        console.log('🔄 [WEBSOCKET] No hay productos después de 3 segundos, obteniendo desde Firestore...');
-        const gameRef = doc(db, 'games', gameId);
-        getDoc(gameRef).then((docSnap) => {
+        console.log('🔄 [WEBSOCKET] No hay productos después de 3 segundos, intentando obtener desde Firestore...');
+        
+        // PRIMERO: Intentar desde la ruta correcta: games/{gameId}/market/{round}
+        const currentRoundForProducts = round || 1;
+        const marketRef = doc(db, 'games', gameId, 'market', currentRoundForProducts.toString());
+        getDoc(marketRef).then((docSnap) => {
           if (docSnap.exists()) {
-            const gameData = docSnap.data();
+            const marketData = docSnap.data();
+            const firestoreProducts = marketData.products || [];
+            if (firestoreProducts.length > 0) {
+              console.log('✅ [WEBSOCKET] Productos obtenidos desde Firestore market:', firestoreProducts.length);
+              setProductList(firestoreProducts);
+              return;
+            }
+          }
+          
+          // FALLBACK: Intentar desde gameData.productList (legacy)
+          const gameRef = doc(db, 'games', gameId);
+          return getDoc(gameRef);
+        }).then((gameDocSnap) => {
+          if (gameDocSnap && gameDocSnap.exists()) {
+            const gameData = gameDocSnap.data();
             const firestoreProducts = gameData.productList || [];
             if (firestoreProducts.length > 0) {
-              console.log('✅ [WEBSOCKET] Productos obtenidos desde Firestore:', firestoreProducts.length);
+              console.log('✅ [WEBSOCKET] Productos obtenidos desde Firestore gameData:', firestoreProducts.length);
               setProductList(firestoreProducts);
             } else {
               console.warn('⚠️ [WEBSOCKET] Firestore tampoco tiene productos');
+              // Solicitar productos explícitamente al servidor
+              console.log('📡 [WEBSOCKET] Solicitando productos al servidor...');
+              const webSocketService = getWebSocket();
+              if (webSocketService && webSocketService.isConnected) {
+                webSocketService.emit('request_market_data', { gameId, round: currentRoundForProducts });
+              }
             }
           }
         }).catch((error) => {
           console.error('❌ [WEBSOCKET] Error obteniendo productos desde Firestore:', error);
+          // Solicitar productos explícitamente al servidor como último recurso
+          const webSocketService = getWebSocket();
+          if (webSocketService && webSocketService.isConnected) {
+            console.log('📡 [WEBSOCKET] Solicitando productos al servidor (fallback)...');
+            webSocketService.emit('request_market_data', { gameId, round: round || 1 });
+          }
         });
       }
     }, 3000); // Esperar 3 segundos después de conectar
     
     return () => clearTimeout(timeoutId);
-  }, [isWebSocketConnected, gameId, productList]);
+  }, [isWebSocketConnected, gameId, productList, round]);
 
   // CARGAR INVENTARIO DESDE WEBSOCKET
   useEffect(() => {
@@ -793,14 +838,15 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     getWebSocket().on('start_round', (data) => {
         console.log('🎯 Inicio de ronda (WebSocket):', data);
       
-      setGameStatus(data.status);
+      updateGameStatus(data.status); // Usar updateGameStatus para sincronizar el ref
       setRound(data.round || 1);
       setWinningIndustry(data.winningIndustry);
-      setRoundEndedSent(false);
+      roundEndedSentRef.current = false; // Resetear flag usando ref
       
       if (data.roundTime) {
         const roundTimeDate = new Date(data.roundTime);
         setRoundTime(roundTimeDate);
+        roundTimeSetAtRef.current = Date.now(); // Registrar cuando se estableció roundTime
           console.log('🕒 roundTime actualizado desde WebSocket:', roundTimeDate);
         }
       
@@ -2314,19 +2360,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       const remainingMs = calculateRemainingTime(roundEndsAtMs);
       const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
       
-      // CRÍTICO: Si totalSecondsLeft es 0 o negativo pero roundTime es válido y está en el futuro,
-      // mantener countdown en 120 hasta que se sincronice correctamente
-      if (totalSecondsLeft <= 0 && roundTime && roundTime.getTime() > currentTime) {
-        console.log(`⏸️ [TIMER] totalSecondsLeft=${totalSecondsLeft} pero roundTime está en el futuro, manteniendo countdown en 120 hasta sincronización`);
-        setCountdown(prev => {
-          if (prev !== 120) {
-            return 120;
-          }
-          return prev;
-        });
-        return; // No actualizar countdown hasta que se sincronice
-      }
-      
       // Debug del timer (solo en casos críticos)
       if (gameStatus === 'in_progress' && totalSecondsLeft <= 5 && totalSecondsLeft > 0) {
         console.log(`⏰ [TIMER] Últimos segundos: ${totalSecondsLeft}s (drift: ${clockDrift}ms)`);
@@ -2337,16 +2370,20 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       const currentGameStatus = gameStatusRef.current || gameStatus;
       
       // CRÍTICO: Verificar si acabamos de cambiar de ronda (protección contra detección prematura)
-      // Si el roundTime se estableció hace menos de 5 segundos, NO ejecutar lógica de fin de ronda
-      // Usar la misma variable roundTimeSetAge que ya se calculó arriba
-      const isRoundTimeVeryRecent = roundTimeSetAge < 5000; // 5 segundos de gracia
+      // Si el roundTime se estableció hace menos de 10 segundos Y está en el futuro, NO ejecutar lógica de fin de ronda
+      // Esto previene detección prematura cuando se inicia una nueva ronda
+      const isRoundTimeVeryRecent = roundTimeSetAge < 10000; // 10 segundos de gracia
+      const isRoundTimeInFuture = roundTime && roundTime.getTime() > currentTime;
       
       // Verificar si el contador llegó a 0 y estamos en in_progress o calculating
-      // PERO solo si el roundTime NO es muy reciente (para evitar detección prematura al iniciar nueva ronda)
-      // TAMBIÉN verificar que totalSecondsLeft sea realmente <= 0 (no solo por un error de cálculo)
-      const shouldIgnoreRoundEnd = isRoundTimeVeryRecent || (totalSecondsLeft <= 0 && roundTime && roundTime.getTime() > currentTime);
+      // IGNORAR solo si el roundTime es muy reciente Y está en el futuro (nueva ronda iniciando)
+      // Si totalSecondsLeft <= 0 y roundTime está en el pasado o es igual, proceder con fin de ronda
+      const shouldIgnoreRoundEnd = isRoundTimeVeryRecent && isRoundTimeInFuture;
       
-      if (totalSecondsLeft <= 0 && (currentGameStatus === 'in_progress' || currentGameStatus === 'calculating') && !shouldIgnoreRoundEnd) {
+      // CRÍTICO: Si realmente llegó a 0 y roundTime está en el pasado o es igual, proceder SIEMPRE
+      const shouldProceedWithRoundEnd = totalSecondsLeft <= 0 && !isRoundTimeInFuture;
+      
+      if ((shouldProceedWithRoundEnd || (totalSecondsLeft <= 0 && (currentGameStatus === 'in_progress' || currentGameStatus === 'calculating') && !shouldIgnoreRoundEnd))) {
         // CRÍTICO: Si aún no se envió round_ended, enviarlo SIEMPRE
         if (!roundEndedSentRef.current) {
           const webSocketService = getWebSocket();
@@ -2484,7 +2521,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         intervalRef.current = null;
       }
     };
-  }, [roundTime, gameStatus, clockDrift, authoritativeState]);
+  }, [roundTime, gameId, userId, round, gameStatus, clockDrift, authoritativeState, safeNavigate, updateGameStatus]);
 
   // EFECTO ADICIONAL PARA LIMPIAR TIMER AL DESMONTAJE
   useEffect(() => {

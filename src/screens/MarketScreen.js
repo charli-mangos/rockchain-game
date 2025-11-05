@@ -11,33 +11,27 @@ const MarketScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
   const { productList, gameId, userId, round } = useGameContextHybridRobust();
   
-  // Debug logs para diagnosticar problema de productos
-  console.log('🏪 [MarketScreen] productList recibido:', productList?.length || 0, 'productos');
-  console.log('🏪 [MarketScreen] productList:', productList);
-  console.log('🏪 [MarketScreen] gameId:', gameId);
-  console.log('🏪 [MarketScreen] round:', round);
+  // Logs eliminados para reducir ruido
   
   // Filtrar productos válidos y agregar elemento invisible si el número de productos es impar
-  const validProducts = productList ? productList.filter(product => product && product.id) : [];
-  console.log('🏪 [MarketScreen] validProducts después del filtro:', validProducts.length);
+  const validProducts = productList.filter(product => product && product.id);
   
   const dataWithSpacer = validProducts.length % 2 === 1 
     ? [...validProducts, { isSpacer: true, id: 'spacer' }]
     : validProducts;
   
-  // Si no hay productos válidos, mostrar mensaje de carga pero con NavigationBar
+  // Si no hay productos válidos, mostrar mensaje de carga
   if (!validProducts || validProducts.length === 0) {
     return (
       <View style={styles.screenContainer}>
         <GameHeader
           title={t('market.title')}
-          subtitle={`Round ${round}`}
+          subtitle={`Round ${round || 1}`}
           showBackButton={false}
         />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Cargando productos...</Text>
         </View>
-        <NavigationBar navigation={navigation} />
       </View>
     );
   }

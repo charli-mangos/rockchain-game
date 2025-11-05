@@ -432,8 +432,8 @@ const calculateRoundRewards = async (gameId, round) => {
     
     // 3. Elegir y persistir winningIndustry (SIEMPRE se resetea para cada ronda)
     // CRÍTICO: Reseteamos winningIndustry para cada ronda para que sea diferente
-    const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
-    room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
+      const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
+      room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
     console.log(`🏭 [ROUND][WASTE] winningIndustry seleccionado para ronda ${round}: ${room.winningIndustry}`);
     
     // Definir eficiencias de las industrias para economía circular
@@ -885,21 +885,13 @@ const syncGameToFirestore = async (gameId, room) => {
     const gameRef = admin.firestore().collection('games').doc(gameId);
     
     // Sincronizar estado del juego
-    const updateData = {
+    await gameRef.update({
       status: room.status,
       round: Math.max(1, room.round || 1),
       roundTime: room.roundTime ? admin.firestore.Timestamp.fromMillis(room.roundTime) : null,
       winningIndustry: room.winningIndustry,
       lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-    };
-    
-    // CRÍTICO: Incluir productList si está disponible en el room
-    if (room.productList && Array.isArray(room.productList) && room.productList.length > 0) {
-      updateData.productList = room.productList;
-      console.log(`📦 [SYNC] Incluyendo productList en sincronización: ${room.productList.length} productos`);
-    }
-    
-    await gameRef.update(updateData);
+    });
     
     // NOTA: Los inventarios ya fueron persistidos en calculateRoundRewards después de aplicar rewards
     // No es necesario sincronizarlos aquí nuevamente para evitar conflictos
@@ -1185,80 +1177,11 @@ const transformProductsToLegacy = (products, round) => {
     }
   }
   
-  // RELLENAR combinaciones faltantes con valores calculados basados en precios base
-  // Esto evita que ChatScreen muestre 0 para combinaciones que no se generaron aleatoriamente
-  const marbleTypes = ['Red', 'Black', 'White', 'Gray', 'Cream'];
-  const productTypes = ['Block', 'Slab'];
-  const qualities = ['A', 'B', 'C'];
-  
-  // Precios base para cálculo de valores faltantes
-  const marbleBasePrice = {
-    'Red': 150,
-    'Black': 140,
-    'White': 130,
-    'Gray': 100,
-    'Cream': 160
-  };
-  
-  const marbleBaseWaste = {
-    'Red': 50,
-    'Black': 45,
-    'White': 40,
-    'Gray': 35,
-    'Cream': 55
-  };
-  
-  // Multiplicadores por calidad
-  const qualityMultipliers = {
-    'A': { price: 1.3, waste: 0.9 },
-    'B': { price: 1.0, waste: 1.0 },
-    'C': { price: 0.8, waste: 1.1 }
-  };
-  
-  let filledCount = 0;
-  for (const marble of marbleTypes) {
-    if (!legacyRound[marble]) {
-      legacyRound[marble] = {};
-    }
-    for (const pType of productTypes) {
-      if (!legacyRound[marble][pType]) {
-        legacyRound[marble][pType] = {};
-      }
-      for (const quality of qualities) {
-        // Solo rellenar si la combinación no existe
-        if (!legacyRound[marble][pType][quality]) {
-          // Calcular precio base
-          let basePrice = marbleBasePrice[marble] || 100;
-          if (pType === 'Slab') basePrice = Math.round(basePrice * 1.25);
-          
-          // Aplicar multiplicador de calidad
-          const mult = qualityMultipliers[quality];
-          let calculatedPrice = Math.round(basePrice * mult.price);
-          
-          // Calcular waste base
-          let baseWaste = marbleBaseWaste[marble] || 40;
-          if (pType === 'Slab') baseWaste = Math.round(baseWaste * 1.1);
-          
-          // Aplicar multiplicador de calidad
-          let calculatedWaste = Math.round(baseWaste * mult.waste);
-          
-          // Clamp a rangos válidos
-          calculatedPrice = Math.min(maxPrice, Math.max(minPrice, calculatedPrice));
-          calculatedWaste = Math.min(maxWaste, Math.max(minWaste, calculatedWaste));
-          
-          legacyRound[marble][pType][quality] = {
-            price: calculatedPrice,
-            waste: calculatedWaste
-          };
-          filledCount++;
-        }
-      }
-    }
-  }
-  
-  if (filledCount > 0) {
-    console.log(`🔧 [MARKET] ${filledCount} combinaciones faltantes rellenadas con valores calculados para ronda ${round}`);
-  }
+  // NO RELLENAR combinaciones faltantes - SOLO usar valores exactos de productos generados
+  // Según ANALISIS_FLUJO_MERCADO.md: "NO rellenar: solo incluir combinaciones que realmente existen en products"
+  // Si falta una combinación, NO se crea (ChatScreen mostrará 0, que es correcto)
+  // Esto garantiza que los valores en legacy coincidan exactamente con los valores en products
+  console.log(`✅ [MARKET] Solo se incluyen combinaciones que realmente existen en los productos generados (no se rellenan valores faltantes)`);
   
   return legacyRound;
 };
@@ -2088,42 +2011,16 @@ io.on('connection', (socket) => {
       console.log(`✅ Evento game_status enviado a ${userId}`);
     }
     
-    // Si el juego ya está en estado 'in_progress', enviar inmediatamente el evento start_round Y productos
+    // Si el juego ya está en estado 'in_progress', enviar inmediatamente el evento start_round
     if (room.status === 'in_progress') {
       console.log(`🔄 Juego ${gameId} ya en estado 'in_progress', enviando evento start_round a nuevo jugador`);
       console.log(`📡 Enviando start_round a socket ${socket.id} para usuario ${userId}`);
-      
-      // CRÍTICO: Incluir productos si están disponibles
-      const startRoundData = {
+      socket.emit('start_round', {
         roundTime: room.roundTime,
         round: room.round,
         winningIndustry: room.winningIndustry,
         status: 'in_progress'
-      };
-      
-      // Si hay productos, incluirlos en economy:state
-      if (room.productList && room.productList.length > 0) {
-        let legacy = {};
-        try {
-          legacy = transformProductsToLegacy(room.productList, room.round);
-        } catch (error) {
-          console.error(`❌ [JOIN_GAME] Error generando legacy desde productList:`, error);
-        }
-        
-        // Emitir economy:state con productos actuales
-        socket.emit('economy:state', {
-          roundId: `${gameId}:${room.round}:${Date.now()}`,
-          version: room.round,
-          round: room.round,
-          market: {
-            products: room.productList,
-            legacy: legacy
-          }
-        });
-        console.log(`✅ [JOIN_GAME] economy:state enviado con ${room.productList.length} productos para ronda ${room.round}`);
-      }
-      
-      socket.emit('start_round', startRoundData);
+      });
       console.log(`✅ Evento start_round enviado a ${userId}`);
     }
     
@@ -2236,32 +2133,13 @@ io.on('connection', (socket) => {
       
       console.log(`🔍 [START_GAME] Productos válidos: ${validProducts.length}/${marketData.products?.length || 0}`);
       
-      // CRÍTICO: Guardar productList en el room ANTES de emitir
-      const finalProducts = validProducts.length > 0 ? validProducts : marketData.products;
-      room.productList = finalProducts;
-      console.log(`💾 [START_GAME] productList guardado en room: ${room.productList.length} productos`);
-      
-      // Sincronizar productList con Firestore INMEDIATAMENTE
-      if (admin.apps.length) {
-        try {
-          const gameRef = admin.firestore().collection('games').doc(gameId);
-          await gameRef.update({
-            productList: finalProducts,
-            lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-          });
-          console.log(`✅ [START_GAME] productList sincronizado con Firestore: ${finalProducts.length} productos`);
-        } catch (error) {
-          console.error(`❌ [START_GAME] Error sincronizando productList con Firestore:`, error);
-        }
-      }
-      
       // MISMA ESTRUCTURA QUE RONDA 2+ - SIN campos extra (round, seed)
       emitToGame(gameId, 'economy:state', {
         roundId: roundId,
         version: version,
         round: 1,
         market: {
-          products: finalProducts, // Usar productos válidos si hay, sino originales
+          products: validProducts.length > 0 ? validProducts : marketData.products, // Usar productos válidos si hay, sino originales
           legacy: marketData.legacy || {} // Incluir legacy (vacío si no está disponible)
         }
       });
@@ -2356,67 +2234,43 @@ io.on('connection', (socket) => {
         }
       }, 120000); // 120 segundos (2 minutos)
       
-      // CRÍTICO: Emitir economy:state con productos para ronda 1
-      // Si room.productList está vacío, intentar obtener desde Firestore
+      // CRÍTICO: Emitir productos nuevamente cuando todos están listos (especialmente para Ronda 1)
+      // Esto asegura que todos los clientes reciban los productos incluso si se perdieron en start_game
       if (room.round === 1) {
-        let productsToEmit = room.productList || [];
-        
-        // Si no hay productos en el room, intentar obtener desde Firestore
-        if (!productsToEmit || productsToEmit.length === 0) {
-          console.log(`⚠️ [READY_TO_PLAY] room.productList vacío, obteniendo desde Firestore...`);
+        console.log(`📡 [READY_TO_PLAY] Re-emitiendo economy:state para Ronda 1 cuando todos están listos...`);
+        try {
+          // Obtener productos desde Firestore
           if (admin.apps.length) {
-            try {
-              const gameRef = admin.firestore().collection('games').doc(gameId);
-              const gameDoc = await gameRef.get();
-              if (gameDoc.exists()) {
-                const gameData = gameDoc.data();
-                productsToEmit = gameData.productList || [];
-                if (productsToEmit.length > 0) {
-                  room.productList = productsToEmit; // Actualizar room
-                  console.log(`✅ [READY_TO_PLAY] Productos obtenidos desde Firestore: ${productsToEmit.length}`);
-                }
+            const db = admin.firestore();
+            const marketRef = db.collection('games').doc(gameId).collection('market').doc('1');
+            const marketDoc = await marketRef.get();
+            
+            if (marketDoc.exists) {
+              const marketData = marketDoc.data();
+              const products = marketData.products || [];
+              
+              // Obtener legacy
+              const legacyRef = db.collection('market').doc(gameId);
+              const legacyDoc = await legacyRef.get();
+              const legacyData = legacyDoc.exists ? (legacyDoc.data().rounds || {}) : {};
+              const legacy = legacyData[1] || {};
+              
+              if (products.length > 0) {
+                console.log(`✅ [READY_TO_PLAY] Re-emitiendo ${products.length} productos para Ronda 1`);
+                emitToGame(gameId, 'economy:state', {
+                  roundId: `${gameId}:1:${Date.now()}`,
+                  version: 1,
+                  round: 1,
+                  market: {
+                    products: products,
+                    legacy: legacy
+                  }
+                });
               }
-            } catch (error) {
-              console.error(`❌ [READY_TO_PLAY] Error obteniendo productos desde Firestore:`, error);
             }
           }
-        }
-        
-        // Si aún no hay productos, generar nuevos
-        if (!productsToEmit || productsToEmit.length === 0) {
-          console.log(`⚠️ [READY_TO_PLAY] No hay productos, generando nuevos...`);
-          try {
-            const marketData = await generateMarketForRound(gameId, 1);
-            productsToEmit = marketData.products || [];
-            room.productList = productsToEmit;
-            console.log(`✅ [READY_TO_PLAY] Productos generados: ${productsToEmit.length}`);
-          } catch (error) {
-            console.error(`❌ [READY_TO_PLAY] Error generando productos:`, error);
-          }
-        }
-        
-        // Emitir economy:state si hay productos
-        if (productsToEmit && productsToEmit.length > 0) {
-          console.log(`🏪 [READY_TO_PLAY] Emitiendo economy:state para ronda 1 con ${productsToEmit.length} productos`);
-          let legacy = {};
-          try {
-            legacy = transformProductsToLegacy(productsToEmit, room.round);
-          } catch (error) {
-            console.error(`❌ [READY_TO_PLAY] Error generando legacy desde productList:`, error);
-          }
-          
-          emitToGame(gameId, 'economy:state', {
-            roundId: `${gameId}:${room.round}:${Date.now()}`,
-            version: room.round,
-            round: room.round,
-            market: {
-              products: productsToEmit,
-              legacy: legacy
-            }
-          });
-          console.log(`✅ [READY_TO_PLAY] economy:state emitido para ronda 1`);
-        } else {
-          console.error(`❌ [READY_TO_PLAY] No se pueden emitir productos - array vacío`);
+        } catch (error) {
+          console.error(`❌ [READY_TO_PLAY] Error re-emitiendo productos:`, error);
         }
       }
       
@@ -2459,7 +2313,6 @@ io.on('connection', (socket) => {
     
     const authority = getGameAuthority(gameId);
     const serverNow = getServerTimestamp();
-    const room = getGameRoom(gameId);
     
     const resyncData = {
       ...authority,
@@ -2468,26 +2321,65 @@ io.on('connection', (socket) => {
       userId
     };
     
-    // CRÍTICO: Si el juego está en progreso y hay productos, incluirlos en resync
-    if (room.status === 'in_progress' && room.productList && room.productList.length > 0) {
-      // Generar legacy desde productList actual si no está disponible
-      let legacy = {};
-      try {
-        legacy = transformProductsToLegacy(room.productList, room.round);
-      } catch (error) {
-        console.error(`❌ [RESYNC] Error generando legacy desde productList:`, error);
-      }
-      
-      resyncData.market = {
-        products: room.productList,
-        legacy: legacy
-      };
-      resyncData.round = room.round;
-      console.log(`🔄 [RESYNC] Incluyendo productos en resync: ${room.productList.length} productos para ronda ${room.round}`);
-    }
-    
     console.log(`🔄 [RESYNC] Enviando estado autoritativo:`, resyncData);
     socket.emit('resync_state', resyncData);
+  });
+
+  // ENDPOINT: Solicitar datos de mercado (productos)
+  socket.on('request_market_data', async ({ gameId, round }) => {
+    console.log(`📡 [MARKET_REQUEST] Solicitud de productos para ronda ${round} del juego ${gameId}`);
+    
+    try {
+      // Obtener productos desde Firestore
+      if (admin.apps.length) {
+        const db = admin.firestore();
+        const marketRef = db.collection('games').doc(gameId).collection('market').doc(round.toString());
+        const marketDoc = await marketRef.get();
+        
+        if (marketDoc.exists) {
+          const marketData = marketDoc.data();
+          const products = marketData.products || [];
+          
+          // Obtener legacy desde el documento agregado
+          const legacyRef = db.collection('market').doc(gameId);
+          const legacyDoc = await legacyRef.get();
+          const legacyData = legacyDoc.exists ? (legacyDoc.data().rounds || {}) : {};
+          const legacy = legacyData[round] || {};
+          
+          console.log(`✅ [MARKET_REQUEST] Enviando ${products.length} productos al cliente`);
+          
+          // Emitir economy:state directamente al socket que lo solicitó
+          socket.emit('economy:state', {
+            roundId: `${gameId}:${round}:${Date.now()}`,
+            version: 1,
+            round: round,
+            market: {
+              products: products,
+              legacy: legacy
+            }
+          });
+        } else {
+          console.warn(`⚠️ [MARKET_REQUEST] No se encontraron productos en Firestore para ronda ${round}`);
+          // Si no hay productos, generar mercado
+          const marketData = await generateMarketForRound(gameId, round);
+          if (marketData && marketData.products) {
+            socket.emit('economy:state', {
+              roundId: `${gameId}:${round}:${Date.now()}`,
+              version: 1,
+              round: round,
+              market: {
+                products: marketData.products,
+                legacy: marketData.legacy || {}
+              }
+            });
+          }
+        }
+      } else {
+        console.warn(`⚠️ [MARKET_REQUEST] Firebase Admin no disponible`);
+      }
+    } catch (error) {
+      console.error(`❌ [MARKET_REQUEST] Error obteniendo productos:`, error);
+    }
   });
 
   // NUEVO: Jugador listo para siguiente ronda (round:ready) - IMPLEMENTACIÓN CORREGIDA
@@ -2602,20 +2494,20 @@ io.on('connection', (socket) => {
           // Solo inicializar inventario si NO existe en memoria
           if (!gameInventory.has(userId)) {
             // Si no existe en memoria, intentar restaurar desde Firestore como último recurso
-            const userRef = admin.firestore().collection('users').doc(userId);
-            const userDoc = await userRef.get();
-            if (userDoc.exists) {
-              const userData = userDoc.data();
-              const gameData = userData?.games?.[gameId];
+          const userRef = admin.firestore().collection('users').doc(userId);
+          const userDoc = await userRef.get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            const gameData = userData?.games?.[gameId];
+            
+            if (gameData) {
+              const restoredInventory = {
+                products: Array.isArray(gameData.products) ? gameData.products : [],
+                rockCoins: typeof gameData.rockCoins === 'number' ? gameData.rockCoins : 600,
+                waste: typeof gameData.waste === 'number' ? gameData.waste : 0
+              };
               
-              if (gameData) {
-                const restoredInventory = {
-                  products: Array.isArray(gameData.products) ? gameData.products : [],
-                  rockCoins: typeof gameData.rockCoins === 'number' ? gameData.rockCoins : 600,
-                  waste: typeof gameData.waste === 'number' ? gameData.waste : 0
-                };
-                
-                gameInventory.set(userId, restoredInventory);
+              gameInventory.set(userId, restoredInventory);
                 console.log(`⚠️ [ROUND:READY] Inventario inicializado desde Firestore para ${userId} (no existía en memoria):`, restoredInventory);
               } else {
                 // Si no hay datos en Firestore, inicializar con defaults
@@ -2931,35 +2823,16 @@ io.on('connection', (socket) => {
         
         console.log(`🔍 [ROUND:READY] Productos válidos: ${validProducts.length}/${newMarket.products?.length || 0}`);
         
-        // CRÍTICO: Guardar productList en el room ANTES de emitir
-        const finalProducts = validProducts.length > 0 ? validProducts : newMarket.products;
-        room.productList = finalProducts;
-        console.log(`💾 [ROUND:READY] productList guardado en room: ${room.productList.length} productos`);
-        
-        // Sincronizar productList con Firestore INMEDIATAMENTE
-        if (admin.apps.length) {
-          try {
-            const gameRef = admin.firestore().collection('games').doc(gameId);
-            await gameRef.update({
-              productList: finalProducts,
-              lastUpdated: admin.firestore.FieldValue.serverTimestamp()
-            });
-            console.log(`✅ [ROUND:READY] productList sincronizado con Firestore: ${finalProducts.length} productos`);
-          } catch (error) {
-            console.error(`❌ [ROUND:READY] Error sincronizando productList con Firestore:`, error);
-          }
-        }
-        
         emitToGame(gameId, 'economy:state', {
           roundId: roundId,
           version: version,
           round: nextRound,
           market: {
-            products: finalProducts, // Usar productos válidos si hay, sino originales
+            products: validProducts.length > 0 ? validProducts : newMarket.products, // Usar productos válidos si hay, sino originales
             legacy: newMarket.legacy // SIEMPRE incluir legacy para ChatScreen
           }
         });
-        console.log(`✅ [ROUND:READY] EMIT economy:state autoritativo (${nextRound}) con ${finalProducts.length} productos`);
+        console.log(`✅ [ROUND:READY] EMIT economy:state autoritativo (${nextRound}) con ${validProducts.length || newMarket.products?.length || 0} productos`);
         
         // SEGUNDO: game_status starting (dispara countdown) CON ESTADO AUTORITATIVO
         emitAuthoritativeState(gameId, 'game_status', {
@@ -3329,12 +3202,22 @@ io.on('connection', (socket) => {
       room.status = 'starting';
       room.readyPlayers.clear();
       
+      // CRÍTICO: Resetear winningIndustry para la nueva ronda (aleatorio)
+      const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
+      room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
+      console.log(`🏭 [PLAYER_READY_NEXT_ROUND] winningIndustry reseteado para ronda ${room.round}: ${room.winningIndustry}`);
+      
       // Emitir nueva ronda
       emitToGame(gameId, 'new_round', {
+        gameId,
         status: 'starting',
         round: room.round,
-        roundTime: Date.now() + 3000, // 3 segundos para countdown
-        message: `Round ${room.round} starting in 3 seconds...`
+        roundTimeISO: new Date(Date.now() + 3000).toISOString(), // 3 segundos de preparación
+        winningIndustry: room.winningIndustry, // CRÍTICO: Incluir winningIndustry reseteado
+        roundMeta: {
+          totalRounds: 3,
+          currentRound: room.round
+        }
       });
       
       // Sincronizar con Firestore
@@ -4268,10 +4151,10 @@ io.on('connection', (socket) => {
     const playerData = room.players.map(player => {
       const productsCount = productsCountByPlayer.get(player.userId) || 0;
       return {
-        userId: player.userId,
-        userName: player.userName,
-        imageUrl: player.imageUrl,
-        totalRewards: playerRankings.get(gameId)?.get(player.userId)?.totalRewards || 0,
+      userId: player.userId,
+      userName: player.userName,
+      imageUrl: player.imageUrl,
+      totalRewards: playerRankings.get(gameId)?.get(player.userId)?.totalRewards || 0,
         blocksMined: productsCount
       };
     });
@@ -4316,6 +4199,11 @@ io.on('connection', (socket) => {
     // Actualizar estado de la sala
     room.status = 'starting';
     room.round = Math.max(1, room.round || 1) + 1;
+    
+    // CRÍTICO: Resetear winningIndustry para la nueva ronda (aleatorio)
+    const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
+    room.winningIndustry = industries[Math.floor(Math.random() * industries.length)];
+    console.log(`🏭 [START_NEXT_ROUND] winningIndustry reseteado para ronda ${room.round}: ${room.winningIndustry}`);
     
     console.log(`✅ [SERVER] Siguiente ronda ${room.round} iniciada para juego ${gameId}`);
     
@@ -4509,11 +4397,6 @@ io.on('connection', (socket) => {
 });
 
 // Endpoint de estado del servidor
-// Health check endpoint para Cloud Run
-app.get('/healthz', (req, res) => {
-  res.status(200).send('OK');
-});
-
 app.get('/status', (req, res) => {
   res.json({
     status: 'running',
