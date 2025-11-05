@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, TouchableOpacity, Text, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
-import GameHeader from '../components/GameHeader';
 import styles from '../styles/EndOfRoundScreenStyles';
 import BlockchainComponent from '../components/BlockchainComponent';
 import PlayerRankingComponent from '../components/PlayerRankingComponent';
@@ -34,8 +33,12 @@ const computeLocalRewards = ({
 }) => {
   if (!Array.isArray(allPlayersData) || allPlayersData.length === 0) return null;
 
+  // Filtrar solo bloques de la ronda actual para las recompensas del ranking
+  // El servidor asigna rounds 1-indexed (1, 2, 3...), así que block.round es directamente el número de ronda
+  // Entonces si estamos en round 1, buscamos bloques con round: 1
+  // Si estamos en round 2, buscamos bloques con round: 2
   const blocks = Array.isArray(minedBlocks) ? minedBlocks.filter(b => {
-    return b && (b.round === round || b.round === (round - 1));
+    return b && b.round === round;
   }) : [];
 
   const rewards = {};
@@ -92,40 +95,42 @@ const EndOfRoundScreen = ({ route }) => {
     setIsWaitingNextRoundLocal
   } = useGameContextHybridRobust();
   
-  // Crear displayPlayers aplicando recompensas locales solo para UI
-  const basePlayers = [...allPlayersData].sort((a, b) => {
+  // CRÍTICO: allPlayersData ya viene con los rewards aplicados desde el servidor
+  // NO debemos sumar los rewards de nuevo - solo usarlos para mostrar los badges
+  // Los valores de rockCoins y waste en allPlayersData ya son los finales (con rewards aplicados)
+  const displayPlayers = [...allPlayersData].sort((a, b) => {
     const balanceA = a.rockCoins - a.waste;
     const balanceB = b.rockCoins - b.waste;
     return balanceB - balanceA;
   });
 
-  const displayPlayers = basePlayers.map(p => {
-    const r = (roundRewards && roundRewards[p.userId]) || {};
-    const rockCoins = p.rockCoins + (r.miningReward || 0);
-    const waste = Math.max(0, p.waste - (r.wasteRemoved || 0));
-    return { ...p, rockCoins, waste };
-  }).sort((a, b) => (b.rockCoins - b.waste) - (a.rockCoins - a.waste));
-
   // Debug: Log de datos recibidos
   console.log('🎮 [EndOfRoundScreen] Datos recibidos del contexto:');
   console.log('🎮 [EndOfRoundScreen] allPlayersData:', allPlayersData);
   console.log('🎮 [EndOfRoundScreen] allPlayersData.length:', allPlayersData.length);
-  console.log('🎮 [EndOfRoundScreen] displayPlayers (con recompensas aplicadas):', displayPlayers);
+  console.log('🎮 [EndOfRoundScreen] displayPlayers (valores finales del servidor, rewards ya incluidos):', displayPlayers);
+  console.log('🎮 [EndOfRoundScreen] roundRewards (solo para badges):', roundRewards);
   console.log('🎮 [EndOfRoundScreen] winningIndustry:', winningIndustry);
   console.log('🎮 [EndOfRoundScreen] round:', round);
   console.log('🎮 [EndOfRoundScreen] isWebSocketConnected:', isWebSocketConnected);
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
   
-  // Cargar industria seleccionada del usuario desde el contexto
+  // Cargar industria seleccionada del usuario desde el contexto SOLO para la ronda actual
+  // CRÍTICO: Resetear la selección cuando cambia la ronda
   useEffect(() => {
+    // Resetear selección cuando cambia la ronda
+    setUserSelectedIndustry(null);
+    console.log(`🏭 [INDUSTRY] Ronda ${round} - reseteando selección de industria`);
+    
+    // Cargar industria seleccionada solo si existe en los datos actuales
     if (allPlayersData && allPlayersData.length > 0) {
       const currentPlayer = allPlayersData.find(player => player.userId === userId);
       if (currentPlayer && currentPlayer.selectedIndustry) {
-        console.log('🏭 [INDUSTRY] Cargando industria seleccionada:', currentPlayer.selectedIndustry);
+        console.log('🏭 [INDUSTRY] Cargando industria seleccionada para esta ronda:', currentPlayer.selectedIndustry);
         setUserSelectedIndustry(currentPlayer.selectedIndustry);
       }
     }
-  }, [allPlayersData, userId]);
+  }, [round, allPlayersData, userId]); // Agregar round como dependencia para resetear en cada ronda
   
   // Estado interno para overlay de calculating (3 segundos fijos como detalle visual)
   const [isCalculating, setIsCalculating] = useState(true);
@@ -181,7 +186,7 @@ const EndOfRoundScreen = ({ route }) => {
       setRoundRewards({}); // sin premios, pero quita el loader
     }
 
-    // 2) Inventario optimista (una sola vez por pantalla)
+    // 2) Inventario optimista (una sola vez por pantalla) - SINCRONIZADO
     if (!appliedOptimisticRef.current && rewards && Object.keys(rewards).length > 0) {
       appliedOptimisticRef.current = true;
       const mine = rewards[userId] || {};
@@ -190,6 +195,9 @@ const EndOfRoundScreen = ({ route }) => {
 
       console.log('💰 [OPTIMISTIC] Aplicando inventario optimista:', { deltaCoins, deltaWaste });
       
+      // Actualizar webSocketInventory (optimista)
+      // NOTA: allPlayersData se sincronizará automáticamente cuando lleguen las actualizaciones del servidor
+      // a través de los listeners en GameContextHybridRobust (inventory_data, player_rankings_data, ROUND_END)
       setWebSocketInventory(prev => ({
         ...prev,
         rockCoins: Math.max(0, (prev?.rockCoins || 0) + deltaCoins),
@@ -233,8 +241,12 @@ const EndOfRoundScreen = ({ route }) => {
       rewardsProcessedRef.current = false;
       effectRunRef.current = false;
       isNavigatingRef.current = false; // Resetear estado de navegación
+      appliedOptimisticRef.current = false; // RESETEAR: Permitir actualizaciones optimistas en nueva ronda
       setRewardMessage(null);
-      // NO limpiar roundRewards aquí - viene del contexto global
+      
+      // NO resetear roundRewards aquí - mantenerlos visibles hasta que salgamos de EndOfRoundScreen
+      // Los rewards se limpiarán cuando realmente naveguemos fuera de esta pantalla
+      // setRoundRewards(null);
       
       // Limpiar cualquier suscripción anterior
       if (unsubscribeRef.current) {
@@ -242,9 +254,9 @@ const EndOfRoundScreen = ({ route }) => {
         unsubscribeRef.current = null;
       }
       
-      console.log(`🧹 Estados reseteados para ronda ${round}`);
+      console.log(`🧹 Estados reseteados para ronda ${round} (rewards se mantienen visibles)`);
     }
-  }, [round]);
+  }, [round]); // Remover setRoundRewards de dependencias
 
   // Efecto principal para manejar recompensas (simplificado para sistema híbrido)
   useEffect(() => {
@@ -387,7 +399,8 @@ const EndOfRoundScreen = ({ route }) => {
       
       // Resetear estados solo cuando el usuario presiona Next Round
       setRewardMessage(null);
-      // NO limpiar roundRewards aquí - viene del contexto global
+      // AHORA SÍ limpiar roundRewards cuando salimos de EndOfRoundScreen
+      setRoundRewards(null);
       rewardsProcessedRef.current = false;
       effectRunRef.current = false;
       
@@ -422,6 +435,15 @@ const EndOfRoundScreen = ({ route }) => {
       isNavigatingRef.current = false;
     }
   };
+
+  // Limpiar rewards cuando el componente se desmonte
+  useEffect(() => {
+    return () => {
+      // Limpiar rewards al desmontar el componente
+      setRoundRewards(null);
+      console.log('🧹 [EndOfRoundScreen] Componente desmontado, limpiando rewards');
+    };
+  }, [setRoundRewards]);
 
   // Overlay de calculating que se muestra encima del contenido original
   // Solo mostrar si estamos realmente en fin de ronda (evita overlay rezagado en nueva ronda)
@@ -491,12 +513,15 @@ const EndOfRoundScreen = ({ route }) => {
 
   return (
     <View style={styles.container}>
-      <GameHeader 
-        title={round === 3 ? 'Game Complete!' : `Round ${round} Complete`} 
-        userId={userId} 
-        gameId={gameId}
-        currentScreen="EndOfRound"
-      />
+      {/* Header limpio sin contador ni número de ronda */}
+      <View style={styles.header}>
+        <Text style={styles.title}>
+          {round === 3 ? 'Game Complete!' : `Round ${round} Complete`}
+        </Text>
+        <Text style={styles.subtitle}>
+          {round === 3 ? 'Final Standings' : 'Round Results'}
+        </Text>
+      </View>
       
       <ScrollView 
         style={styles.content}
@@ -531,14 +556,25 @@ const EndOfRoundScreen = ({ route }) => {
             
             {/* Señalización visual para acertar industria */}
             {userSelectedIndustry === winningIndustry && winningIndustry && (
-              <View style={styles.successBanner}>
-                <Text style={styles.successBannerIcon}>✓</Text>
-                <View style={styles.successBannerText}>
-                  <Text style={styles.successBannerTitle}>Industry guessed!</Text>
-                  <Text style={styles.successBannerSubtitle}>
-                    Your waste it's been reduced
-                  </Text>
+              <View style={styles.successBannerContainer}>
+                <View style={styles.successBanner}>
+                  <Text style={styles.successBannerIcon}>✓</Text>
+                  <View style={styles.successBannerText}>
+                    <Text style={styles.successBannerTitle}>Industry guessed!</Text>
+                    <Text style={styles.successBannerSubtitle}>
+                      Your waste it's been reduced
+                    </Text>
+                  </View>
                 </View>
+                  {/* Cartelito de recompensa de waste similar al de minado */}
+                 {/* CRÍTICO: Solo mostrar si wasteRemoved > 0 Y el waste actual del usuario es > 0 */}
+                 {roundRewards?.[userId]?.wasteRemoved > 0 && (webSocketInventory?.waste || 0) > 0 && (
+                  <View style={styles.wasteRewardBadge}>
+                    <Text style={styles.wasteRewardBadgeText}>
+                      -{roundRewards[userId].wasteRemoved}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
             
@@ -567,8 +603,10 @@ const EndOfRoundScreen = ({ route }) => {
           gameId={gameId} 
           title="Mined Blocks" 
           showReward={true}
-          filterByRound={round}
+          filterByRound={null}
           currentUserId={userId}
+          currentRound={round}
+          showMiningReward={true}
         />
       </ScrollView>
 

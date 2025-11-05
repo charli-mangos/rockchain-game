@@ -58,6 +58,7 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
     const balance = item.rockCoins - item.waste;
     const balanceColor = balance > 0 ? '#2d5a56' : '#ba5d17';
     const isCurrentUser = currentUserId && item.userId === currentUserId;
+    const isLastItem = index === players.length - 1;
     
     // Obtener recompensas para este jugador desde roundRewards
     const playerRewards = roundRewards?.[item.userId];
@@ -70,7 +71,7 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
     }
     
     return (
-      <View style={[styles.row, isCurrentUser && styles.currentUserRow]}>
+      <View style={[styles.row, isCurrentUser && styles.currentUserRow, isLastItem && styles.rowLast]}>
         <View style={styles.cell}>
           <Text style={[styles.rankText, isCurrentUser && styles.currentUserText]}>#{index + 1}</Text>
         </View>
@@ -107,21 +108,23 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
         </View>
       </View>
     );
-  }, [currentUserId, roundRewards]);
+  }, [currentUserId, roundRewards, players.length]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
-      <FlatList
-        data={players}
-        renderItem={renderPlayerItem}
-        keyExtractor={(item) => item.userId}
-        ListHeaderComponent={ListHeader}
-        scrollEnabled={false}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-      />
+      <View style={styles.cardContainer}>
+        <FlatList
+          data={players}
+          renderItem={renderPlayerItem}
+          keyExtractor={(item) => item.userId}
+          ListHeaderComponent={ListHeader}
+          scrollEnabled={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+        />
+      </View>
     </View>
   );
 };
@@ -136,18 +139,39 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: '#1d3d39',
   },
+  cardContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   headerRow: {
     flexDirection: 'row',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 2,
     borderBottomColor: '#1d3d39',
     backgroundColor: '#f8f8f8',
   },
   row: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    backgroundColor: '#fff',
+  },
+  rowLast: {
+    borderBottomWidth: 0,
   },
   headerCell: {
     flex: 1,
@@ -203,13 +227,14 @@ const styles = StyleSheet.create({
     top: -12,
     right: -25,
     backgroundColor: '#2d5a56',
-    borderRadius: 6,
+    borderRadius: 12, // Igualado a BlockchainComponent
     paddingHorizontal: 4,
     paddingVertical: 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#feda8c',
+    borderColor: '#feda8c', // Borde amarillo
+    opacity: 0.85, // Reducir opacidad para que no sean tan "pegostosos"
     shadowColor: '#2d5a56',
     shadowOffset: {
       width: 0,

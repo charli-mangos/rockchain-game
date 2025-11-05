@@ -4,9 +4,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingBottom: 25,
-    paddingTop: 30,
+    paddingTop: 50,
     width: '100%',
     backgroundColor: '#fff',
+  },
+  header: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1d3d39',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#1d3d39',
   },
   content: {
     flex: 1,
@@ -108,6 +123,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  // Contenedor para el banner de éxito con cartelito de recompensa
+  successBannerContainer: {
+    position: 'relative',
+    marginTop: 10,
+  },
   // Banner de éxito para acertar industria
   successBanner: {
     flexDirection: 'row',
@@ -115,7 +135,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#2d5a56',
     padding: 12,
     borderRadius: 10,
-    marginTop: 10,
     borderWidth: 2,
     borderColor: '#feda8c',
     shadowColor: '#2d5a56',
@@ -126,6 +145,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 6,
+  },
+  // Cartelito de recompensa de waste (similar al de minado)
+  wasteRewardBadge: {
+    position: 'absolute',
+    top: -12,
+    right: -25,
+    backgroundColor: '#2d5a56',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#feda8c', // Borde amarillo
+    opacity: 0.85, // Reducir opacidad para que no sean tan "pegostosos"
+    shadowColor: '#2d5a56',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+    zIndex: 10,
+  },
+  wasteRewardBadgeText: {
+    color: '#feda8c',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   successBannerIcon: {
     fontSize: 28,

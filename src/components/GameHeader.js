@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Image, Alert } from 'react-native';
-import { functions } from '../../firebase';
+import { functions, db } from '../../firebase';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { Ionicons } from '@expo/vector-icons';
 import { Animated, Easing } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { httpsCallable } from 'firebase/functions';
 import { callAuthenticatedFunction } from '../utils/authHelper';
+import { doc, getDoc } from 'firebase/firestore';
+import { useTranslation } from 'react-i18next';
 
 const GameHeader = ({ title, userId, gameId, currentScreen }) => {
+  const { t } = useTranslation();
   const { countdown, round, webSocketInventory } = useGameContextHybridRobust();
   const rockCoins = webSocketInventory.rockCoins || 600;
   const waste = webSocketInventory.waste || 0;
@@ -91,6 +94,27 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
     setShowExitModal(true);
   };
 
+  // Función helper para esperar a que el documento del juego exista
+  const waitForGameDocument = async (gameId, maxRetries = 10, delay = 500) => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const gameRef = doc(db, 'games', gameId);
+        const gameDoc = await getDoc(gameRef);
+        if (gameDoc.exists()) {
+          console.log(`✅ Documento del juego ${gameId} verificado después de ${i + 1} intentos`);
+          return true;
+        }
+        console.log(`⏳ Esperando documento del juego ${gameId}... (intento ${i + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } catch (error) {
+        console.error(`❌ Error verificando documento del juego:`, error);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    console.error(`❌ Documento del juego ${gameId} no encontrado después de ${maxRetries} intentos`);
+    return false;
+  };
+
   const createNewGame = async () => {
     console.log('🔄 Creando nueva partida desde GameHeader...');
     setIsCreatingGame(true);
@@ -105,6 +129,12 @@ const GameHeader = ({ title, userId, gameId, currentScreen }) => {
       
       const { gameId: newGameId, gameCode } = result.data;
       console.log('✅ Nueva partida creada con ID:', newGameId, 'Código:', gameCode);
+      
+      // Esperar a que el documento esté disponible en Firestore
+      const documentExists = await waitForGameDocument(newGameId);
+      if (!documentExists) {
+        throw new Error('El documento del juego no está disponible en Firestore');
+      }
       
       // Navegar a GameScreen con la nueva partida usando reset
       navigation.reset({

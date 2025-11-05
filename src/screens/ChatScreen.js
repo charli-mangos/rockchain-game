@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, FlatList, Dimensions, Image } from 'react-native';
+import { View, Text, FlatList, Dimensions, Image, TouchableOpacity } from 'react-native';
 import { db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { LineChart } from 'react-native-chart-kit';
@@ -23,6 +23,9 @@ const ChatScreen = ({ navigation, route }) => {
   const [selectedQuality, setSelectedQuality] = useState('A'); // Default: A
   const [openType, setOpenType] = useState(false);
   const [openQuality, setOpenQuality] = useState(false);
+  
+  // Estado para controlar la vista (lista o chart)
+  const [viewMode, setViewMode] = useState('list'); // 'list' o 'chart'
 
   const marbleColors = {
     White: '#FF9999',
@@ -33,10 +36,8 @@ const ChatScreen = ({ navigation, route }) => {
   };
 
   useEffect(() => {
-    console.log('🏪 [CHATSCREEN] marketData recibido:', marketData);
-    console.log('🏪 [CHATSCREEN] marketData.rounds:', marketData?.rounds);
+    // Logs eliminados para reducir ruido
     if (!marketData || !marketData.rounds) {
-      console.log('🏪 [CHATSCREEN] No hay marketData o rounds, usando fallback');
       // fallback vacío seguro
       setRound(0);
       setPriceHistory([]);
@@ -86,20 +87,39 @@ const ChatScreen = ({ navigation, route }) => {
   // }, [gameId]);
 
   const updateMarbleBasePrices = (roundsData, typeFilter, qualityFilter) => {
-    if (!roundsData || Object.keys(roundsData).length === 0) return;
+    if (!roundsData || Object.keys(roundsData).length === 0) {
+      console.log('🏪 [CHATSCREEN] No hay roundsData disponible');
+      return;
+    }
 
     // Obtener la última ronda disponible de forma segura
     const roundInts = Object.keys(roundsData).map((k) => parseInt(k, 10)).filter((n) => !Number.isNaN(n));
-    if (roundInts.length === 0) return;
+    if (roundInts.length === 0) {
+      console.log('🏪 [CHATSCREEN] No hay rondas válidas');
+      return;
+    }
     const lastRound = Math.max(...roundInts);
     const currentRoundData = roundsData[lastRound];
+    
+    if (!currentRoundData) {
+      console.log(`🏪 [CHATSCREEN] No hay datos para ronda ${lastRound}`);
+      return;
+    }
 
-    const filteredPrices = Object.entries(currentRoundData).map(([marbleType, productData]) => ({
+    // USAR SOLO LOS VALORES EXACTOS - NO BUSCAR ALTERNATIVOS
+    const filteredPrices = Object.entries(currentRoundData).map(([marbleType, productData]) => {
+      const productInfo = productData[typeFilter]?.[qualityFilter];
+      const price = productInfo?.price || 0;
+      const waste = productInfo?.waste || 0;
+      
+      return {
         marbleType,
-        price: productData[typeFilter]?.[qualityFilter]?.price || 0,
-        waste: productData[typeFilter]?.[qualityFilter]?.waste || 0,
-    }));
-
+        price: price,
+        waste: waste,
+      };
+    });
+    
+    // Logs eliminados para reducir ruido
     setMarbleBasePrices(filteredPrices);
   };
 
@@ -153,10 +173,10 @@ const ChatScreen = ({ navigation, route }) => {
           }
         });
       } else {
-        // forma legacy
+        // forma legacy - USAR SOLO VALORES EXACTOS
         Object.entries(roundData || {}).forEach(([marbleType, productData]) => {
           const productInfo = productData[typeFilter]?.[qualityFilter];
-          if (productInfo) {
+          if (productInfo && productInfo.price && productInfo.waste) {
             prices[marbleType] = productInfo.price;
             waste[marbleType] = productInfo.waste;
           }
@@ -279,27 +299,30 @@ const ChatScreen = ({ navigation, route }) => {
     </View>
   ), []);
 
-  // Memoizar el renderizado de cada item
-  const renderPriceItem = useMemo(() => ({ item }) => (
-    <View style={styles.row}>
-      <View style={styles.cell}>
-        <Text style={[styles.nameText, { color: marbleColors[item.marbleType] }]}>
-        {item.marbleType}
-      </Text>
+  // Renderizar cada item de la tabla
+  const renderPriceItem = ({ item, index }) => {
+    const isLastItem = index === sortedMarbleBasePrices.length - 1;
+    return (
+      <View style={[styles.row, isLastItem && styles.rowLast]}>
+        <View style={styles.cell}>
+          <Text style={[styles.nameText, { color: marbleColors[item.marbleType] }]}>
+            {item.marbleType}
+          </Text>
+        </View>
+        <View style={styles.cell}>
+          <Text style={styles.valueText}>{item.price}</Text>
+        </View>
+        <View style={styles.cell}>
+          <Text style={styles.valueText}>{item.waste}</Text>
+        </View>
+        <View style={styles.cell}>
+          <Text style={[styles.valueText, { color: item.balance > 0 ? '#2d5a56' : '#ba5d17' }]}>
+            {item.balance}
+          </Text>
+        </View>
       </View>
-      <View style={styles.cell}>
-        <Text style={styles.valueText}>{item.price}</Text>
-      </View>
-      <View style={styles.cell}>
-        <Text style={styles.valueText}>{item.waste}</Text>
-      </View>
-      <View style={styles.cell}>
-        <Text style={[styles.valueText, { color: item.balance > 0 ? '#2d5a56' : '#ba5d17' }]}>
-          {item.balance}
-        </Text>
-      </View>
-    </View>
-  ), [marbleColors]);
+    );
+  };
 
   if (!marketData) {
     return (
@@ -313,94 +336,126 @@ const ChatScreen = ({ navigation, route }) => {
     <View style={styles.screenContainer}>
       <GameHeader title="RockStock" gameId={gameId} userId={userId} />
 
+      {/* Selector de vista */}
+      <View style={styles.viewModeContainer}>
+        <TouchableOpacity
+          style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]}
+          onPress={() => setViewMode('list')}
+        >
+          <Text style={[styles.viewModeText, viewMode === 'list' && styles.viewModeTextActive]}>
+            List
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewModeButton, viewMode === 'chart' && styles.viewModeButtonActive]}
+          onPress={() => setViewMode('chart')}
+        >
+          <Text style={[styles.viewModeText, viewMode === 'chart' && styles.viewModeTextActive]}>
+            Chart
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Filtros principales */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 21 }}>
-        <DropDownPicker
-          open={openType}
-          value={selectedType}
-          items={[
-            { label: 'Block', value: 'Block' },
-            { label: 'Slab', value: 'Slab' },
-          ]}
-          setOpen={setOpenType}
-          setValue={setSelectedType}
-          placeholder="Select Type"
-          style={{ marginBottom: 5, backgroundColor: '#fdf4e8', borderColor: '#1d3d39', borderWidth: 1 }}
-          textStyle={{ color: '#1d3d39' }}
-          dropDownContainerStyle={{ backgroundColor: '#fdf4e8' }}
-          listItemLabelStyle={{ color: '#1d3d39' }}
-          containerStyle={{ width: '35%' }}
-        />
-        <DropDownPicker
-          open={openQuality}
-          value={selectedQuality}
-          items={[
-            { label: 'A', value: 'A' },
-            { label: 'B', value: 'B' },
-            { label: 'C', value: 'C' },
-          ]}
-          setOpen={setOpenQuality}
-          setValue={setSelectedQuality}
-          placeholder="Select Quality"
-          style={{ marginBottom: 5, backgroundColor: '#fdf4e8', borderColor: '#1d3d39', borderWidth: 1 }}
-          textStyle={{ color: '#1d3d39' }}
-          dropDownContainerStyle={{ backgroundColor: '#fdf4e8' }}
-          listItemLabelStyle={{ color: '#1d3d39' }}
-          containerStyle={{ width: '35%' }}
-        />
+      <View style={styles.filtersContainer}>
+        <View style={styles.filterWrapper}>
+          <Text style={styles.filterLabel}>Type</Text>
+          <DropDownPicker
+            open={openType}
+            value={selectedType}
+            items={[
+              { label: 'Block', value: 'Block' },
+              { label: 'Slab', value: 'Slab' },
+            ]}
+            setOpen={setOpenType}
+            setValue={setSelectedType}
+            placeholder="Select Type"
+            style={styles.dropdownStyle}
+            textStyle={styles.dropdownTextStyle}
+            dropDownContainerStyle={[styles.dropdownContainerStyle, { zIndex: 3000 }]}
+            listItemLabelStyle={styles.dropdownItemStyle}
+            containerStyle={[styles.dropdownContainer, { zIndex: 3000 }]}
+            zIndex={3000}
+          />
+        </View>
+        <View style={styles.filterWrapper}>
+          <Text style={styles.filterLabel}>Quality</Text>
+          <DropDownPicker
+            open={openQuality}
+            value={selectedQuality}
+            items={[
+              { label: 'A', value: 'A' },
+              { label: 'B', value: 'B' },
+              { label: 'C', value: 'C' },
+            ]}
+            setOpen={setOpenQuality}
+            setValue={setSelectedQuality}
+            placeholder="Select Quality"
+            style={styles.dropdownStyle}
+            textStyle={styles.dropdownTextStyle}
+            dropDownContainerStyle={[styles.dropdownContainerStyle, { zIndex: 3000 }]}
+            listItemLabelStyle={styles.dropdownItemStyle}
+            containerStyle={[styles.dropdownContainer, { zIndex: 3000 }]}
+            zIndex={3000}
+          />
+        </View>
       </View>
 
-      {/* Lista de precios base */}
-      <View style={styles.marbleContainer}>
-        <FlatList
-          data={sortedMarbleBasePrices}
-          keyExtractor={(item, index) => `${item.marbleType}-${index}`}
-          renderItem={renderPriceItem}
-          ListHeaderComponent={ListHeader}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-        />
-      </View>
+      {/* Contenido condicional: Lista o Chart */}
+      {viewMode === 'list' ? (
+        <View style={styles.tableContainer}>
+          <View style={styles.tableCard}>
+            <FlatList
+              data={sortedMarbleBasePrices}
+              keyExtractor={(item, index) => `${item.marbleType}-${index}`}
+              renderItem={renderPriceItem}
+              ListHeaderComponent={ListHeader}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        </View>
+      ) : (
+        <View style={styles.chartContentContainer}>
+          {/* Métrica de la gráfica */}
+          <View style={styles.chartMetricContainer}>
+            <Text style={styles.chartMetricLabel}>Chart Metric</Text>
+            <DropDownPicker
+              open={openMetric}
+              value={selectedMetric}
+              items={[
+                { label: 'Price', value: 'Price' },
+                { label: 'Waste', value: 'Waste' },
+                { label: 'Balance', value: 'Balance' },
+              ]}
+              setOpen={setOpenMetric}
+              setValue={setSelectedMetric}
+              style={styles.dropdownStyle}
+              textStyle={styles.dropdownTextStyle}
+              dropDownContainerStyle={[styles.dropdownContainerStyle, { zIndex: 1000 }]}
+              listItemLabelStyle={styles.dropdownItemStyle}
+              containerStyle={[styles.chartDropdownContainer, { zIndex: 1000 }]}
+              zIndex={1000}
+            />
+          </View>
 
-      {/* Métrica de la gráfica */}
-      <DropDownPicker
-        open={openMetric}
-        value={selectedMetric}
-        items={[
-          { label: 'Price', value: 'Price' },
-          { label: 'Waste', value: 'Waste' },
-          { label: 'Balance', value: 'Balance' },
-        ]}
-        setOpen={setOpenMetric}
-        setValue={setSelectedMetric}
-        style={{ backgroundColor: '#fdf4e8', borderColor: '#1d3d39', borderWidth: 1 }}
-        textStyle={{ color: '#1d3d39' }}
-        dropDownContainerStyle={{ backgroundColor: '#fdf4e8' }}
-        listItemLabelStyle={{ color: '#1d3d39' }}
-        containerStyle={{ 
-          width: '35%', 
-          height: 50, 
-          alignSelf: 'center',
-          marginTop: 16,
-          marginBottom: 0
-        }}
-      />
-
-      {/* Gráfica */}
-      <View style={styles.chartContainer}>
-        <LineChart
-          data={chartData}
-          width={Dimensions.get('window').width - 21}
-          height={220}
-          fromZero={true}
-          chartConfig={chartConfig}
-          style={{
-            margin: -15,
-            marginBottom: -30,
-          }}
-        />
-      </View>
+          {/* Gráfica */}
+          <View style={styles.chartWrapper}>
+            <View style={styles.chartContainer}>
+              <LineChart
+                data={chartData}
+                width={Dimensions.get('window').width - 42}
+                height={220}
+                fromZero={true}
+                chartConfig={chartConfig}
+                style={styles.chartStyle}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       <NavigationBar navigation={navigation} />
     </View>

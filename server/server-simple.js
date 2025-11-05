@@ -2088,16 +2088,42 @@ io.on('connection', (socket) => {
       console.log(`✅ Evento game_status enviado a ${userId}`);
     }
     
-    // Si el juego ya está en estado 'in_progress', enviar inmediatamente el evento start_round
+    // Si el juego ya está en estado 'in_progress', enviar inmediatamente el evento start_round Y productos
     if (room.status === 'in_progress') {
       console.log(`🔄 Juego ${gameId} ya en estado 'in_progress', enviando evento start_round a nuevo jugador`);
       console.log(`📡 Enviando start_round a socket ${socket.id} para usuario ${userId}`);
-      socket.emit('start_round', {
+      
+      // CRÍTICO: Incluir productos si están disponibles
+      const startRoundData = {
         roundTime: room.roundTime,
         round: room.round,
         winningIndustry: room.winningIndustry,
         status: 'in_progress'
-      });
+      };
+      
+      // Si hay productos, incluirlos en economy:state
+      if (room.productList && room.productList.length > 0) {
+        let legacy = {};
+        try {
+          legacy = transformProductsToLegacy(room.productList, room.round);
+        } catch (error) {
+          console.error(`❌ [JOIN_GAME] Error generando legacy desde productList:`, error);
+        }
+        
+        // Emitir economy:state con productos actuales
+        socket.emit('economy:state', {
+          roundId: `${gameId}:${room.round}:${Date.now()}`,
+          version: room.round,
+          round: room.round,
+          market: {
+            products: room.productList,
+            legacy: legacy
+          }
+        });
+        console.log(`✅ [JOIN_GAME] economy:state enviado con ${room.productList.length} productos para ronda ${room.round}`);
+      }
+      
+      socket.emit('start_round', startRoundData);
       console.log(`✅ Evento start_round enviado a ${userId}`);
     }
     
@@ -2369,6 +2395,7 @@ io.on('connection', (socket) => {
     
     const authority = getGameAuthority(gameId);
     const serverNow = getServerTimestamp();
+    const room = getGameRoom(gameId);
     
     const resyncData = {
       ...authority,
@@ -2376,6 +2403,24 @@ io.on('connection', (socket) => {
       gameId,
       userId
     };
+    
+    // CRÍTICO: Si el juego está en progreso y hay productos, incluirlos en resync
+    if (room.status === 'in_progress' && room.productList && room.productList.length > 0) {
+      // Generar legacy desde productList actual si no está disponible
+      let legacy = {};
+      try {
+        legacy = transformProductsToLegacy(room.productList, room.round);
+      } catch (error) {
+        console.error(`❌ [RESYNC] Error generando legacy desde productList:`, error);
+      }
+      
+      resyncData.market = {
+        products: room.productList,
+        legacy: legacy
+      };
+      resyncData.round = room.round;
+      console.log(`🔄 [RESYNC] Incluyendo productos en resync: ${room.productList.length} productos para ronda ${room.round}`);
+    }
     
     console.log(`🔄 [RESYNC] Enviando estado autoritativo:`, resyncData);
     socket.emit('resync_state', resyncData);

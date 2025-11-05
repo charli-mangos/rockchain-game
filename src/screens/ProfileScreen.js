@@ -17,8 +17,20 @@ import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 const ProfileScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
-  const { userData, webSocketInventory, gameId, userId, refreshUserData, updateUserDataImmediately } = useGameContextHybridRobust();
+  const { userData, webSocketInventory, gameId, userId, refreshUserData, updateUserDataImmediately, allPlayersData } = useGameContextHybridRobust();
   const userProducts = webSocketInventory?.products || []; 
+  
+  // Obtener el conteo de productos del ranking para comparar
+  const currentUserRankingData = allPlayersData.find(p => p.userId === userId);
+  const rankingProductsCount = currentUserRankingData?.blocksMined || 0;
+  
+  // Debug: Comparar valores
+  console.log('📊 [ProfileScreen] Comparación de inventario:', {
+    profileProductsCount: userProducts.length,
+    rankingProductsCount: rankingProductsCount,
+    webSocketInventoryProducts: webSocketInventory?.products?.length || 0,
+    allPlayersDataBlocksMined: currentUserRankingData?.blocksMined
+  }); 
   const [isEditing, setIsEditing] = useState(false);  // Estado para controlar si el modal está abierto
   const [editingData, setEditingData] = useState({ userName: '', imageUrl: '' }); // Estado para los datos que se están editando
   const [isSaving, setIsSaving] = useState(false); // Estado para controlar el guardado

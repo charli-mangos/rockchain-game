@@ -39,7 +39,12 @@ const StatsScreen = ({ navigation, route }) => {
       </View>
 
       <View style={styles.playersContainer}>
-        <BlockchainComponent gameId={gameId} currentUserId={userId} />
+        <BlockchainComponent 
+          gameId={gameId} 
+          currentUserId={userId}
+          showReward={true}
+          filterByRound={null}
+        />
       </View>
 
       <NavigationBar navigation={navigation} />

@@ -13,6 +13,16 @@ import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 
 const ExpandableProduct = ({ product, userId, gameId, screenType, productList = [] }) => {
+  // Validación defensiva para evitar errores cuando product es undefined
+  if (!product || !product.id) {
+    console.log('⚠️ [ExpandableProduct] Product undefined o sin ID, renderizando placeholder');
+    return (
+      <View style={styles.productCard}>
+        <Text style={styles.productName}>Producto no disponible</Text>
+      </View>
+    );
+  }
+
   const [expanded, setExpanded] = useState(false);
   const [showSummary, setShowSummary] = useState(false); // Controla si se muestra el resumen de compra
   const navigation = useNavigation();
@@ -288,35 +298,20 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
       }
   
       // Determinar el nuevo tipo: transformar bloque a tabla del mismo mármol
-      let newType;
-      let color = null; // Declarar color fuera del scope
-      
-      if (productToTransform.type === "Block") {
-        // Mapear el color del bloque a su tabla correspondiente
-        const colorMapping = {
-          "Black": "BlackSlab",
-          "White": "WhiteSlab", 
-          "Gray": "GraySlab",
-          "Cream": "CreamSlab",
-          "Red": "RedSlab"
-        };
-        
-        // Extraer el color del nombre del producto (ej: "BlackBlock" -> "Black")
-        const productName = productToTransform.name || "";
-        color = Object.keys(colorMapping).find(colorKey => 
-          productName.includes(colorKey)
-        );
-        
-        if (color && colorMapping[color]) {
-          newType = colorMapping[color];
-        } else {
-          // Fallback: usar el tipo original + "Slab"
-          newType = productToTransform.type.replace("Block", "Slab");
-        }
-      } else {
+      if (productToTransform.type !== "Block") {
         Alert.alert("Transform Not Allowed", "Only blocks can be transformed into slabs.");
         return;
       }
+      
+      // Verificar que el producto tenga marbleType
+      if (!productToTransform.marbleType) {
+        Alert.alert("Transform Failed", "Product marble type is missing.");
+        return;
+      }
+      
+      // Transformar Block a Slab del mismo mármol
+      // El tipo cambia de "Block" a "Slab", pero el marbleType se mantiene igual
+      const newType = "Slab";
       
       // Multiplicadores para la transformación bloque -> tabla
       const priceMultiplier = 1.25; // Las tablas valen 25% más
@@ -333,7 +328,8 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
       const transformedProduct = {
         ...productToTransform,
         id: newId, // Nuevo ID único
-        type: newType,
+        type: newType, // "Slab"
+        marbleType: productToTransform.marbleType, // Mantener el mismo mármol
         currentPrice: newPrice,
         waste: newWaste,
         // El nombre se generará automáticamente como marbleType + ' ' + type
@@ -342,19 +338,20 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
       
       console.log('🔄 [TRANSFORM] Transformación:', {
         original: {
-          name: productToTransform.name,
+          id: productToTransform.id,
+          marbleType: productToTransform.marbleType,
           type: productToTransform.type,
           price: productToTransform.currentPrice,
           waste: productToTransform.waste
         },
         transformed: {
-          name: transformedProduct.name,
+          id: transformedProduct.id,
+          marbleType: transformedProduct.marbleType,
           type: transformedProduct.type,
           price: transformedProduct.currentPrice,
           waste: transformedProduct.waste
         },
-        color: color,
-        newType: newType
+        wasteExtra: wasteExtra
       });
   
       // Procesar transformación vía WebSocket

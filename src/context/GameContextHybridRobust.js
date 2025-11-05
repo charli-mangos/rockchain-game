@@ -292,6 +292,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     const webSocketService = getWebSocket();
     if (webSocketService && webSocketService.isConnected) {
       webSocketService.emit('resync_state', { gameId, userId });
+      lastSyncTimeRef.current = Date.now();
     }
   };
 
@@ -354,6 +355,35 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       }
     };
   }, [gameId, userId]); // Agregar gameId como dependencia
+
+  // EFECTO: Verificar productos después de conectar WebSocket
+  useEffect(() => {
+    if (!isWebSocketConnected || !gameId) return;
+    
+    // Si no hay productos después de 3 segundos de conectarse, obtener desde Firestore
+    const timeoutId = setTimeout(() => {
+      if (!productList || productList.length === 0) {
+        console.log('🔄 [WEBSOCKET] No hay productos después de 3 segundos, obteniendo desde Firestore...');
+        const gameRef = doc(db, 'games', gameId);
+        getDoc(gameRef).then((docSnap) => {
+          if (docSnap.exists()) {
+            const gameData = docSnap.data();
+            const firestoreProducts = gameData.productList || [];
+            if (firestoreProducts.length > 0) {
+              console.log('✅ [WEBSOCKET] Productos obtenidos desde Firestore:', firestoreProducts.length);
+              setProductList(firestoreProducts);
+            } else {
+              console.warn('⚠️ [WEBSOCKET] Firestore tampoco tiene productos');
+            }
+          }
+        }).catch((error) => {
+          console.error('❌ [WEBSOCKET] Error obteniendo productos desde Firestore:', error);
+        });
+      }
+    }, 3000); // Esperar 3 segundos después de conectar
+    
+    return () => clearTimeout(timeoutId);
+  }, [isWebSocketConnected, gameId, productList]);
 
   // CARGAR INVENTARIO DESDE WEBSOCKET
   useEffect(() => {

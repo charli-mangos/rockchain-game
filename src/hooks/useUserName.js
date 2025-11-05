@@ -7,7 +7,17 @@ export const useUserName = (userId) => {
 
   useEffect(() => {
     const fetchUserName = async () => {
-      if (userId) {
+      if (!userId) {
+        setUserName(null);
+        return;
+      }
+      
+      // Caso especial: external miner
+      if (userId === 'external_miner') {
+        setUserName('External Miner');
+        return;
+      }
+      
         try {
           const userDocRef = doc(db, "users", userId);
           const userDoc = await getDoc(userDocRef);
@@ -20,7 +30,6 @@ export const useUserName = (userId) => {
         } catch (error) {
           console.error(`Error fetching userName for userId: ${userId}`, error);
           setUserName("Unknown");
-        }
       }
     };
 

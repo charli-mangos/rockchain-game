@@ -4,11 +4,35 @@ import { useTranslation } from 'react-i18next';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 import { useUserName } from '../hooks/useUserName';
 
-const BlockCard = ({ block, index, showReward, currentUserId }) => {
+const BlockCard = ({ block, index, showReward, currentUserId, currentRound, showMiningReward = false }) => {
   const { t } = useTranslation();
   const minerId = block.winner?.userId;
   const minerName = useUserName(minerId);
   const isCurrentUserWinner = minerId === currentUserId;
+  
+  // Determinar si el bloque es de la ronda actual o de una ronda anterior
+  // El servidor asigna rounds 1-indexed (1, 2, 3...), así que block.round es directamente el número de ronda
+  // Entonces si block.round === currentRound, es de la ronda actual
+  const blockRoundNumber = block.round !== undefined ? block.round : 1; // block.round ya es el número de ronda (1, 2, 3...)
+  const isCurrentRound = currentRound !== undefined && block.round === currentRound;
+  
+  // Determinar qué mostrar en el cartelito y su estilo
+  let badgeText = null;
+  let showBadge = false;
+  let isPreviousRound = false;
+  
+  // Siempre mostrar la ronda (R1, R2, R3...) si hay un bloque con winner
+  if (showReward && block.winner) {
+    badgeText = `R${blockRoundNumber}`;
+    showBadge = true;
+    isPreviousRound = true; // Por defecto, mostrar estilo naranja (ronda anterior)
+    
+    // Solo en EndOfRoundScreen, si es la ronda actual y el usuario ganó, mostrar +50 en lugar de la ronda
+    if (showMiningReward && isCurrentRound && isCurrentUserWinner) {
+      badgeText = '+50';
+      isPreviousRound = false; // Estilo verde con fondo para el reward de minado
+    }
+  }
   
   return (
     <View style={styles.blockCard}>
@@ -19,9 +43,16 @@ const BlockCard = ({ block, index, showReward, currentUserId }) => {
       <Text style={styles.blockDetails}>
         {t('blockchain.time')}: {((block.winner?.responseTime || 0) / 1000).toFixed(2)}s
       </Text>
-      {showReward && block.winner && isCurrentUserWinner && (
-        <View style={styles.rewardContainer}>
-          <Text style={styles.rewardText}>+50</Text>
+      {showBadge && (
+        <View style={[
+          styles.rewardContainer,
+          isPreviousRound && styles.rewardContainerPreviousRound
+        ]}>
+          <Text style={[
+            styles.rewardText,
+            isPreviousRound && styles.rewardTextPreviousRound,
+            !isPreviousRound && styles.rewardTextCurrentRound // Estilo amarillo para +50
+          ]}>{badgeText}</Text>
         </View>
       )}
     </View>
@@ -32,10 +63,13 @@ const BlockConnection = () => (
   <View style={styles.blockConnection} />
 );
 
-const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null, currentUserId }) => {
+const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false, filterByRound = null, currentUserId, currentRound, showMiningReward = false }) => {
   const { t } = useTranslation();
   const { webSocketInventory, minedBlocks, round } = useGameContextHybridRobust();
   const [blocks, setBlocks] = useState([]);
+  
+  // Usar currentRound si se proporciona, sino usar el round del contexto
+  const displayRound = currentRound !== undefined ? currentRound : round;
 
   useEffect(() => {
     if (!gameId) {
@@ -52,14 +86,18 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
     // Usar bloques minados directamente del WebSocket
     const blocksToShow = minedBlocks
       .filter(block => {
-        // FIX: Los bloques tienen round: 0 pero corresponden a la ronda actual
-        if (filterByRound !== null) {
-          // Si filterByRound es 1, mostrar bloques con round: 0 (primera ronda)
-          const shouldShow = filterByRound === 1 ? block.round === 0 : block.round === filterByRound;
+        // Si filterByRound es null, mostrar TODOS los bloques desde el inicio de la partida
+        if (filterByRound === null) {
+          return true; // Mostrar todos los bloques
+        }
+        
+        // Si filterByRound tiene un valor, filtrar por esa ronda específica
+        // El servidor asigna rounds 1-indexed (1, 2, 3...), así que block.round es directamente el número de ronda
+        // Entonces si filterByRound es 1, buscamos bloques con round: 1
+        // Si filterByRound es 2, buscamos bloques con round: 2
+        const shouldShow = block.round === filterByRound;
           console.log(`🔍 [BLOCKCHAIN] Filtrando bloques: block.round=${block.round}, filterByRound=${filterByRound}, shouldShow=${shouldShow}`);
           return shouldShow;
-        }
-        return true; // Mostrar todos los bloques si no hay filtro
       })
       .sort((a, b) => a.timestamp - b.timestamp); // Ordenar por timestamp
 
@@ -82,7 +120,7 @@ const BlockchainComponent = ({ gameId, title = "Blockchain", showReward = false,
           >
             {blocks.map((block, index) => (
               <React.Fragment key={block.id}>
-                <BlockCard block={block} index={index} showReward={showReward} currentUserId={currentUserId} />
+                <BlockCard block={block} index={index} showReward={showReward} currentUserId={currentUserId} currentRound={displayRound} showMiningReward={showMiningReward} />
                 {index < blocks.length - 1 && <BlockConnection />}
               </React.Fragment>
             ))}
@@ -171,10 +209,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
+  rewardContainerPreviousRound: {
+    backgroundColor: 'transparent',
+  },
   rewardText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  rewardTextPreviousRound: {
+    color: '#ba5d17', // Color naranja del botón End Game
+  },
+  rewardTextCurrentRound: {
+    color: '#feda8c', // Color amarillo para +50
   },
 });
 

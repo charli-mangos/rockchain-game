@@ -72,6 +72,9 @@ class SocketAdapter {
       // Configurar eventos
       this._setupEventListeners();
       
+      // Registrar listeners pendientes que se registraron antes de crear el socket
+      this._registerPendingListeners();
+      
       // Esperar conexión
       await this._waitForConnection();
       
@@ -161,7 +164,10 @@ class SocketAdapter {
     // start_round (Cloud Run) -> start_round (legacy)
     this.socket.on('start_round', (data) => {
       console.log('🔌 [SocketAdapter] start_round Cloud Run -> legacy:', data);
+      console.log('🔌 [SocketAdapter] start_round payload completo:', JSON.stringify(data, null, 2));
+      console.log('🔌 [SocketAdapter] start_round roundEndsAtMs:', data.roundEndsAtMs);
       this._emit('start_round', data);
+      console.log('✅ [SocketAdapter] start_round emitido a listeners internos');
     });
 
     // new_round (Cloud Run) -> new_round (legacy)
@@ -276,6 +282,18 @@ class SocketAdapter {
     });
   }
 
+  // Registrar listeners pendientes en el socket
+  _registerPendingListeners() {
+    console.log('🔌 [SocketAdapter] Registrando listeners pendientes en socket...');
+    this.listeners.forEach((callbacks, event) => {
+      callbacks.forEach(callback => {
+        console.log(`🔌 [SocketAdapter] Registrando listener pendiente para: ${event}`);
+        this.socket.on(event, callback);
+      });
+    });
+    console.log(`🔌 [SocketAdapter] ${this.listeners.size} tipos de eventos registrados`);
+  }
+
   // Esperar conexión
   _waitForConnection() {
     return new Promise((resolve, reject) => {
@@ -325,10 +343,14 @@ class SocketAdapter {
       this.listeners.set(event, []);
     }
     this.listeners.get(event).push(callback);
+    console.log(`🔌 [SocketAdapter] Listener registrado para evento: ${event} (total listeners: ${this.listeners.get(event).length})`);
 
     // Configurar listener en el socket si existe
     if (this.socket) {
+      console.log(`🔌 [SocketAdapter] Configurando listener directamente en socket para: ${event}`);
       this.socket.on(event, callback);
+    } else {
+      console.log(`⚠️ [SocketAdapter] Socket no existe aún, listener se registrará cuando el socket se cree`);
     }
   }
 
