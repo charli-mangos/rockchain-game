@@ -61,12 +61,15 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
     const isLastItem = index === players.length - 1;
     
     // Obtener recompensas para este jugador desde roundRewards
-    const playerRewards = roundRewards?.[item.userId];
-    const hasMiningReward = playerRewards?.miningReward > 0;
+    const playerRewards = roundRewards?.[item.userId] || {};
+    const miningReward = playerRewards.miningReward || playerRewards.miningRewards || 0;
+    const industryReward = playerRewards.industryReward || 0;
+    const totalRockCoinReward = miningReward + industryReward;
+    const hasRockCoinReward = totalRockCoinReward > 0;
     const hasWasteReduction = playerRewards?.wasteRemoved > 0;
     
     // Debug logs solo si hay recompensas
-    if (hasMiningReward || hasWasteReduction) {
+    if (hasRockCoinReward || hasWasteReduction) {
       console.log(`🏆 [PlayerRankingComponent] ${item.userName} tiene recompensas:`, playerRewards);
     }
     
@@ -81,9 +84,9 @@ const PlayerRankingComponent = ({ players, title, currentUserId, roundRewards })
         <View style={styles.cell}>
           <View style={styles.valueContainer}>
             <Text style={[styles.valueText, isCurrentUser && styles.currentUserText]}>{item.rockCoins}</Text>
-            {hasMiningReward && (
+            {hasRockCoinReward && (
               <View style={styles.rewardBadge}>
-                <Text style={styles.rewardBadgeText}>+{playerRewards.miningReward}</Text>
+                <Text style={styles.rewardBadgeText}>+{totalRockCoinReward}</Text>
               </View>
             )}
           </View>

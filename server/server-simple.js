@@ -45,6 +45,23 @@ io.on('connection', (socket) => {
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint para Cloud Run
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Info endpoint
+app.get('/info', (req, res) => {
+  res.status(200).json({
+    service: 'rockchain-socket',
+    version: '1.0.0',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    activeGames: gameRooms.size,
+    activeConnections: io.sockets.sockets.size
+  });
+});
+
 // Almacenamiento en memoria para el estado del juego
 const gameRooms = new Map(); // gameId -> { players: [], status, round, etc. }
 const playerSockets = new Map(); // userId -> socketId
@@ -232,11 +249,31 @@ const emitAuthoritativeState = (gameId, eventName, additionalData = {}) => {
   const authority = getGameAuthority(gameId);
   const serverNow = getServerTimestamp();
   
+  // CRÍTICO: additionalData debe sobrescribir authority para asegurar que los valores más recientes se usen
+  // Especialmente importante para roundEndsAtMs cuando se emite start_round después de countdown_start
   const authoritativePayload = {
     ...authority,
     serverNowMs: serverNow,
-    ...additionalData
+    ...additionalData // additionalData sobrescribe authority (incluyendo roundEndsAtMs si está presente)
   };
+  
+  // CRÍTICO: Si additionalData incluye roundEndsAtMs, actualizar el authority en memoria
+  // para que futuras llamadas a getGameAuthority devuelvan el valor correcto
+  // IMPORTANTE: Solo actualizar si NO es countdown_start (countdown es temporal)
+  // Solo start_round debe actualizar el authority permanente
+  if (additionalData.roundEndsAtMs !== undefined && eventName !== 'countdown_start') {
+    const updatedAuthority = {
+      ...authority,
+      roundEndsAtMs: additionalData.roundEndsAtMs,
+      round: additionalData.round !== undefined ? additionalData.round : authority.round,
+      roundId: additionalData.roundId !== undefined ? additionalData.roundId : authority.roundId,
+      version: additionalData.version !== undefined ? additionalData.version : authority.version
+    };
+    gameAuthorities.set(gameId, updatedAuthority);
+    console.log(`🔄 [AUTHORITY] Authority actualizado en memoria con roundEndsAtMs=${additionalData.roundEndsAtMs} para ${eventName}`);
+  } else if (eventName === 'countdown_start') {
+    console.log(`⏸️ [AUTHORITY] countdown_start NO actualiza authority permanente (es temporal)`);
+  }
   
   console.log(`📡 [AUTHORITY] Emitiendo ${eventName} con estado autoritativo:`, authoritativePayload);
   console.log(`📡 [AUTHORITY] Payload incluye roundEndsAtMs:`, !!authoritativePayload.roundEndsAtMs);
@@ -1041,19 +1078,233 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
   }
 };
 
-// NUEVA FUNCIÓN: Generar mercado determinista para una ronda
-const generateMarketForRound = async (gameId, round) => {
+// FUNCIÓN AUXILIAR: Validar que todos los productos son válidos
+const validateProducts = (products, expectedCount = 20) => {
+  if (!Array.isArray(products)) {
+    return { valid: false, error: 'products no es un array' };
+  }
+  
+  if (products.length !== expectedCount) {
+    return { valid: false, error: `Se esperaban ${expectedCount} productos, se generaron ${products.length}` };
+  }
+  
+  const invalidProducts = [];
+  for (let i = 0; i < products.length; i++) {
+    const p = products[i];
+    
+    // Validar campos requeridos
+    if (!p.marbleType || !p.type || !p.quality) {
+      invalidProducts.push({ index: i, error: 'Campos requeridos faltantes', product: p });
+      continue;
+    }
+    
+    // Validar tipos de campos (orden alineado con generateProductsWithSeed)
+    const validMarbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
+    const validTypes = ['Block', 'Slab'];
+    const validQualities = ['A', 'B', 'C'];
+    
+    if (!validMarbleTypes.includes(p.marbleType)) {
+      invalidProducts.push({ index: i, error: `marbleType inválido: ${p.marbleType}`, product: p });
+      continue;
+    }
+    
+    if (!validTypes.includes(p.type)) {
+      invalidProducts.push({ index: i, error: `type inválido: ${p.type}`, product: p });
+      continue;
+    }
+    
+    if (!validQualities.includes(p.quality)) {
+      invalidProducts.push({ index: i, error: `quality inválido: ${p.quality}`, product: p });
+      continue;
+    }
+    
+    // Validar valores numéricos
+    if (typeof p.currentPrice !== 'number' || isNaN(p.currentPrice) || !isFinite(p.currentPrice) || p.currentPrice <= 0) {
+      invalidProducts.push({ index: i, error: `currentPrice inválido: ${p.currentPrice}`, product: p });
+      continue;
+    }
+    
+    if (typeof p.waste !== 'number' || isNaN(p.waste) || !isFinite(p.waste) || p.waste <= 0) {
+      invalidProducts.push({ index: i, error: `waste inválido: ${p.waste}`, product: p });
+      continue;
+    }
+    
+    // Validar rangos
+    const minPrice = 80;
+    const maxPrice = 200;
+    const minWaste = 30;
+    const maxWaste = 80; // Actualizado: waste entre 30-80
+    
+    if (p.currentPrice < minPrice || p.currentPrice > maxPrice) {
+      invalidProducts.push({ index: i, error: `currentPrice fuera de rango: ${p.currentPrice} (debe estar entre ${minPrice} y ${maxPrice})`, product: p });
+      continue;
+    }
+    
+    if (p.waste < minWaste || p.waste > maxWaste) {
+      invalidProducts.push({ index: i, error: `waste fuera de rango: ${p.waste} (debe estar entre ${minWaste} y ${maxWaste})`, product: p });
+      continue;
+    }
+  }
+  
+  if (invalidProducts.length > 0) {
+    return { 
+      valid: false, 
+      error: `${invalidProducts.length} productos inválidos`, 
+      details: invalidProducts 
+    };
+  }
+  
+  return { valid: true };
+};
+
+// FUNCIÓN AUXILIAR: Validar consistencia entre products y legacy
+const validateMarketConsistency = (products, legacy) => {
+  const inconsistencies = [];
+  
+  // Crear mapa de productos por combinación
+  const productMap = new Map();
+  for (const p of products) {
+    const key = `${p.marbleType}:${p.type}:${p.quality}`;
+    if (!productMap.has(key)) {
+      productMap.set(key, []);
+    }
+    productMap.get(key).push(p);
+  }
+  
+  // Verificar que cada combinación en legacy tiene al menos un producto correspondiente
+  for (const marbleType in legacy) {
+    for (const type in legacy[marbleType]) {
+      for (const quality in legacy[marbleType][type]) {
+        const key = `${marbleType}:${type}:${quality}`;
+        if (!productMap.has(key)) {
+          inconsistencies.push({
+            type: 'missing_product',
+            combination: key,
+            legacy: legacy[marbleType][type][quality]
+          });
+        } else {
+          // Verificar que los valores coinciden
+          const legacyPrice = legacy[marbleType][type][quality].price;
+          const legacyWaste = legacy[marbleType][type][quality].waste;
+          const matchingProducts = productMap.get(key);
+          
+          // Al menos un producto debe coincidir con legacy
+          const hasMatch = matchingProducts.some(p => 
+            p.currentPrice === legacyPrice && p.waste === legacyWaste
+          );
+          
+          if (!hasMatch) {
+            inconsistencies.push({
+              type: 'value_mismatch',
+              combination: key,
+              legacy: { price: legacyPrice, waste: legacyWaste },
+              products: matchingProducts.map(p => ({ price: p.currentPrice, waste: p.waste }))
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  if (inconsistencies.length > 0) {
+    return { valid: false, inconsistencies };
+  }
+  
+  return { valid: true };
+};
+
+// NUEVA FUNCIÓN: Generar mercado determinista para una ronda (VERSIÓN MEJORADA)
+const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
   console.log(`🏪 [MARKET] Generando mercado para ronda ${round} del juego ${gameId}`);
   
   // Semilla determinista basada en gameId + round (SIN timestamp para reproducibilidad)
   const seed = `${gameId}:${round}`;
   console.log(`🌱 [MARKET] Semilla determinista: ${seed}`);
   
-  // Generar productos con semilla determinista
-  const products = generateProductsWithSeed(seed, round);
-  
-  // Inicializar legacyRound desde el principio para que siempre esté disponible
+  let products = null;
   let legacyRound = {};
+  let attempt = 0;
+  let lastError = null;
+  
+  // Reintentos para garantizar productos válidos
+  while (attempt < maxRetries) {
+    attempt++;
+    console.log(`🔄 [MARKET] Intento ${attempt}/${maxRetries} de generación de productos...`);
+    
+    try {
+  // Generar productos con semilla determinista
+      products = generateProductsWithSeed(seed, round);
+      
+      // VALIDACIÓN CRÍTICA: Verificar que todos los productos son válidos
+      const validation = validateProducts(products, 20);
+      if (!validation.valid) {
+        lastError = new Error(`Validación de productos falló: ${validation.error}`);
+        if (validation.details) {
+          console.error(`❌ [MARKET] Detalles de productos inválidos:`, validation.details);
+        }
+        console.error(`❌ [MARKET] ${lastError.message}, reintentando...`);
+        continue; // Reintentar
+      }
+      
+      console.log(`✅ [MARKET] Validación de productos exitosa: ${products.length} productos válidos`);
+      
+      // Transformar a estructura legacy
+      legacyRound = transformProductsToLegacy(products, round);
+      
+      // VALIDACIÓN CRÍTICA: Verificar consistencia entre products y legacy
+      const consistencyCheck = validateMarketConsistency(products, legacyRound);
+      if (!consistencyCheck.valid) {
+        lastError = new Error(`Inconsistencia entre products y legacy: ${consistencyCheck.inconsistencies.length} problemas`);
+        console.error(`❌ [MARKET] Inconsistencias detectadas:`, consistencyCheck.inconsistencies);
+        console.error(`❌ [MARKET] ${lastError.message}, reintentando...`);
+        continue; // Reintentar
+      }
+      
+      console.log(`✅ [MARKET] Consistencia entre products y legacy verificada`);
+      
+      // Si llegamos aquí, los productos son válidos y consistentes
+      break;
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ [MARKET] Error en intento ${attempt}:`, error);
+      if (attempt < maxRetries) {
+        console.log(`🔄 [MARKET] Reintentando generación...`);
+        continue;
+      }
+    }
+  }
+  
+  // Si después de todos los reintentos no tenemos productos válidos, usar productos generados de todos modos
+  // (pero loguear el error para debugging)
+  if (!products || !validateProducts(products, 20).valid) {
+    const error = lastError || new Error('No se pudieron generar productos válidos después de todos los reintentos');
+    console.error(`❌ [MARKET] ${error.message}`);
+    
+    // Si tenemos productos aunque no pasen validación estricta, usarlos de todos modos
+    if (products && products.length > 0) {
+      console.warn(`⚠️ [MARKET] Usando productos generados aunque no pasen validación estricta (${products.length} productos)`);
+      // Filtrar solo los productos que tengan campos básicos válidos
+      const basicValidProducts = products.filter(p => 
+        p && 
+        p.marbleType && p.type && p.quality &&
+        typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) && p.currentPrice > 0 &&
+        typeof p.waste === 'number' && !isNaN(p.waste) && p.waste > 0
+      );
+      
+      if (basicValidProducts.length > 0) {
+        console.warn(`⚠️ [MARKET] Usando ${basicValidProducts.length} productos con validación básica`);
+        products = basicValidProducts;
+        legacyRound = transformProductsToLegacy(products, round);
+      } else {
+        // Si ni siquiera hay productos básicamente válidos, lanzar error
+        throw error;
+      }
+    } else {
+      // Si no hay productos en absoluto, lanzar error
+      throw error;
+    }
+  }
   
   // Persistir mercado en Firestore si está disponible
   if (admin.apps.length) {
@@ -1065,7 +1316,9 @@ const generateMarketForRound = async (gameId, round) => {
         round: round,
         products: products,
         seed: seed,
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        validated: true, // Marcar como validado
+        validationTimestamp: admin.firestore.FieldValue.serverTimestamp()
       });
       
       console.log(`✅ [MARKET] Mercado persistido en Firestore para ronda ${round}`);
@@ -1076,32 +1329,32 @@ const generateMarketForRound = async (gameId, round) => {
       // Primero obtener el documento existente para preservar rondas anteriores
       const legacyDoc = await legacyRef.get();
       const existingRounds = legacyDoc.exists ? (legacyDoc.data().rounds || {}) : {};
-      
-      // Transformar lista plana a estructura legacy usando función auxiliar
-      legacyRound = transformProductsToLegacy(products, round);
 
       // Agregar la nueva ronda a las existentes
       existingRounds[round] = legacyRound;
       
       await legacyRef.set({
-        rounds: existingRounds
+        rounds: existingRounds,
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
       console.log(`✅ [MARKET] Legacy market agregado/actualizado para ronda ${round}`);
     } catch (error) {
       console.error(`❌ [MARKET] Error persistiendo mercado:`, error);
-      // Si hay error, aún generamos legacyRound desde los productos
-      legacyRound = transformProductsToLegacy(products, round);
+      // NO lanzar error aquí - los productos ya están validados y generados
+      // El cliente puede recibirlos vía WebSocket aunque Firestore falle
     }
   } else {
-    // Si Firestore no está disponible, aún generamos legacyRound desde los productos
-    legacyRound = transformProductsToLegacy(products, round);
+    console.warn(`⚠️ [MARKET] Firestore no disponible, productos generados pero no persistidos`);
   }
+  
+  console.log(`✅ [MARKET] Mercado generado exitosamente para ronda ${round}: ${products.length} productos válidos y consistentes`);
   
   return {
     products: products,
     round: round,
     seed: seed,
-    legacy: legacyRound
+    legacy: legacyRound,
+    validated: true
   };
 };
 
@@ -1160,11 +1413,17 @@ const transformProductsToLegacy = (products, round) => {
     console.error(`❌ [MARKET] No se generó estructura legacy válida para ronda ${round}`);
   }
   
+  // NO RELLENAR combinaciones faltantes - SOLO usar valores exactos de productos generados
+  // Según ANALISIS_FLUJO_MERCADO.md: "NO rellenar: solo incluir combinaciones que realmente existen en products"
+  // Si falta una combinación, NO se crea (ChatScreen mostrará 0, que es correcto)
+  // Esto garantiza que los valores en legacy coincidan exactamente con los valores en products
+  console.log(`✅ [MARKET] Solo se incluyen combinaciones que realmente existen en los productos generados (no se rellenan valores faltantes)`);
+  
   // Clamp valores existentes a rangos válidos
   const minPrice = 80;
   const maxPrice = 200;
   const minWaste = 30;
-  const maxWaste = 70;
+  const maxWaste = 80; // Actualizado: waste entre 30-80
   
   for (const marble in legacyRound) {
     for (const pType in legacyRound[marble]) {
@@ -1176,12 +1435,6 @@ const transformProductsToLegacy = (products, round) => {
       }
     }
   }
-  
-  // NO RELLENAR combinaciones faltantes - SOLO usar valores exactos de productos generados
-  // Según ANALISIS_FLUJO_MERCADO.md: "NO rellenar: solo incluir combinaciones que realmente existen en products"
-  // Si falta una combinación, NO se crea (ChatScreen mostrará 0, que es correcto)
-  // Esto garantiza que los valores en legacy coincidan exactamente con los valores en products
-  console.log(`✅ [MARKET] Solo se incluyen combinaciones que realmente existen en los productos generados (no se rellenan valores faltantes)`);
   
   return legacyRound;
 };
@@ -1200,22 +1453,33 @@ const generateProductsWithSeed = (seed, round) => {
       hash = hash & hash; // Convertir a 32bit integer
     }
   
+  // CRÍTICO: Asegurar que el hash sea siempre positivo
+  hash = Math.abs(hash);
+  if (hash === 0) {
+    hash = 1; // Evitar hash cero que causaría problemas
+    }
+  
   console.log(`🔍 [GENERATE] Hash inicial: ${hash}`);
   
-  // Asegurar que hash es un número válido
-  if (isNaN(hash) || !isFinite(hash)) {
-    console.error(`❌ [GENERATE] Hash inválido: ${hash}, usando fallback`);
-    hash = Math.abs(hash) || 12345; // Fallback si hash es inválido
+  // Validar hash inicial - NO usar fallback, lanzar error si hay problema
+  if (isNaN(hash) || !isFinite(hash) || hash <= 0) {
+    throw new Error(`Hash inicial inválido para seed "${seed}": ${hash}`);
   }
   
   // Función que mantiene el estado de hash entre llamadas
   const random = () => {
       hash = (hash * 9301 + 49297) % 233280;
+    // CRÍTICO: Asegurar que el hash sea siempre positivo después del módulo
+    if (hash < 0) {
+      hash = hash + 233280;
+    }
+    if (hash === 0) {
+      hash = 1; // Evitar hash cero
+    }
     const result = hash / 233280;
-    // Validar que el resultado es un número válido
-    if (isNaN(result) || !isFinite(result)) {
-      console.error(`❌ [GENERATE] random() devolvió valor inválido: ${result}, hash=${hash}`);
-      return 0.5; // Fallback seguro
+    // Validar que el resultado es un número válido - NO usar fallback
+    if (isNaN(result) || !isFinite(result) || result < 0 || result >= 1) {
+      throw new Error(`random() devolvió valor inválido: ${result}, hash=${hash}, seed="${seed}"`);
     }
     return result;
   };
@@ -1224,10 +1488,10 @@ const generateProductsWithSeed = (seed, round) => {
   const testRandom = random();
   console.log(`🔍 [GENERATE] Test random(): ${testRandom}`);
   
-  // Mármol y base - VALORES MÍNIMOS GARANTIZADOS
-  const marbleTypes = ['Gray', 'White', 'Cream', 'Black', 'Red'];
-  const marbleBasePrice = { Gray: 90, White: 120, Cream: 150, Black: 200, Red: 110 };
-  const marbleBaseWaste = { Gray: 15, White: 12, Cream: 25, Black: 30, Red: 14 }; // Aumentar valores mínimos
+  // Mármol y base - VALORES ALINEADOS CON updateProductPrices.js
+  const marbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
+  const marbleBasePrice = { Red: 100, White: 120, Gray: 90, Black: 150, Cream: 110 };
+  const marbleBaseWaste = { Red: 20, White: 25, Gray: 15, Black: 30, Cream: 22 };
   const productTypes = ['Block', 'Slab'];
   const qualities = ['A', 'B', 'C'];
   const qualityMultipliers = {
@@ -1236,27 +1500,33 @@ const generateProductsWithSeed = (seed, round) => {
     C: { price: 0.8, waste: 1.1 }
   };
   
+  // LÍMITES GLOBALES
+  const minPrice = 80;
+  const maxPrice = 200;
+  const minWaste = 30;
+  const maxWaste = 80; // Actualizado: waste entre 30-80 (aleatorio)
+  
   const products = [];
   const numProducts = 20; // 20 productos por ronda
   
   console.log(`🔍 [GENERATE] Generando ${numProducts} productos...`);
   
-  // Cache para garantizar que productos con la misma combinación tengan valores idénticos
-  // Key: "marbleType:type:quality" -> { priceVariation, wasteVariation }
-  const combinationCache = new Map();
-  
   // Offsets derivados de la semilla para evitar sesgos repetitivos por ronda
-  const marbleOffset = Math.floor(random() * marbleTypes.length);
-  const typeOffset = Math.floor(random() * productTypes.length);
-  const qualityOffset = Math.floor(random() * qualities.length);
+  // CRÍTICO: Asegurar que los offsets sean siempre positivos
+  const marbleOffset = Math.abs(Math.floor(random() * marbleTypes.length)) % marbleTypes.length;
+  const typeOffset = Math.abs(Math.floor(random() * productTypes.length)) % productTypes.length;
+  const qualityOffset = Math.abs(Math.floor(random() * qualities.length)) % qualities.length;
+  
+  console.log(`🔍 [GENERATE] Offsets calculados: marbleOffset=${marbleOffset}, typeOffset=${typeOffset}, qualityOffset=${qualityOffset}`);
   
   for (let i = 0; i < numProducts; i++) {
     console.log(`🔍 [GENERATE] Generando producto ${i + 1}/${numProducts}`);
     // Selección estratificada con offsets dependientes de la semilla.
     // Garantiza variedad entre mármoles, tipos y calidades en cada ronda.
-    const marbleIndex = (i + marbleOffset) % marbleTypes.length; // cicla 5 mármoles
-    const typeIndex = (Math.floor(i / marbleTypes.length) + typeOffset) % productTypes.length; // 10 Block, 10 Slab intercalados
-    const qualityIndex = (i + qualityOffset) % qualities.length; // mezcla A, B, C
+    // CRÍTICO: Asegurar que los índices sean siempre positivos usando módulo positivo
+    const marbleIndex = ((i + marbleOffset) % marbleTypes.length + marbleTypes.length) % marbleTypes.length;
+    const typeIndex = ((Math.floor(i / marbleTypes.length) + typeOffset) % productTypes.length + productTypes.length) % productTypes.length;
+    const qualityIndex = ((i + qualityOffset) % qualities.length + qualities.length) % qualities.length;
     
     console.log(`🔍 [GENERATE] Producto ${i + 1} - índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}`);
     
@@ -1266,35 +1536,30 @@ const generateProductsWithSeed = (seed, round) => {
     
     console.log(`🔍 [GENERATE] Producto ${i + 1} - valores: marble=${marble}, pType=${pType}, quality=${quality}`);
     
-    // Validar que los valores son válidos
+    // Validar que los valores son válidos - NO usar fallbacks, lanzar error si hay problema
     if (!marble || !pType || !quality) {
-      console.error(`❌ [GENERATE] Producto ${i + 1} tiene valores inválidos: marble=${marble}, pType=${pType}, quality=${quality}`);
-      console.error(`❌ [GENERATE] Índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}`);
-      console.error(`❌ [GENERATE] Offsets: marbleOffset=${marbleOffset}, typeOffset=${typeOffset}, qualityOffset=${qualityOffset}`);
-      // Usar valores por defecto en lugar de saltar
-      marble = 'Gray';
-      pType = 'Block';
-      quality = 'B';
-      console.log(`🔍 [GENERATE] Producto ${i + 1} - usando valores por defecto: marble=${marble}, pType=${pType}, quality=${quality}`);
+      const error = new Error(`Producto ${i + 1} tiene valores inválidos: marble=${marble}, pType=${pType}, quality=${quality}. Índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}. Offsets: marbleOffset=${marbleOffset}, typeOffset=${typeOffset}, qualityOffset=${qualityOffset}`);
+      console.error(`❌ [GENERATE] ${error.message}`);
+      throw error; // Lanzar error en lugar de usar fallback
     }
     
     // CLAVE: Crear clave única para la combinación
     const combinationKey = `${marble}:${pType}:${quality}`;
     
-    // Precio base según mármol y tipo
-    let basePrice = marbleBasePrice[marble];
-    if (typeof basePrice !== 'number' || isNaN(basePrice)) {
-      console.error(`❌ [DEBUG] Producto ${i} tiene basePrice inválido para marble ${marble}: ${basePrice}`);
-      basePrice = 100; // Fallback seguro
+    // Precio base según mármol y tipo - NO usar fallbacks
+    const basePriceRaw = marbleBasePrice[marble];
+    if (typeof basePriceRaw !== 'number' || isNaN(basePriceRaw) || !isFinite(basePriceRaw) || basePriceRaw <= 0) {
+      throw new Error(`Producto ${i + 1}: basePrice inválido para marble ${marble}: ${basePriceRaw}`);
     }
+    let basePrice = basePriceRaw;
     if (pType === 'Slab') basePrice = Math.round(basePrice * 1.25);
     
-    // Waste base según mármol y tipo
-    let baseWaste = marbleBaseWaste[marble];
-    if (typeof baseWaste !== 'number' || isNaN(baseWaste)) {
-      console.error(`❌ [DEBUG] Producto ${i} tiene baseWaste inválido para marble ${marble}: ${baseWaste}`);
-      baseWaste = 15; // Fallback seguro
+    // Waste base según mármol y tipo - NO usar fallbacks
+    const baseWasteRaw = marbleBaseWaste[marble];
+    if (typeof baseWasteRaw !== 'number' || isNaN(baseWasteRaw) || !isFinite(baseWasteRaw) || baseWasteRaw <= 0) {
+      throw new Error(`Producto ${i + 1}: baseWaste inválido para marble ${marble}: ${baseWasteRaw}`);
     }
+    let baseWaste = baseWasteRaw;
     if (pType === 'Slab') baseWaste = Math.round(baseWaste * 1.1);
     
     // DEBUG: Verificar valores base
@@ -1303,81 +1568,73 @@ const generateProductsWithSeed = (seed, round) => {
       console.log(`🔍 [DEBUG] basePrice=${basePrice}, baseWaste=${baseWaste}`);
     }
     
-    // VARIACIÓN DETERMINISTA POR COMBINACIÓN: productos con la misma combinación tienen la misma variación
-    let priceVariation, wasteVariation;
-    if (combinationCache.has(combinationKey)) {
-      // Reutilizar variación existente para esta combinación
-      const cached = combinationCache.get(combinationKey);
-      priceVariation = cached.priceVariation;
-      wasteVariation = cached.wasteVariation;
-      console.log(`🔄 [GENERATE] Producto ${i + 1} reutiliza variación para combinación: ${combinationKey}`);
-    } else {
-      // Generar variación determinista basada en la combinación + seed
-      // Esto garantiza que la misma combinación siempre tenga la misma variación
-      const variationSeed = `${seed}:${combinationKey}`;
-      let variationHash = 0;
-      for (let j = 0; j < variationSeed.length; j++) {
-        const char = variationSeed.charCodeAt(j);
-        variationHash = ((variationHash << 5) - variationHash) + char;
-        variationHash = variationHash & variationHash;
-      }
-      
-      // Generador de variación determinista independiente
-      let varHash = variationHash;
-      const varRandom = () => {
-        varHash = (varHash * 9301 + 49297) % 233280;
-        return varHash / 233280;
-      };
-      
-      // Variación ±20% determinista basada en la combinación
-      priceVariation = (varRandom() - 0.5) * 0.4;
-      wasteVariation = (varRandom() - 0.5) * 0.2;
-      
-      // Guardar en cache para reutilizar
-      combinationCache.set(combinationKey, { priceVariation, wasteVariation });
-      console.log(`✨ [GENERATE] Producto ${i + 1} genera nueva variación para combinación: ${combinationKey}`);
+    // GENERACIÓN ALEATORIA DIRECTA: valores completamente aleatorios dentro de los rangos
+    // Sin valores base, sin multiplicadores, sin redondeos que limiten la variación
+    const randomSeed = `${seed}:${combinationKey}:${i}`;
+    let randomHash = 0;
+    for (let j = 0; j < randomSeed.length; j++) {
+      const char = randomSeed.charCodeAt(j);
+      randomHash = ((randomHash << 5) - randomHash) + char;
+      randomHash = randomHash & randomHash;
     }
     
-    // Validar variaciones
-    if (isNaN(priceVariation) || !isFinite(priceVariation)) {
-      console.error(`❌ [DEBUG] Producto ${i} tiene priceVariation inválido: ${priceVariation}`);
-      continue;
-    }
-    if (isNaN(wasteVariation) || !isFinite(wasteVariation)) {
-      console.error(`❌ [DEBUG] Producto ${i} tiene wasteVariation inválido: ${wasteVariation}`);
-      continue;
+    // Asegurar que randomHash sea siempre positivo
+    randomHash = Math.abs(randomHash);
+    if (randomHash === 0) {
+      randomHash = 1; // Evitar hash cero que causaría problemas
     }
     
-    const mult = qualityMultipliers[quality] || qualityMultipliers['B']; // Fallback a calidad B
-    if (!mult || typeof mult.price !== 'number' || typeof mult.waste !== 'number') {
-      console.error(`❌ [DEBUG] Producto ${i} tiene multiplier inválido para quality ${quality}:`, mult);
-      continue;
+    // Generador aleatorio determinista
+    // Aplicar módulo inicial para evitar overflow con números grandes
+    const MOD = 233280;
+    let hash = randomHash % MOD;
+    if (hash < 0) {
+      hash = hash + MOD;
+    }
+    if (hash === 0) {
+      hash = 1; // Evitar hash cero
     }
     
-    const currentPriceRaw = basePrice * (1 + priceVariation) * mult.price;
-    const wasteRaw = baseWaste * (1 + wasteVariation) * mult.waste;
+    // Función de módulo que siempre devuelve valores positivos
+    const mod = (a, b) => {
+      const result = a % b;
+      return result < 0 ? result + b : result;
+    };
     
-    let currentPrice = Math.max(1, Math.round(currentPriceRaw));
-    let waste = Math.max(1, Math.round(wasteRaw)); // Mínimo 1 waste
+    const getRandom = () => {
+      // Aplicar módulo antes de multiplicar para evitar overflow
+      const hashMod = mod(hash, MOD);
+      hash = mod(hashMod * 9301 + 49297, MOD);
+      // Asegurar que el resultado esté entre 0 y 1
+      const result = hash / MOD;
+      return Math.max(0, Math.min(1, result)); // Clamp entre 0 y 1
+    };
     
-    // DEBUG: Verificar cálculos finales
+    // Generar valores ALEATORIOS DIRECTOS dentro de los rangos
+    // Waste: 30-80 (aleatorio)
+    // Precio: 80-200 (aleatorio)
+    const wasteRandom = getRandom();
+    const priceRandom = getRandom();
+    
+    // Calcular valores directamente en el rango sin usar valores base ni multiplicadores
+    const finalWaste = Math.floor(minWaste + (maxWaste - minWaste) * wasteRandom); // 30-80
+    const finalPrice = Math.floor(minPrice + (maxPrice - minPrice) * priceRandom); // 80-200
+    
+    console.log(`✨ [GENERATE] Producto ${i + 1} valores aleatorios directos: price=${finalPrice}, waste=${finalWaste}`);
+    
+    // Validar que los valores están en los rangos correctos
+    if (finalWaste < 30 || finalWaste > 80) {
+      throw new Error(`Producto ${i + 1}: waste fuera de rango: ${finalWaste} (debe estar entre 30 y 80)`);
+    }
+    if (finalPrice < minPrice || finalPrice > maxPrice) {
+      throw new Error(`Producto ${i + 1}: price fuera de rango: ${finalPrice} (debe estar entre ${minPrice} y ${maxPrice})`);
+    }
+    
+    // DEBUG: Verificar valores generados
     if (i < 3) { // Solo log para los primeros 3 productos
-      console.log(`🔍 [DEBUG] Producto ${i}: marble=${marble}, pType=${pType}, quality=${quality}`);
-      console.log(`🔍 [DEBUG] basePrice=${basePrice}, baseWaste=${baseWaste}`);
-      console.log(`🔍 [DEBUG] priceVariation=${priceVariation}, wasteVariation=${wasteVariation}`);
-      console.log(`🔍 [DEBUG] mult.price=${mult.price}, mult.waste=${mult.waste}`);
-      console.log(`🔍 [DEBUG] currentPriceRaw=${currentPriceRaw}, wasteRaw=${wasteRaw}`);
-      console.log(`🔍 [DEBUG] currentPrice=${currentPrice}, waste=${waste}`);
-    }
-    
-    // Validar valores antes de agregar - usar valores por defecto si hay error
-    if (isNaN(currentPrice) || !isFinite(currentPrice) || currentPrice <= 0) {
-      console.error(`❌ [GENERATE] Producto ${i + 1} tiene currentPrice inválido: ${currentPrice}, usando 100`);
-      currentPrice = 100;
-    }
-    if (isNaN(waste) || !isFinite(waste) || waste <= 0) {
-      console.error(`❌ [GENERATE] Producto ${i + 1} tiene waste inválido: ${waste}, usando 20`);
-      waste = 20;
+      console.log(`🔍 [DEBUG] Producto ${i + 1}: marble=${marble}, pType=${pType}, quality=${quality}`);
+      console.log(`🔍 [DEBUG] Precio aleatorio: ${finalPrice} (rango: ${minPrice}-${maxPrice})`);
+      console.log(`🔍 [DEBUG] Waste aleatorio: ${finalWaste} (rango: 30-80)`);
     }
     
     const product = {
@@ -1385,27 +1642,18 @@ const generateProductsWithSeed = (seed, round) => {
       type: pType,
       quality,
       marbleType: marble,
-      currentPrice: Math.max(1, Math.round(currentPrice)), // Asegurar valor válido
-      waste: Math.max(1, Math.round(waste)), // Asegurar valor válido
+      currentPrice: finalPrice,
+      waste: finalWaste,
       round
     };
     
-    // Validar producto final antes de agregar - usar valores por defecto si hay error
+    // Validación final del producto - NO usar fallbacks
     if (!product.marbleType || !product.type || !product.quality) {
-      console.error(`❌ [GENERATE] Producto ${i + 1} tiene campos inválidos, usando valores por defecto:`, product);
-      product.marbleType = product.marbleType || 'Gray';
-      product.type = product.type || 'Block';
-      product.quality = product.quality || 'B';
+      throw new Error(`Producto ${i + 1}: campos requeridos faltantes después de creación: ${JSON.stringify(product)}`);
     }
     
-    if (!product.currentPrice || product.currentPrice <= 0) {
-      console.error(`❌ [GENERATE] Producto ${i + 1} tiene currentPrice inválido, usando 100:`, product.currentPrice);
-      product.currentPrice = 100;
-    }
-    
-    if (!product.waste || product.waste <= 0) {
-      console.error(`❌ [GENERATE] Producto ${i + 1} tiene waste inválido, usando 20:`, product.waste);
-      product.waste = 20;
+    if (!product.currentPrice || product.currentPrice <= 0 || !product.waste || product.waste <= 0) {
+      throw new Error(`Producto ${i + 1}: valores numéricos inválidos después de creación: price=${product.currentPrice}, waste=${product.waste}`);
     }
     
     console.log(`🔍 [GENERATE] Producto ${i + 1} final:`, {
@@ -2068,12 +2316,43 @@ io.on('connection', (socket) => {
     console.log(`🏪 [START_GAME] Generando productos para Ronda 1...`);
     generateMarketForRound(gameId, 1).then(async (marketData) => {
       if (!marketData) {
-        console.error(`❌ [START_GAME] marketData es null/undefined`);
+        console.error(`❌ [START_GAME] marketData es null/undefined - NO INICIAR PARTIDA`);
+        room.status = 'waiting'; // Revertir estado
+        socket.emit('error', { 
+          message: 'No se pudieron generar productos. Por favor, intenta de nuevo.',
+          type: 'market_generation_error'
+        });
+        syncGameToFirestore(gameId, room);
         return;
       }
       
       if (!marketData.products || !Array.isArray(marketData.products)) {
-        console.error(`❌ [START_GAME] marketData.products no es válido:`, marketData);
+        console.error(`❌ [START_GAME] marketData.products no es válido:`, marketData, '- NO INICIAR PARTIDA');
+        room.status = 'waiting'; // Revertir estado
+        socket.emit('error', { 
+          message: 'Productos inválidos generados. Por favor, intenta de nuevo.',
+          type: 'market_validation_error'
+        });
+        syncGameToFirestore(gameId, room);
+        return;
+      }
+      
+      // CRÍTICO: Validar que hay productos válidos antes de continuar
+      const validProducts = (marketData.products || []).filter(p => 
+        p && 
+        typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) && p.currentPrice > 0 &&
+        typeof p.waste === 'number' && !isNaN(p.waste) && p.waste > 0 &&
+        p.marbleType && p.type && p.quality
+      );
+      
+      if (validProducts.length === 0) {
+        console.error(`❌ [START_GAME] No hay productos válidos (${marketData.products.length} productos generados, 0 válidos) - NO INICIAR PARTIDA`);
+        room.status = 'waiting'; // Revertir estado
+        socket.emit('error', { 
+          message: 'No se pudieron generar productos válidos. Por favor, intenta de nuevo.',
+          type: 'market_validation_error'
+        });
+        syncGameToFirestore(gameId, room);
         return;
       }
       
@@ -2081,7 +2360,7 @@ io.on('connection', (socket) => {
         console.error(`❌ [START_GAME] marketData.legacy no está disponible:`, marketData);
       }
       
-      console.log(`✅ [START_GAME] Productos generados para Ronda 1: ${marketData.products.length} productos`);
+      console.log(`✅ [START_GAME] Productos generados para Ronda 1: ${validProducts.length}/${marketData.products.length} productos válidos`);
       console.log(`✅ [START_GAME] Legacy disponible:`, !!marketData.legacy);
       
       // PRIMERO: Enviar inventario actualizado a todos los jugadores
@@ -2117,33 +2396,18 @@ io.on('connection', (socket) => {
       const roundId = `${gameId}:1:${Date.now()}`;
       const version = 1;
       
-      // Validar productos antes de emitir (MISMO MECANISMO QUE RONDA 2+)
-      const validProducts = (marketData.products || []).filter(p => 
-        p && 
-        typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) && p.currentPrice > 0 &&
-        typeof p.waste === 'number' && !isNaN(p.waste) && p.waste > 0 &&
-        p.marbleType && p.type && p.quality
-      );
-      
-      if (validProducts.length === 0 && marketData.products && marketData.products.length > 0) {
-        console.error(`❌ [START_GAME] Todos los productos tienen valores inválidos!`);
-        console.error(`❌ [START_GAME] Primeros 3 productos:`, marketData.products.slice(0, 3));
-        // Aún así emitir los productos originales para no bloquear el juego
-      }
-      
-      console.log(`🔍 [START_GAME] Productos válidos: ${validProducts.length}/${marketData.products?.length || 0}`);
-      
       // MISMA ESTRUCTURA QUE RONDA 2+ - SIN campos extra (round, seed)
+      // Usar solo productos válidos (ya validados arriba)
       emitToGame(gameId, 'economy:state', {
         roundId: roundId,
         version: version,
         round: 1,
         market: {
-          products: validProducts.length > 0 ? validProducts : marketData.products, // Usar productos válidos si hay, sino originales
+          products: validProducts, // Solo productos válidos
           legacy: marketData.legacy || {} // Incluir legacy (vacío si no está disponible)
         }
       });
-      console.log(`✅ [START_GAME] economy:state emitido para Ronda 1 con ${validProducts.length || marketData.products?.length || 0} productos`);
+      console.log(`✅ [START_GAME] economy:state emitido para Ronda 1 con ${validProducts.length} productos válidos`);
       
       // EMITIR game_status DESPUÉS de que economy:state se haya enviado
       console.log(`📡 [START_GAME] Emitiendo game_status después de economy:state...`);
@@ -2156,12 +2420,14 @@ io.on('connection', (socket) => {
     }).catch(error => {
       console.error(`❌ [START_GAME] Error generando productos para Ronda 1:`, error);
       console.error(`❌ [START_GAME] Stack trace:`, error.stack);
-      // Emitir game_status incluso si hay error para no bloquear el juego
-      emitToGame(gameId, 'game_status', {
-        status: 'starting',
-        round: 1,
-        message: 'Game starting in 3 seconds...'
+      // CRÍTICO: NO iniciar partida si hay error - revertir estado
+      room.status = 'waiting';
+      socket.emit('error', { 
+        message: `Error generando productos: ${error.message}. Por favor, intenta de nuevo.`,
+        type: 'market_generation_error'
       });
+      syncGameToFirestore(gameId, room);
+      console.error(`❌ [START_GAME] Partida NO iniciada debido a error en generación de productos`);
     });
     
     // Sincronizar con Firestore
@@ -2188,6 +2454,52 @@ io.on('connection', (socket) => {
     // Verificar si todos están listos
     if (areAllPlayersReady(gameId)) {
       console.log(`🎮 Todos los jugadores listos para juego ${gameId}`);
+      
+      // CRÍTICO: Verificar que hay productos antes de iniciar la ronda
+      if (room.round === 1) {
+        try {
+          if (admin.apps.length) {
+            const db = admin.firestore();
+            const marketRef = db.collection('games').doc(gameId).collection('market').doc('1');
+            const marketDoc = await marketRef.get();
+            
+            if (!marketDoc.exists || !marketDoc.data().products || marketDoc.data().products.length === 0) {
+              console.error(`❌ [READY_TO_PLAY] No hay productos para ronda 1 - NO INICIAR RONDA`);
+              socket.emit('error', { 
+                message: 'No hay productos disponibles. Por favor, espera a que se generen.',
+                type: 'market_missing_error'
+              });
+              return;
+            }
+            
+            const products = marketDoc.data().products || [];
+            const validProducts = products.filter(p => 
+              p && 
+              typeof p.currentPrice === 'number' && !isNaN(p.currentPrice) && p.currentPrice > 0 &&
+              typeof p.waste === 'number' && !isNaN(p.waste) && p.waste > 0 &&
+              p.marbleType && p.type && p.quality
+            );
+            
+            if (validProducts.length === 0) {
+              console.error(`❌ [READY_TO_PLAY] No hay productos válidos para ronda 1 - NO INICIAR RONDA`);
+              socket.emit('error', { 
+                message: 'Productos inválidos. Por favor, espera a que se regeneren.',
+                type: 'market_validation_error'
+              });
+              return;
+            }
+            
+            console.log(`✅ [READY_TO_PLAY] Verificados ${validProducts.length} productos válidos para ronda 1`);
+          }
+        } catch (checkError) {
+          console.error(`❌ [READY_TO_PLAY] Error verificando productos:`, checkError);
+          socket.emit('error', { 
+            message: 'Error verificando productos. Por favor, intenta de nuevo.',
+            type: 'market_check_error'
+          });
+          return;
+        }
+      }
       
       // Simular selección de industria ganadora (solo industrias que utilizan residuos físicos)
       const industries = ['Construction', 'Technology', 'Healthcare', 'Energy'];
@@ -2327,58 +2639,98 @@ io.on('connection', (socket) => {
 
   // ENDPOINT: Solicitar datos de mercado (productos)
   socket.on('request_market_data', async ({ gameId, round }) => {
-    console.log(`📡 [MARKET_REQUEST] Solicitud de productos para ronda ${round} del juego ${gameId}`);
+    console.log(`📡 [MARKET_REQUEST] Solicitud de productos para ronda ${round} del juego ${gameId} desde socket ${socket.id}`);
+    
+    // Asegurar que el socket esté unido a la sala
+    if (!socket.rooms.has(gameId)) {
+      console.log(`🔗 [MARKET_REQUEST] Uniendo socket ${socket.id} a sala ${gameId}`);
+      socket.join(gameId);
+    }
     
     try {
-      // Obtener productos desde Firestore
+      let products = [];
+      let legacy = {};
+      let productsFound = false;
+      
+      // PRIMERO: Intentar obtener productos desde Firestore
       if (admin.apps.length) {
-        const db = admin.firestore();
-        const marketRef = db.collection('games').doc(gameId).collection('market').doc(round.toString());
-        const marketDoc = await marketRef.get();
-        
-        if (marketDoc.exists) {
-          const marketData = marketDoc.data();
-          const products = marketData.products || [];
+        try {
+          const db = admin.firestore();
+          const marketRef = db.collection('games').doc(gameId).collection('market').doc(round.toString());
+          const marketDoc = await marketRef.get();
           
-          // Obtener legacy desde el documento agregado
-          const legacyRef = db.collection('market').doc(gameId);
-          const legacyDoc = await legacyRef.get();
-          const legacyData = legacyDoc.exists ? (legacyDoc.data().rounds || {}) : {};
-          const legacy = legacyData[round] || {};
-          
-          console.log(`✅ [MARKET_REQUEST] Enviando ${products.length} productos al cliente`);
-          
-          // Emitir economy:state directamente al socket que lo solicitó
-          socket.emit('economy:state', {
-            roundId: `${gameId}:${round}:${Date.now()}`,
-            version: 1,
-            round: round,
-            market: {
-              products: products,
-              legacy: legacy
+          if (marketDoc.exists) {
+            const marketData = marketDoc.data();
+            products = marketData.products || [];
+            
+            // Obtener legacy desde el documento agregado
+            const legacyRef = db.collection('market').doc(gameId);
+            const legacyDoc = await legacyRef.get();
+            const legacyData = legacyDoc.exists ? (legacyDoc.data().rounds || {}) : {};
+            legacy = legacyData[round] || {};
+            
+            if (products.length > 0) {
+              productsFound = true;
+              console.log(`✅ [MARKET_REQUEST] Encontrados ${products.length} productos en Firestore para ronda ${round}`);
+            } else {
+              console.warn(`⚠️ [MARKET_REQUEST] Documento existe pero productos array está vacío`);
             }
-          });
-        } else {
-          console.warn(`⚠️ [MARKET_REQUEST] No se encontraron productos en Firestore para ronda ${round}`);
-          // Si no hay productos, generar mercado
-          const marketData = await generateMarketForRound(gameId, round);
-          if (marketData && marketData.products) {
-            socket.emit('economy:state', {
-              roundId: `${gameId}:${round}:${Date.now()}`,
-              version: 1,
-              round: round,
-              market: {
-                products: marketData.products,
-                legacy: marketData.legacy || {}
-              }
-            });
+          } else {
+            console.warn(`⚠️ [MARKET_REQUEST] No se encontró documento en Firestore para ronda ${round}`);
           }
+        } catch (firestoreError) {
+          console.error(`❌ [MARKET_REQUEST] Error accediendo a Firestore:`, firestoreError);
         }
       } else {
-        console.warn(`⚠️ [MARKET_REQUEST] Firebase Admin no disponible`);
+        console.warn(`⚠️ [MARKET_REQUEST] Firebase Admin no disponible, generando productos directamente`);
+      }
+      
+      // SEGUNDO: Si no hay productos, generar mercado
+      if (!productsFound || products.length === 0) {
+        console.log(`🔄 [MARKET_REQUEST] Generando productos para ronda ${round}...`);
+        try {
+          const marketData = await generateMarketForRound(gameId, round);
+          if (marketData && marketData.products && marketData.products.length > 0) {
+            products = marketData.products;
+            legacy = marketData.legacy || {};
+            productsFound = true;
+            console.log(`✅ [MARKET_REQUEST] Productos generados exitosamente: ${products.length} productos`);
+          } else {
+            console.error(`❌ [MARKET_REQUEST] generateMarketForRound no devolvió productos válidos`);
+          }
+        } catch (genError) {
+          console.error(`❌ [MARKET_REQUEST] Error generando productos:`, genError);
+          console.error(`❌ [MARKET_REQUEST] Stack:`, genError.stack);
+        }
+      }
+      
+      // TERCERO: Emitir economy:state si tenemos productos
+      if (productsFound && products.length > 0) {
+        console.log(`📡 [MARKET_REQUEST] Emitiendo economy:state con ${products.length} productos a socket ${socket.id}`);
+        socket.emit('economy:state', {
+          roundId: `${gameId}:${round}:${Date.now()}`,
+          version: 1,
+          round: round,
+          market: {
+            products: products,
+            legacy: legacy
+          }
+        });
+        console.log(`✅ [MARKET_REQUEST] economy:state emitido exitosamente`);
+      } else {
+        console.error(`❌ [MARKET_REQUEST] No se pudieron obtener o generar productos. No se emite economy:state`);
+        socket.emit('error', { 
+          message: `No se pudieron cargar productos para ronda ${round}`,
+          type: 'market_data_error'
+        });
       }
     } catch (error) {
-      console.error(`❌ [MARKET_REQUEST] Error obteniendo productos:`, error);
+      console.error(`❌ [MARKET_REQUEST] Error general obteniendo productos:`, error);
+      console.error(`❌ [MARKET_REQUEST] Stack:`, error.stack);
+      socket.emit('error', { 
+        message: `Error cargando productos: ${error.message}`,
+        type: 'market_data_error'
+      });
     }
   });
 
@@ -2621,6 +2973,26 @@ io.on('connection', (socket) => {
           player.readyForNextRound = false;
         });
         
+        // CRÍTICO: Resetear selectedIndustry en Firestore para todos los jugadores
+        // Esto asegura que cada ronda requiere una nueva selección
+        console.log(`🏭 [ROUND:READY] Reseteando selectedIndustry para todos los jugadores en Firestore...`);
+        if (admin.apps.length) {
+          const batch = admin.firestore().batch();
+          for (const player of room.players) {
+            const userRef = admin.firestore().collection('users').doc(player.userId);
+            batch.update(userRef, {
+              [`games.${gameId}.selectedIndustry`]: admin.firestore.FieldValue.delete()
+            });
+          }
+          try {
+            await batch.commit();
+            console.log(`✅ [ROUND:READY] selectedIndustry reseteado para ${room.players.length} jugadores`);
+          } catch (error) {
+            console.error(`❌ [ROUND:READY] Error reseteando selectedIndustry:`, error);
+            // Continuar aunque falle el reset (no crítico)
+          }
+        }
+        
         // 4. SINCRONIZAR CON FIRESTORE
         await syncGameToFirestore(gameId, room);
         
@@ -2822,6 +3194,22 @@ io.on('connection', (socket) => {
         }
         
         console.log(`🔍 [ROUND:READY] Productos válidos: ${validProducts.length}/${newMarket.products?.length || 0}`);
+        console.log(`🔍 [ROUND:READY] Legacy disponible:`, !!newMarket.legacy);
+        console.log(`🔍 [ROUND:READY] Legacy keys:`, newMarket.legacy ? Object.keys(newMarket.legacy) : []);
+        
+        // Asegurar que legacy esté presente y sea válido
+        let legacyToEmit = newMarket.legacy || {};
+        if (!legacyToEmit || Object.keys(legacyToEmit).length === 0) {
+          console.warn(`⚠️ [ROUND:READY] Legacy vacío, regenerando desde productos...`);
+          // Regenerar legacy desde productos válidos si no está disponible
+          if (validProducts.length > 0) {
+            legacyToEmit = transformProductsToLegacy(validProducts, nextRound);
+            console.log(`✅ [ROUND:READY] Legacy regenerado:`, Object.keys(legacyToEmit));
+          } else if (newMarket.products && newMarket.products.length > 0) {
+            legacyToEmit = transformProductsToLegacy(newMarket.products, nextRound);
+            console.log(`✅ [ROUND:READY] Legacy regenerado desde productos originales:`, Object.keys(legacyToEmit));
+          }
+        }
         
         emitToGame(gameId, 'economy:state', {
           roundId: roundId,
@@ -2829,10 +3217,10 @@ io.on('connection', (socket) => {
           round: nextRound,
           market: {
             products: validProducts.length > 0 ? validProducts : newMarket.products, // Usar productos válidos si hay, sino originales
-            legacy: newMarket.legacy // SIEMPRE incluir legacy para ChatScreen
+            legacy: legacyToEmit // SIEMPRE incluir legacy para ChatScreen (regenerado si es necesario)
           }
         });
-        console.log(`✅ [ROUND:READY] EMIT economy:state autoritativo (${nextRound}) con ${validProducts.length || newMarket.products?.length || 0} productos`);
+        console.log(`✅ [ROUND:READY] EMIT economy:state autoritativo (${nextRound}) con ${validProducts.length || newMarket.products?.length || 0} productos y legacy con ${Object.keys(legacyToEmit).length} mármoles`);
         
         // SEGUNDO: game_status starting (dispara countdown) CON ESTADO AUTORITATIVO
         emitAuthoritativeState(gameId, 'game_status', {

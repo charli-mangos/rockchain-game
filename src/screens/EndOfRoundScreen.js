@@ -114,19 +114,24 @@ const EndOfRoundScreen = ({ route }) => {
   console.log('🎮 [EndOfRoundScreen] round:', round);
   console.log('🎮 [EndOfRoundScreen] isWebSocketConnected:', isWebSocketConnected);
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
+  const userSelectedIndustryRef = useRef(null); // Ref para mantener la selección de la ronda actual
   
   // Cargar industria seleccionada del usuario desde el contexto SOLO para la ronda actual
-  // CRÍTICO: Resetear la selección cuando cambia la ronda
+  // CRÍTICO: Guardar en ref para que no desaparezca cuando Firestore se actualiza
   useEffect(() => {
     // Resetear selección cuando cambia la ronda
-    setUserSelectedIndustry(null);
-    console.log(`🏭 [INDUSTRY] Ronda ${round} - reseteando selección de industria`);
+    if (currentRoundRef.current !== round) {
+      userSelectedIndustryRef.current = null;
+      setUserSelectedIndustry(null);
+      console.log(`🏭 [INDUSTRY] Ronda ${round} - reseteando selección de industria`);
+    }
     
-    // Cargar industria seleccionada solo si existe en los datos actuales
-    if (allPlayersData && allPlayersData.length > 0) {
+    // Cargar industria seleccionada solo si existe en los datos actuales Y aún no la tenemos guardada
+    if (!userSelectedIndustryRef.current && allPlayersData && allPlayersData.length > 0) {
       const currentPlayer = allPlayersData.find(player => player.userId === userId);
       if (currentPlayer && currentPlayer.selectedIndustry) {
         console.log('🏭 [INDUSTRY] Cargando industria seleccionada para esta ronda:', currentPlayer.selectedIndustry);
+        userSelectedIndustryRef.current = currentPlayer.selectedIndustry;
         setUserSelectedIndustry(currentPlayer.selectedIndustry);
       }
     }
@@ -244,9 +249,10 @@ const EndOfRoundScreen = ({ route }) => {
       appliedOptimisticRef.current = false; // RESETEAR: Permitir actualizaciones optimistas en nueva ronda
       setRewardMessage(null);
       
-      // NO resetear roundRewards aquí - mantenerlos visibles hasta que salgamos de EndOfRoundScreen
-      // Los rewards se limpiarán cuando realmente naveguemos fuera de esta pantalla
-      // setRoundRewards(null);
+      // CRÍTICO: NO limpiar roundRewards aquí - se limpiará cuando llegue ROUND_END para la nueva ronda
+      // Si limpiamos aquí, podemos borrar los rewards antes de que se muestren en la pantalla
+      // Los rewards se limpiarán cuando llegue el evento ROUND_END para una ronda diferente
+      console.log(`🧹 [ROUND_CHANGE] Estados reseteados para ronda ${round} (roundRewards se mantiene hasta nuevo ROUND_END)`);
       
       // Limpiar cualquier suscripción anterior
       if (unsubscribeRef.current) {
@@ -254,9 +260,9 @@ const EndOfRoundScreen = ({ route }) => {
         unsubscribeRef.current = null;
       }
       
-      console.log(`🧹 Estados reseteados para ronda ${round} (rewards se mantienen visibles)`);
+      console.log(`🧹 Estados reseteados para ronda ${round}`);
     }
-  }, [round]); // Remover setRoundRewards de dependencias
+  }, [round]);
 
   // Efecto principal para manejar recompensas (simplificado para sistema híbrido)
   useEffect(() => {
@@ -367,12 +373,24 @@ const EndOfRoundScreen = ({ route }) => {
     });
 
     // Obtener industria seleccionada del usuario
+    // CRÍTICO: Solo actualizar si aún no tenemos una selección guardada para esta ronda
+    // Esto evita que desaparezca cuando el servidor resetea selectedIndustry en Firestore
     const unsubscribeUser = onSnapshot(userRef, (userDoc) => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const gameUserData = userData.games?.[gameId] || {};
         const selectedIndustry = gameUserData.selectedIndustry || 'No selection';
-        setUserSelectedIndustry(selectedIndustry);
+        
+        // Solo actualizar si no tenemos una selección guardada para esta ronda
+        // O si la selección en Firestore es diferente y no es 'No selection'
+        if (!userSelectedIndustryRef.current && selectedIndustry !== 'No selection') {
+          console.log('🏭 [INDUSTRY] Cargando selección desde Firestore:', selectedIndustry);
+          userSelectedIndustryRef.current = selectedIndustry;
+          setUserSelectedIndustry(selectedIndustry);
+        } else if (userSelectedIndustryRef.current && selectedIndustry === 'No selection') {
+          // Si Firestore se resetea pero ya tenemos la selección guardada, mantenerla
+          console.log('🏭 [INDUSTRY] Firestore reseteado pero manteniendo selección de ronda actual:', userSelectedIndustryRef.current);
+        }
       }
     });
 
@@ -555,41 +573,51 @@ const EndOfRoundScreen = ({ route }) => {
             </View>
             
             {/* Señalización visual para acertar industria */}
-            {userSelectedIndustry === winningIndustry && winningIndustry && (
-              <View style={styles.successBannerContainer}>
-              <View style={styles.successBanner}>
-                <Text style={styles.successBannerIcon}>✓</Text>
-                <View style={styles.successBannerText}>
-                  <Text style={styles.successBannerTitle}>Industry guessed!</Text>
-                  <Text style={styles.successBannerSubtitle}>
-                    Your waste it's been reduced
-                  </Text>
-                </View>
-                </View>
-                  {/* Cartelito de recompensa de waste similar al de minado */}
-                 {/* CRÍTICO: Solo mostrar si wasteRemoved > 0 Y el waste actual del usuario es > 0 */}
-                 {roundRewards?.[userId]?.wasteRemoved > 0 && (webSocketInventory?.waste || 0) > 0 && (
-                  <View style={styles.wasteRewardBadge}>
-                    <Text style={styles.wasteRewardBadgeText}>
-                      -{roundRewards[userId].wasteRemoved}
-                    </Text>
+            {/* CRÍTICO: Solo mostrar cuando realmente se acertó EN ESTA RONDA (roundRewards tiene wasteRemoved > 0) */}
+            {/* El cartelillo de waste solo aparece en el ranking, no aquí */}
+            {(() => {
+              const wasteRemoved = roundRewards?.[userId]?.wasteRemoved || 0;
+              const currentWaste = webSocketInventory?.waste || 0;
+              const wasteBeforeReward = currentWaste + wasteRemoved;
+              const shouldShowSuccess = wasteRemoved > 0 && wasteBeforeReward > 0;
+              
+              return shouldShowSuccess ? (
+                <View style={styles.successBannerContainer}>
+                  <View style={styles.successBanner}>
+                    <Text style={styles.successBannerIcon}>✓</Text>
+                    <View style={styles.successBannerText}>
+                      <Text style={styles.successBannerTitle}>Industry guessed!</Text>
+                      <Text style={styles.successBannerSubtitle}>
+                        Your waste it's been reduced
+                      </Text>
+                    </View>
                   </View>
-                )}
-              </View>
-            )}
+                </View>
+              ) : null;
+            })()}
             
             {/* Señalización visual para no acertar */}
-            {userSelectedIndustry !== winningIndustry && userSelectedIndustry && winningIndustry && (
-              <View style={styles.failBanner}>
-                <Text style={styles.failBannerIcon}>✕</Text>
-                <View style={styles.failBannerText}>
-                  <Text style={styles.failBannerTitle}>Industry Missed</Text>
-                  <Text style={styles.failBannerSubtitle}>
-                    No waste reduction this round
-                  </Text>
+            {/* CRÍTICO: Solo mostrar si hay selección en esta ronda Y no se acertó */}
+            {/* Verificar que NO hay wasteRemoved para asegurar que es de esta ronda */}
+            {(() => {
+              const wasteRemoved = roundRewards?.[userId]?.wasteRemoved || 0;
+              const hasSelection = userSelectedIndustry && userSelectedIndustry !== 'No selection';
+              const didNotGuess = userSelectedIndustry !== winningIndustry;
+              // Solo mostrar error si hay selección, no se acertó, Y no hay wasteRemoved (asegura que es de esta ronda)
+              const shouldShowFail = hasSelection && didNotGuess && winningIndustry && wasteRemoved === 0;
+              
+              return shouldShowFail ? (
+                <View style={styles.failBanner}>
+                  <Text style={styles.failBannerIcon}>✕</Text>
+                  <View style={styles.failBannerText}>
+                    <Text style={styles.failBannerTitle}>Industry Missed</Text>
+                    <Text style={styles.failBannerSubtitle}>
+                      No waste reduction this round
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            )}
+              ) : null;
+            })()}
             
             {rewardMessage && (
               <View style={styles.rewardContainer}>

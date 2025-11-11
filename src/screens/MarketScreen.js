@@ -20,21 +20,8 @@ const MarketScreen = ({ navigation, route }) => {
     ? [...validProducts, { isSpacer: true, id: 'spacer' }]
     : validProducts;
   
-  // Si no hay productos válidos, mostrar mensaje de carga
-  if (!validProducts || validProducts.length === 0) {
-    return (
-      <View style={styles.screenContainer}>
-        <GameHeader
-          title={t('market.title')}
-          subtitle={`Round ${round || 1}`}
-          showBackButton={false}
-        />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando productos...</Text>
-        </View>
-      </View>
-    );
-  }
+  // Si no hay productos válidos, mostrar mensaje de carga PERO mantener navigation bar
+  const hasNoProducts = !validProducts || validProducts.length === 0;
   
   // console.log('MarketScreen - productList:', productList);
   // console.log('MarketScreen - gameId:', gameId);
@@ -123,14 +110,20 @@ const MarketScreen = ({ navigation, route }) => {
           userId={userId}
           onSettingsPress={() => console.log('Settings Pressed')}
       />
-      <FlatList
-        data={dataWithSpacer}
-        renderItem={renderProduct}
-        keyExtractor={(item, index) => item.isSpacer ? 'spacer' : index.toString()}
-        numColumns={2}
-        style={styles.flatList}
-        contentContainerStyle={styles.flatListContainer}
-      />
+      {hasNoProducts ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Cargando productos...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={dataWithSpacer}
+          renderItem={renderProduct}
+          keyExtractor={(item, index) => item.isSpacer ? 'spacer' : index.toString()}
+          numColumns={2}
+          style={styles.flatList}
+          contentContainerStyle={styles.flatListContainer}
+        />
+      )}
       <NavigationBar navigation={navigation} />
     </View>
   );

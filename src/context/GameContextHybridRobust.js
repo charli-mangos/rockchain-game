@@ -151,6 +151,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   
   // Estado local para controlar navegación individual
   const [isWaitingNextRoundLocal, setIsWaitingNextRoundLocal] = useState(false);
+  const isWaitingNextRoundLocalRef = useRef(false);
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [currentBlockId, setCurrentBlockId] = useState(null);
   const [currentTransactionUserName, setCurrentTransactionUserName] = useState(null);
@@ -176,6 +177,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   const gameStatusRef = useRef('waiting'); // Ref para obtener el estado actual en timeouts
   const roundEndedSentRef = useRef(false); // Ref para rastrear si round_ended ya se envió
   const roundTimeSetAtRef = useRef(null); // Ref para rastrear cuándo se estableció roundTime
+  const authoritativeStateRef = useRef(null); // Ref para acceso inmediato al estado autoritativo
 
   // Función helper para actualizar gameStatus y el ref
   const updateGameStatus = (newStatus) => {
@@ -192,6 +194,37 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
   useEffect(() => {
     gameStatusRef.current = gameStatus;
   }, [gameStatus]);
+
+  // Mantener isWaitingNextRoundLocalRef sincronizado con el estado
+  useEffect(() => {
+    isWaitingNextRoundLocalRef.current = isWaitingNextRoundLocal;
+  }, [isWaitingNextRoundLocal]);
+
+  // Mantener authoritativeStateRef sincronizado con authoritativeState
+  // CRÍTICO: Solo sincronizar si es una ronda real (no countdown)
+  // El countdown es temporal y será reemplazado por start_round
+  useEffect(() => {
+    if (authoritativeState) {
+      // Verificar si es una ronda real o un countdown
+      const roundEndsAtMs = authoritativeState.roundEndsAtMs;
+      if (roundEndsAtMs) {
+        const serverNowMs = authoritativeState.serverNowMs || Date.now();
+        const deltaMs = roundEndsAtMs - serverNowMs;
+        const isRoundReal = deltaMs > 60000 || (deltaMs > 10000 && authoritativeState.roundEndsAtMs !== undefined);
+        
+        if (isRoundReal) {
+          // Solo sincronizar si es una ronda real
+          authoritativeStateRef.current = authoritativeState;
+        } else {
+          // NO sincronizar si es countdown - mantener el valor anterior
+          console.log(`⏰ [AUTHORITY] Countdown detectado en useEffect (delta=${deltaMs}ms) - NO sincronizando authoritativeStateRef`);
+        }
+      } else {
+        // Si no hay roundEndsAtMs, sincronizar normalmente
+        authoritativeStateRef.current = authoritativeState;
+      }
+    }
+  }, [authoritativeState]);
 
   // FUNCIONES DE NAVEGACIÓN
   const safeNavigate = (screen, params = {}) => {
@@ -278,26 +311,75 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     
     // CRÍTICO: Actualizar roundTime y roundEndsAtMs
     // Según ANALISIS_CONTADOR_120_SEGUNDOS.md: "Si roundEndsAtMs no existe pero roundTime (string ISO) existe, convertirlo"
+    let roundEndsAtCandidate = null;
     if (state.roundEndsAtMs) {
-      // Si viene roundEndsAtMs directamente, usarlo
-      setRoundTime(new Date(state.roundEndsAtMs));
-      // Asegurar que authoritativeState también tenga roundEndsAtMs
-      state.roundEndsAtMs = state.roundEndsAtMs;
+      roundEndsAtCandidate = state.roundEndsAtMs;
     } else if (state.roundTime) {
-      // Si no viene roundEndsAtMs pero viene roundTime (string ISO), convertirlo
-      const roundTimeDate = new Date(state.roundTime);
+        const roundTimeDate = new Date(state.roundTime);
       const roundTimeMs = roundTimeDate.getTime();
       if (!isNaN(roundTimeMs)) {
-        setRoundTime(roundTimeDate);
-        // Agregar roundEndsAtMs al estado para que el timer funcione
+        roundEndsAtCandidate = roundTimeMs;
         state.roundEndsAtMs = roundTimeMs;
         console.log(`🔄 [AUTHORITY] Convertido roundTime (${state.roundTime}) a roundEndsAtMs (${roundTimeMs})`);
+      }
+    }
+
+    if (roundEndsAtCandidate) {
+      const serverNowMs = typeof state.serverNowMs === 'number' ? state.serverNowMs : Date.now();
+      const deltaMs = roundEndsAtCandidate - serverNowMs;
+
+      // CRÍTICO: Detectar si es un evento de ronda real (start_round) o countdown
+      // - Si delta > 60s, es definitivamente una ronda real (120s de duración)
+      // - Si delta > 10s pero <= 60s, podría ser ronda real o countdown, pero si viene con roundEndsAtMs explícito, es ronda real
+      // - Si delta <= 10s, es countdown (3s)
+      // NOTA: start_round siempre viene con roundEndsAtMs > 60s, así que siempre es ronda real
+      const isRoundReal = deltaMs > 60000 || (deltaMs > 10000 && state.roundEndsAtMs !== undefined);
+      
+      if (isRoundReal) {
+        const roundTimeDate = new Date(roundEndsAtCandidate);
+        setRoundTime(roundTimeDate);
+        roundTimeSetAtRef.current = Date.now();
+        // CRÍTICO: Asegurar que roundEndsAtMs se mantiene en el estado para que el timer lo use
+        state.roundEndsAtMs = roundEndsAtCandidate;
+        console.log(`✅ [AUTHORITY] roundTime y roundEndsAtMs actualizados (ronda real): ${roundTimeDate.toISOString()} (Δ${deltaMs}ms)`);
+      } else {
+        console.log(`⏰ [AUTHORITY] roundEndsAtMs=${roundEndsAtCandidate} (Δ${deltaMs}ms) detectado como countdown, se mantiene roundTime actual`);
+        // NO eliminar roundEndsAtMs del estado - mantenerlo para que el timer pueda usarlo si es necesario
+        // PERO no actualizar roundTime para evitar saltos en el contador
+        // IMPORTANTE: Si el estado ya tiene un roundEndsAtMs válido (de start_round anterior), mantenerlo
+        if (state.roundEndsAtMs && state.roundEndsAtMs > roundEndsAtCandidate) {
+          console.log(`⚠️ [AUTHORITY] Manteniendo roundEndsAtMs anterior (${state.roundEndsAtMs}) que es mayor que el countdown (${roundEndsAtCandidate})`);
+          // No hacer nada - mantener el roundEndsAtMs anterior
+        }
       }
     }
 
     // Actualizar tracking de idempotencia
     setLastAppliedRoundId(state.roundId);
     setLastAppliedVersion(state.version);
+    
+    // CRÍTICO: Solo actualizar authoritativeStateRef si es una ronda real (no countdown)
+    // El countdown es temporal y será reemplazado por start_round
+    // Si es countdown (delta <= 10s), NO actualizar authoritativeStateRef para evitar que el timer use el valor del countdown
+    if (roundEndsAtCandidate) {
+      const serverNowMs = typeof state.serverNowMs === 'number' ? state.serverNowMs : Date.now();
+      const deltaMs = roundEndsAtCandidate - serverNowMs;
+      const isRoundReal = deltaMs > 60000 || (deltaMs > 10000 && state.roundEndsAtMs !== undefined);
+      
+      if (isRoundReal) {
+        // CRÍTICO: Actualizar ref PRIMERO para que el timer lo use inmediatamente (solo para ronda real)
+        authoritativeStateRef.current = state;
+        console.log(`✅ [AUTHORITY] authoritativeStateRef actualizado con ronda real (roundEndsAtMs=${state.roundEndsAtMs})`);
+      } else {
+        // NO actualizar authoritativeStateRef con countdown - mantener el valor anterior si existe
+        console.log(`⏰ [AUTHORITY] Countdown detectado (delta=${deltaMs}ms) - NO actualizando authoritativeStateRef para evitar sobrescribir ronda real`);
+      }
+    } else {
+      // Si no hay roundEndsAtCandidate, actualizar normalmente
+      authoritativeStateRef.current = state;
+    }
+    
+    // Luego actualizar el estado (siempre, para mantener sincronización)
     setAuthoritativeState(state);
 
     return true;
@@ -372,63 +454,123 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     };
   }, [gameId, userId]); // Agregar gameId como dependencia
 
-  // EFECTO: Verificar productos después de conectar WebSocket
+  // REF para mantener el contador de reintentos
+  const productRetryCountRef = useRef(0);
+  const productRetryTimeoutRef = useRef(null);
+  
+  // EFECTO: Verificar productos después de conectar WebSocket (CON REINTENTOS)
   useEffect(() => {
     if (!isWebSocketConnected || !gameId) return;
     
-    // Si no hay productos después de 3 segundos de conectarse, intentar obtener desde Firestore
-    const timeoutId = setTimeout(() => {
-      if (!productList || productList.length === 0) {
-        console.log('🔄 [WEBSOCKET] No hay productos después de 3 segundos, intentando obtener desde Firestore...');
-        
+    // Resetear contador cuando cambia el round o gameId
+    productRetryCountRef.current = 0;
+    if (productRetryTimeoutRef.current) {
+      clearTimeout(productRetryTimeoutRef.current);
+      productRetryTimeoutRef.current = null;
+    }
+    
+    const maxRetries = 5; // Máximo 5 reintentos
+    const retryInterval = 5000; // Reintentar cada 5 segundos
+    
+    const attemptLoadProducts = async () => {
+      // Si ya hay productos, no hacer nada
+      if (productList && productList.length > 0) {
+        console.log(`✅ [WEBSOCKET] Productos ya cargados: ${productList.length} productos`);
+        return;
+      }
+      
+      const currentRetry = productRetryCountRef.current + 1;
+      console.log(`🔄 [WEBSOCKET] Intento ${currentRetry}/${maxRetries} de cargar productos para ronda ${round || 1}...`);
+      
+      const currentRoundForProducts = round || 1;
+      let productsFound = false;
+      
+      try {
         // PRIMERO: Intentar desde la ruta correcta: games/{gameId}/market/{round}
-        const currentRoundForProducts = round || 1;
         const marketRef = doc(db, 'games', gameId, 'market', currentRoundForProducts.toString());
-        getDoc(marketRef).then((docSnap) => {
-          if (docSnap.exists()) {
-            const marketData = docSnap.data();
-            const firestoreProducts = marketData.products || [];
-            if (firestoreProducts.length > 0) {
-              console.log('✅ [WEBSOCKET] Productos obtenidos desde Firestore market:', firestoreProducts.length);
-              setProductList(firestoreProducts);
-              return;
-            }
+        const marketDocSnap = await getDoc(marketRef);
+        
+        if (marketDocSnap.exists()) {
+          const marketData = marketDocSnap.data();
+          const firestoreProducts = marketData.products || [];
+          if (firestoreProducts.length > 0) {
+            console.log(`✅ [WEBSOCKET] Productos obtenidos desde Firestore market: ${firestoreProducts.length} productos`);
+            setProductList(firestoreProducts);
+            productRetryCountRef.current = 0; // Resetear contador al éxito
+            productsFound = true;
           }
-          
-          // FALLBACK: Intentar desde gameData.productList (legacy)
+        }
+        
+        // FALLBACK: Intentar desde gameData.productList (legacy) solo si no encontramos en market
+        if (!productsFound) {
           const gameRef = doc(db, 'games', gameId);
-          return getDoc(gameRef);
-        }).then((gameDocSnap) => {
+          const gameDocSnap = await getDoc(gameRef);
+          
           if (gameDocSnap && gameDocSnap.exists()) {
             const gameData = gameDocSnap.data();
             const firestoreProducts = gameData.productList || [];
             if (firestoreProducts.length > 0) {
-              console.log('✅ [WEBSOCKET] Productos obtenidos desde Firestore gameData:', firestoreProducts.length);
+              console.log(`✅ [WEBSOCKET] Productos obtenidos desde Firestore gameData: ${firestoreProducts.length} productos`);
               setProductList(firestoreProducts);
-            } else {
-              console.warn('⚠️ [WEBSOCKET] Firestore tampoco tiene productos');
-              // Solicitar productos explícitamente al servidor
-              console.log('📡 [WEBSOCKET] Solicitando productos al servidor...');
-              const webSocketService = getWebSocket();
-              if (webSocketService && webSocketService.isConnected) {
-                webSocketService.emit('request_market_data', { gameId, round: currentRoundForProducts });
-              }
+              productRetryCountRef.current = 0; // Resetear contador al éxito
+              productsFound = true;
             }
           }
-        }).catch((error) => {
-          console.error('❌ [WEBSOCKET] Error obteniendo productos desde Firestore:', error);
-          // Solicitar productos explícitamente al servidor como último recurso
+        }
+        
+        // Si no hay productos en Firestore, solicitar al servidor
+        if (!productsFound) {
+          console.warn(`⚠️ [WEBSOCKET] Firestore no tiene productos, solicitando al servidor (intento ${currentRetry})...`);
           const webSocketService = getWebSocket();
           if (webSocketService && webSocketService.isConnected) {
-            console.log('📡 [WEBSOCKET] Solicitando productos al servidor (fallback)...');
-            webSocketService.emit('request_market_data', { gameId, round: round || 1 });
+            console.log(`📡 [WEBSOCKET] Emitiendo request_market_data: gameId=${gameId}, round=${currentRoundForProducts}`);
+            webSocketService.emit('request_market_data', { gameId, round: currentRoundForProducts });
+            console.log(`✅ [WEBSOCKET] request_market_data emitido, esperando economy:state...`);
+          } else {
+            console.error(`❌ [WEBSOCKET] WebSocket no está conectado, no se puede solicitar productos`);
           }
-        });
+          
+          // Programar siguiente reintento si no hemos alcanzado el máximo
+          productRetryCountRef.current = currentRetry;
+          if (currentRetry < maxRetries) {
+            productRetryTimeoutRef.current = setTimeout(attemptLoadProducts, retryInterval);
+          } else {
+            console.error(`❌ [WEBSOCKET] No se pudieron cargar productos después de ${maxRetries} intentos`);
+          }
+        }
+      } catch (error) {
+        console.error(`❌ [WEBSOCKET] Error obteniendo productos desde Firestore (intento ${currentRetry}):`, error);
+        // Solicitar productos explícitamente al servidor
+        const webSocketService = getWebSocket();
+        if (webSocketService && webSocketService.isConnected) {
+          webSocketService.emit('request_market_data', { gameId, round: currentRoundForProducts });
+        }
+        
+        // Programar siguiente reintento si no hemos alcanzado el máximo
+        productRetryCountRef.current = currentRetry;
+        if (currentRetry < maxRetries) {
+          productRetryTimeoutRef.current = setTimeout(attemptLoadProducts, retryInterval);
+        } else {
+          console.error(`❌ [WEBSOCKET] No se pudieron cargar productos después de ${maxRetries} intentos`);
+        }
       }
-    }, 3000); // Esperar 3 segundos después de conectar
+    };
     
-    return () => clearTimeout(timeoutId);
-  }, [isWebSocketConnected, gameId, productList, round]);
+    // Esperar 3 segundos después de conectar para dar tiempo a que lleguen los productos
+    const initialTimeout = setTimeout(() => {
+      attemptLoadProducts();
+    }, 3000);
+    
+    return () => {
+      clearTimeout(initialTimeout);
+      if (productRetryTimeoutRef.current) {
+        clearTimeout(productRetryTimeoutRef.current);
+        productRetryTimeoutRef.current = null;
+      }
+      // Resetear contador al desmontar
+      productRetryCountRef.current = 0;
+    };
+  }, [isWebSocketConnected, gameId, round]); // Remover productList de dependencias para permitir reintentos
 
   // CARGAR INVENTARIO DESDE WEBSOCKET
   useEffect(() => {
@@ -499,16 +641,84 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
     // Listener para start_round autoritativo
     const handleStartRound = (data) => {
+      console.log('🚀 [START_ROUND] ===== EVENTO RECIBIDO =====');
       console.log('🚀 [START_ROUND] Recibido evento autoritativo:', data);
+      
+      // CRÍTICO: Asegurar que roundEndsAtMs esté presente antes de aplicar
+      if (data.roundEndsAtMs) {
+        console.log('🚀 [START_ROUND] roundEndsAtMs presente:', data.roundEndsAtMs);
+      } else if (data.roundTime) {
+        const roundTimeMs = new Date(data.roundTime).getTime();
+        if (!isNaN(roundTimeMs)) {
+          data.roundEndsAtMs = roundTimeMs;
+          console.log('🚀 [START_ROUND] roundEndsAtMs calculado desde roundTime:', roundTimeMs);
+        }
+      }
+      
+      // CRÍTICO: start_round SIEMPRE viene con el tiempo de la ronda real (120s)
+      // NO importa lo que diga applyAuthoritativeState - SIEMPRE actualizar
+      if (data.roundEndsAtMs) {
+        const roundTimeDate = new Date(data.roundEndsAtMs);
+        const serverNowMs = data.serverNowMs || Date.now();
+        const deltaMs = data.roundEndsAtMs - serverNowMs;
+        
+        console.log('🚀 [START_ROUND] start_round SIEMPRE es ronda real - actualizando authoritativeState:', {
+          roundEndsAtMs: data.roundEndsAtMs,
+          roundTime: roundTimeDate.toISOString(),
+          deltaMs: deltaMs,
+          isRoundReal: deltaMs > 60000
+        });
+        
+        // CRÍTICO: start_round SIEMPRE es ronda real - actualizar authoritativeState inmediatamente
+        const newAuthoritativeState = {
+          ...data,
+          roundEndsAtMs: data.roundEndsAtMs,
+          roundTime: data.roundTime || roundTimeDate.toISOString(),
+          serverNowMs: data.serverNowMs || serverNowMs
+        };
+        
+        // CRÍTICO: Actualizar el ref PRIMERO para que el timer lo use inmediatamente
+        authoritativeStateRef.current = newAuthoritativeState;
+        
+        // Luego actualizar el estado (que puede tardar un ciclo de render)
+        setAuthoritativeState(newAuthoritativeState);
+        
+        // Actualizar roundTime también
+        setRoundTime(roundTimeDate);
+        roundTimeSetAtRef.current = Date.now();
+        
+        // CRÍTICO: Calcular y actualizar countdown inmediatamente con el nuevo roundEndsAtMs
+        const remainingMs = data.roundEndsAtMs - (Date.now() + clockDrift);
+        const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
+        console.log(`⏰ [START_ROUND] Actualizando countdown inmediatamente a ${totalSecondsLeft}s`);
+        setCountdown(totalSecondsLeft);
+        
+        console.log('✅ [START_ROUND] authoritativeState (ref y estado), roundTime y countdown actualizados inmediatamente');
+      }
+      
       if (applyAuthoritativeState(data)) {
         setGameStatus('in_progress');
         if (data.winningIndustry) setWinningIndustry(data.winningIndustry);
-        // Actualizar roundTime si viene en el evento
-        if (data.roundTime) {
-          const roundTimeDate = new Date(data.roundTime);
-          setRoundTime(roundTimeDate);
-          console.log('🚀 [START_ROUND] roundTime actualizado desde evento autoritativo:', roundTimeDate);
+        
+        // Asegurar que authoritativeState tiene roundEndsAtMs actualizado (por si acaso)
+        if (data.roundEndsAtMs) {
+          setAuthoritativeState(prev => ({
+            ...prev,
+            roundEndsAtMs: data.roundEndsAtMs,
+            roundTime: data.roundTime || new Date(data.roundEndsAtMs).toISOString()
+          }));
         }
+        
+        // Resetear flags para nueva ronda
+        roundEndedSentRef.current = false;
+        endRoundCalledRef.current = false;
+        hasNavigatedRef.current = false;
+        // CRÍTICO: Resetear flag de espera para nueva ronda (tanto estado como ref)
+        setIsWaitingNextRoundLocal(false);
+        isWaitingNextRoundLocalRef.current = false;
+        console.log('🔄 [START_ROUND] isWaitingNextRoundLocal reseteado a false para nueva ronda');
+        
+        console.log('🚀 [START_ROUND] ===== EVENTO PROCESADO =====');
       }
     };
 
@@ -542,7 +752,9 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     const handleCountdownStart = (data) => {
       console.log('⏰ [COUNTDOWN] Recibido countdown_start:', data);
       
-      // Aplicar estado autoritativo
+      // CRÍTICO: NO actualizar authoritativeStateRef con el countdown
+      // El countdown es temporal y será reemplazado por start_round
+      // Solo actualizar el estado para mostrar el countdown en la UI
       if (applyAuthoritativeState(data)) {
         setGameStatus('starting');
         // Actualizar la ronda si viene en el evento
@@ -551,6 +763,10 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
           console.log('⏰ [COUNTDOWN] Ronda actualizada a:', data.round);
         }
       }
+      
+      // CRÍTICO: NO actualizar authoritativeStateRef con roundEndsAtMs del countdown
+      // Esto evitará que el timer use el valor del countdown cuando llegue start_round
+      // El authoritativeStateRef se actualizará cuando llegue start_round
       
       // Solicitar inicio de ronda después del countdown
       if (data.countdownSeconds) {
@@ -571,6 +787,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     const handleEconomyState = (data) => {
       console.log('🏪 [ECONOMY_STATE] ===== EVENTO RECIBIDO =====');
       console.log('🏪 [ECONOMY_STATE] Recibido evento autoritativo:', data);
+      console.log('🏪 [ECONOMY_STATE] data.market:', data.market ? 'existe' : 'no existe');
+      console.log('🏪 [ECONOMY_STATE] data.market?.products:', data.market?.products ? `array con ${data.market.products.length} elementos` : 'no existe');
       
       // CRÍTICO: Actualizar productos PRIMERO, incluso si el evento es rechazado por duplicado
       // Esto asegura que no perdamos productos si el cliente se conecta tarde
@@ -581,21 +799,27 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         if (products.length > 0) {
           setProductList(products);
           console.log('🏪 [ECONOMY_STATE] ✅ Productos actualizados para ronda:', data.round || 'unknown');
+          // Resetear contador de reintentos al recibir productos
+          productRetryCountRef.current = 0;
+          if (productRetryTimeoutRef.current) {
+            clearTimeout(productRetryTimeoutRef.current);
+            productRetryTimeoutRef.current = null;
+          }
         } else {
           console.warn('⚠️ [ECONOMY_STATE] Array de productos vacío recibido');
         }
         
         // Actualizar marketData legacy para ChatScreen
         if (data.market.legacy && data.round !== undefined) {
-          setMarketData((prev) => {
-            const prevRounds = prev?.rounds || {};
-            return {
-              rounds: {
-                ...prevRounds,
-                [data.round]: data.market.legacy
-              }
-            };
-          });
+            setMarketData((prev) => {
+              const prevRounds = prev?.rounds || {};
+              return {
+                rounds: {
+                  ...prevRounds,
+                  [data.round]: data.market.legacy
+                }
+              };
+            });
         }
       }
       
@@ -906,23 +1130,33 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     getWebSocket().off('ROUND_END');
     getWebSocket().on('ROUND_END', (data) => {
       console.log('🏁 [ROUND_END] payload:', data);
+      const eventRound = data.round;
+      console.log('🏁 [ROUND_END] Ronda del evento:', eventRound, 'Ronda actual:', round);
 
       // 1) Estado base
       setGameStatus('roundEnd');
       setIsCalculatingRewards(false);
       if (data.winningIndustry) setWinningIndustry(data.winningIndustry);
+      
+      // Actualizar ronda si viene en el evento
+      if (eventRound !== undefined && eventRound !== null) {
+        setRound(eventRound);
+        console.log('🏁 [ROUND_END] Ronda actualizada a:', eventRound);
+      }
 
       // 2) Actualizar roundMeta con datos autoritativos del servidor
       if (data.winningIndustry && data.waste?.rewardAppliedPerUser) {
         setRoundMeta({
-          round: data.round || round,
+          round: eventRound || round,
           winningIndustry: data.winningIndustry,
           wasteRewardApplied: data.waste.rewardAppliedPerUser,
-          roundSeed: `${gameId}:${data.round || round}:${Date.now()}`
+          roundSeed: `${gameId}:${eventRound || round}:${Date.now()}`
         });
       }
 
       // 3) Cartelitos desde server (si vienen): mining[], waste{}
+      // CRÍTICO: Actualizar roundRewards siempre - el evento ROUND_END es autoritativo
+      // Si la ronda cambió, los nuevos rewards reemplazarán a los antiguos (comportamiento correcto)
       const rewards = {};
       if (Array.isArray(data.mining)) {
         data.mining.forEach(m => {
@@ -937,6 +1171,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
           rewards[winnerId].wasteRemoved = data.waste.rewardAppliedPerUser ?? 0;
         });
       }
+      console.log('🏁 [ROUND_END] Actualizando roundRewards para ronda', eventRound || round, ':', rewards);
       setRoundRewards(rewards);
 
       // 4) Balances finales → inventario y ranking global
@@ -951,6 +1186,54 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         });
         setAllPlayersData(updatedPlayers);
       }
+
+      // 5) Asegurar navegación al fin de ronda incluso si el temporizador no lo disparó
+      roundEndedSentRef.current = true;
+      endRoundCalledRef.current = true;
+
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+
+      // CRÍTICO: ROUND_END es un evento autoritativo del servidor que indica que la ronda terminó
+      // Si la ronda terminó, debemos navegar SIEMPRE, independientemente de isWaitingNextRoundLocal
+      // El flag isWaitingNextRoundLocal solo previene navegación durante el countdown de 3s, no cuando la ronda realmente terminó
+      const currentIsWaiting = isWaitingNextRoundLocalRef.current || isWaitingNextRoundLocal;
+      console.log('🧭 [ROUND_END] Verificando navegación:', {
+        isWaitingNextRoundLocal,
+        isWaitingNextRoundLocalRef: isWaitingNextRoundLocalRef.current,
+        currentIsWaiting,
+        hasNavigated: hasNavigatedRef.current,
+        currentScreen: currentScreenRef.current,
+        round: data.round || round
+      });
+
+      // CRÍTICO: Si ROUND_END llegó, significa que la ronda terminó autoritativamente
+      // Resetear isWaitingNextRoundLocal para permitir navegación
+      if (currentIsWaiting) {
+        console.log('🔄 [ROUND_END] Ronda terminó autoritativamente pero isWaitingNextRoundLocal=true, reseteando para permitir navegación');
+        setIsWaitingNextRoundLocal(false);
+        isWaitingNextRoundLocalRef.current = false;
+      }
+
+      // Navegar SIEMPRE cuando ROUND_END llega (es autoritativo)
+      if (!hasNavigatedRef.current && safeNavigate) {
+        hasNavigatedRef.current = true;
+        console.log('🧭 [ROUND_END] Navegando a EndOfRound por evento autoritativo');
+        safeNavigate('EndOfRound');
+      } else if (currentScreenRef.current !== 'EndOfRound' && safeNavigate) {
+        console.log('🧭 [ROUND_END] Reforzando navegación a EndOfRound');
+        hasNavigatedRef.current = true;
+        safeNavigate('EndOfRound');
+      } else {
+        console.log('🧭 [ROUND_END] Ya navegado a EndOfRound o navegación no disponible');
+      }
+
+      // 5) Resetear flags para evitar loops
+      setIsCalculatingRewards(false);
+      setNextRoundWaiting(false);
+      setRoundEndedSent(false);
     });
 
     // Listener para round_meta (meta global de ronda)
@@ -2317,78 +2600,182 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       return; // Salir temprano para evitar ejecutar el timer con valores inválidos
     }
     
-    // CRÍTICO: Si roundTime es muy reciente (menos de 10 segundos), establecer countdown inicial a 120
-    // para evitar saltos de 120 → 0 → 115
-    // Esto es especialmente importante cuando new_round viene con un roundTimeISO de solo 3 segundos (countdown)
-    const roundTimeSetAge = roundTimeSetAtRef.current ? currentTimeMs - roundTimeSetAtRef.current : Infinity;
-    if (roundTimeSetAge < 10000) {
-      console.log(`⏸️ [TIMER] roundTime muy reciente (${roundTimeSetAge}ms), estableciendo countdown inicial a 120 para evitar saltos`);
+    // CRÍTICO: Verificar si tenemos un roundEndsAtMs válido del authoritativeState
+    // Si lo tenemos, usarlo inmediatamente en lugar de esperar
+    const currentAuthoritativeState = authoritativeStateRef.current || authoritativeState;
+    const authoritativeRoundEndsAtMs = currentAuthoritativeState?.roundEndsAtMs;
+    
+    // CRÍTICO: Si tenemos roundEndsAtMs del authoritativeState y es válido, calcular el tiempo restante inmediatamente
+    // Esto asegura que cuando llega start_round, el timer se actualice correctamente
+    if (authoritativeRoundEndsAtMs && authoritativeRoundEndsAtMs > currentTimeMs) {
+      const remainingMs = authoritativeRoundEndsAtMs - (currentTimeMs + clockDrift);
+      const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
+      console.log(`⏰ [TIMER] Usando roundEndsAtMs del authoritativeState: ${totalSecondsLeft}s restantes (roundTime=${roundTime?.getTime()}, authoritativeRoundEndsAtMs=${authoritativeRoundEndsAtMs})`);
+      setCountdown(totalSecondsLeft);
+      // Continuar con el timer normalmente
+    } else if (roundTime && roundTime.getTime() > currentTimeMs) {
+      // Si no hay authoritativeRoundEndsAtMs válido, usar roundTime
+      const remainingMs = roundTime.getTime() - (currentTimeMs + clockDrift);
+      const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
+      console.log(`⏰ [TIMER] Usando roundTime: ${totalSecondsLeft}s restantes`);
+      setCountdown(totalSecondsLeft);
+    } else {
+      // Si no hay ningún tiempo válido, establecer a 120 como fallback
+      console.log(`⏰ [TIMER] No hay tiempo válido, estableciendo countdown inicial a 120`);
       setCountdown(120);
-      return; // Salir temprano - no iniciar el timer hasta que roundTime se estabilice
     }
 
-    console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
+        console.log("⏰ [TIMER] Iniciando temporizador con roundTime:", roundTime);
 
     intervalRef.current = setInterval(() => {
-      // Usar estado autoritativo si está disponible, sino fallback a roundTime
-      const roundEndsAtMs = authoritativeState?.roundEndsAtMs || roundTime?.getTime();
+      // CRÍTICO: Usar ref para obtener el valor más reciente de authoritativeState
+      // El ref se actualiza inmediatamente, mientras que el estado puede estar en caché en el closure
+      const currentAuthoritativeState = authoritativeStateRef.current || authoritativeState;
+      const roundEndsAtMs = currentAuthoritativeState?.roundEndsAtMs || roundTime?.getTime();
+      
+      // CRÍTICO: Si estamos en in_progress y tenemos roundEndsAtMs del authoritativeState,
+      // SIEMPRE usarlo (tiene prioridad sobre roundTime)
+      const authoritativeRoundEndsAtMs = currentAuthoritativeState?.roundEndsAtMs;
+      const finalRoundEndsAtMs = authoritativeRoundEndsAtMs || roundEndsAtMs;
+      
+      // Log de debugging cuando hay problemas con roundEndsAtMs
+      if (gameStatus === 'in_progress' && !finalRoundEndsAtMs) {
+        console.warn(`⚠️ [TIMER] En in_progress pero no hay roundEndsAtMs: authoritativeState.roundEndsAtMs=${currentAuthoritativeState?.roundEndsAtMs}, roundTime=${roundTime?.getTime()}`);
+      }
       
       // Obtener tiempo actual una sola vez
       const currentTime = Date.now();
       
-      // CRÍTICO: Si roundTime es muy reciente (menos de 10 segundos), mantener countdown en 120
-      // Esto evita mostrar 0s antes de que el tiempo real se sincronice
-      const roundTimeSetAge = roundTimeSetAtRef.current ? currentTime - roundTimeSetAtRef.current : Infinity;
-      if (roundTimeSetAge < 10000) {
-        // Mantener countdown en 120 hasta que el tiempo se estabilice
-        setCountdown(prev => {
-          if (prev !== 120) {
-            console.log(`⏸️ [TIMER] roundTime muy reciente (${roundTimeSetAge}ms), manteniendo countdown en 120 (evitando mostrar 0s)`);
-            return 120;
-          }
-          return prev;
-        });
-        return; // No calcular tiempo restante hasta que se estabilice
+      // Log cuando detectamos que estamos usando authoritativeRoundEndsAtMs
+      if (authoritativeRoundEndsAtMs && authoritativeRoundEndsAtMs !== roundTime?.getTime()) {
+        const remainingFromAuth = authoritativeRoundEndsAtMs - (currentTime + clockDrift);
+        const secondsFromAuth = Math.max(0, Math.floor(remainingFromAuth / 1000));
+        if (secondsFromAuth % 10 === 0 || secondsFromAuth <= 10) {
+          console.log(`⏰ [TIMER] Usando authoritativeRoundEndsAtMs: ${secondsFromAuth}s restantes`);
+        }
       }
       
-      if (!roundEndsAtMs) {
+      const roundTimeSetAge = roundTimeSetAtRef.current ? currentTime - roundTimeSetAtRef.current : Infinity;
+      const currentGameStatus = gameStatusRef.current || gameStatus;
+      
+      // Log de debugging cuando el timer no se mueve (solo en in_progress)
+      if (currentGameStatus === 'in_progress' && authoritativeRoundEndsAtMs) {
+        const remainingFromAuth = authoritativeRoundEndsAtMs - (currentTime + clockDrift);
+        const secondsFromAuth = Math.max(0, Math.floor(remainingFromAuth / 1000));
+        // Log cada 5 segundos para debugging
+        if (secondsFromAuth % 5 === 0) {
+          console.log(`🔍 [TIMER DEBUG] authoritativeRoundEndsAtMs=${authoritativeRoundEndsAtMs}, secondsFromAuth=${secondsFromAuth}, roundTimeSetAge=${roundTimeSetAge}ms, finalRoundEndsAtMs=${finalRoundEndsAtMs}`);
+        }
+      }
+      
+      // CRÍTICO: Si no tenemos finalRoundEndsAtMs válido, usar roundTime como fallback
+      if (!finalRoundEndsAtMs) {
+        if (roundTime && roundTime.getTime() > currentTime) {
+          const remainingMs = roundTime.getTime() - (currentTime + clockDrift);
+          const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
+          setCountdown(totalSecondsLeft);
+          return;
+        } else {
         setCountdown(120);
         return;
+        }
       }
 
       // Calcular tiempo restante usando tiempo corregido
-      const remainingMs = calculateRemainingTime(roundEndsAtMs);
+      const remainingMs = calculateRemainingTime(finalRoundEndsAtMs);
       const totalSecondsLeft = Math.max(0, Math.floor(remainingMs / 1000));
       
       // Debug del timer (solo en casos críticos)
-      if (gameStatus === 'in_progress' && totalSecondsLeft <= 5 && totalSecondsLeft > 0) {
+      if (currentGameStatus === 'in_progress' && totalSecondsLeft <= 5 && totalSecondsLeft > 0) {
         console.log(`⏰ [TIMER] Últimos segundos: ${totalSecondsLeft}s (drift: ${clockDrift}ms)`);
       }
       
-      // Activar loading cuando countdown llegue a 0 SOLO si estamos en in_progress
-      // Verificar también si el estado es 'in_progress' usando el ref para evitar problemas de stale closures
-      const currentGameStatus = gameStatusRef.current || gameStatus;
+      // Log adicional para debugging cuando hay problemas
+      if (currentGameStatus === 'in_progress' && (totalSecondsLeft > 120 || totalSecondsLeft < 0)) {
+        console.warn(`⚠️ [TIMER] Valor anómalo detectado: totalSecondsLeft=${totalSecondsLeft}, roundEndsAtMs=${roundEndsAtMs}, roundTimeSetAge=${roundTimeSetAge}ms`);
+      }
       
       // CRÍTICO: Verificar si acabamos de cambiar de ronda (protección contra detección prematura)
       // Si el roundTime se estableció hace menos de 10 segundos Y está en el futuro, NO ejecutar lógica de fin de ronda
       // Esto previene detección prematura cuando se inicia una nueva ronda
+      // PERO: Si ya estamos en in_progress y el roundTime está en el pasado, NO ignorar (es fin de ronda real)
       const isRoundTimeVeryRecent = roundTimeSetAge < 10000; // 10 segundos de gracia
-      const isRoundTimeInFuture = roundTime && roundTime.getTime() > currentTime;
+      // Usar finalRoundEndsAtMs en lugar de roundTime para verificar si está en el futuro/pasado
+      const isRoundTimeInFuture = finalRoundEndsAtMs && finalRoundEndsAtMs > currentTime;
+      const isRoundTimeInPast = finalRoundEndsAtMs && finalRoundEndsAtMs <= currentTime;
       
       // Verificar si el contador llegó a 0 y estamos en in_progress o calculating
       // IGNORAR solo si el roundTime es muy reciente Y está en el futuro (nueva ronda iniciando)
       // Si totalSecondsLeft <= 0 y roundTime está en el pasado o es igual, proceder con fin de ronda
-      const shouldIgnoreRoundEnd = isRoundTimeVeryRecent && isRoundTimeInFuture;
+      // CRÍTICO: Si el roundTime está en el pasado, NO ignorar aunque sea reciente (es fin de ronda real)
+      const shouldIgnoreRoundEnd = isRoundTimeVeryRecent && isRoundTimeInFuture && !isRoundTimeInPast;
       
-      // CRÍTICO: Si realmente llegó a 0 y roundTime está en el pasado o es igual, proceder SIEMPRE
-      const shouldProceedWithRoundEnd = totalSecondsLeft <= 0 && !isRoundTimeInFuture;
+      // CRÍTICO: Detectar fin de ronda cuando el timer llega a 0
+      // Procesar si estamos en in_progress O si el estado es roundEnd pero el timer aún no ha procesado el fin
+      // (esto puede pasar si el servidor terminó la ronda antes de que el timer detectara el fin)
+      const shouldProcessRoundEnd = totalSecondsLeft <= 0 && 
+        (currentGameStatus === 'in_progress' || 
+         (currentGameStatus === 'roundEnd' && !endRoundCalledRef.current && !hasNavigatedRef.current));
       
-      if ((shouldProceedWithRoundEnd || (totalSecondsLeft <= 0 && (currentGameStatus === 'in_progress' || currentGameStatus === 'calculating') && !shouldIgnoreRoundEnd))) {
+      if (shouldProcessRoundEnd) {
+        // Log detallado para debugging
+        console.log(`🏁 [TIMER] Condiciones de fin de ronda:`, {
+          totalSecondsLeft,
+          currentGameStatus,
+          isWaitingNextRoundLocal,
+          shouldIgnoreRoundEnd,
+          roundTimeSetAge: `${roundTimeSetAge}ms`,
+          isRoundTimeVeryRecent,
+          isRoundTimeInFuture,
+          isRoundTimeInPast,
+          roundEndsAtMs: finalRoundEndsAtMs,
+          authoritativeRoundEndsAtMs: authoritativeRoundEndsAtMs,
+          roundTimeMs: roundTime?.getTime(),
+          round: round
+        });
+        
+        // CRÍTICO: Verificar isWaitingNextRoundLocal usando el ref para obtener el valor más reciente
+        // PERO: Si el timer detecta que la ronda terminó (totalSecondsLeft <= 0), SIEMPRE procesar
+        // El flag isWaitingNextRoundLocal solo se usa para evitar navegación durante el countdown de 3s
+        // Si la ronda real terminó, debemos navegar SIEMPRE
+        const currentIsWaiting = isWaitingNextRoundLocalRef.current || isWaitingNextRoundLocal;
+        // CRÍTICO: Si roundTimeSetAge > 120s, significa que la ronda real terminó, así que procesar SIEMPRE
+        // Si roundTimeSetAge < 120s pero totalSecondsLeft <= 0, también procesar (ronda terminó)
+        if (currentIsWaiting && roundTimeSetAge < 120000 && totalSecondsLeft > 0) {
+          console.log(`⏸️ [TIMER] Ignorando fin de ronda - esperando siguiente ronda (roundTimeSetAge=${roundTimeSetAge}ms, isWaiting=${currentIsWaiting}, totalSecondsLeft=${totalSecondsLeft})`);
+          return;
+        }
+        
+        // Si llegamos aquí y totalSecondsLeft <= 0, significa que la ronda terminó
+        // Resetear isWaitingNextRoundLocal para permitir navegación
+        if (totalSecondsLeft <= 0 && currentIsWaiting) {
+          console.log(`🔄 [TIMER] Ronda terminó pero isWaitingNextRoundLocal=true, reseteando para permitir navegación`);
+          setIsWaitingNextRoundLocal(false);
+          isWaitingNextRoundLocalRef.current = false;
+        }
+        
+        // Si debemos ignorar (ronda muy reciente y en futuro), no procesar
+        // PERO: Si roundTimeSetAge > 120s, significa que la ronda ya terminó, así que NO ignorar
+        if (shouldIgnoreRoundEnd && roundTimeSetAge < 120000) {
+          console.log(`⏸️ [TIMER] Ignorando fin de ronda - roundTime muy reciente y en futuro (roundTimeSetAge=${roundTimeSetAge}ms)`);
+          return;
+        }
+        
+        console.log(`🏁 [TIMER] Fin de ronda detectado - PROCESANDO: totalSecondsLeft=${totalSecondsLeft}, gameStatus=${currentGameStatus}, roundTimeSetAge=${roundTimeSetAge}ms`);
+        
+        // CRÍTICO: Limpiar el timer PRIMERO para evitar múltiples ejecuciones
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+          console.log(`🧹 [TIMER] Timer limpiado antes de procesar fin de ronda`);
+        }
+        
         // CRÍTICO: Si aún no se envió round_ended, enviarlo SIEMPRE
         if (!roundEndedSentRef.current) {
           const webSocketService = getWebSocket();
           
           if (webSocketService && webSocketService.isConnected) {
+            console.log(`📡 [TIMER] Enviando round_ended al servidor: gameId=${gameId}, userId=${userId}, round=${round}`);
             webSocketService.emit('round_ended', { gameId, userId, round });
             roundEndedSentRef.current = true;
           } else {
@@ -2396,78 +2783,97 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
           }
         }
         
-        // Si aún no se procesó el fin de ronda, procesarlo ahora
+        // CRÍTICO: Procesar fin de ronda y navegar SIEMPRE que detectemos el fin
+        // No depender solo de los flags - intentar navegar múltiples veces si es necesario
         if (!endRoundCalledRef.current) {
+          console.log(`🎬 [TIMER] Procesando fin de ronda por primera vez`);
           endRoundCalledRef.current = true;
           setIsCalculatingRewards(true);
-          
-          // Limpiar el timer inmediatamente para evitar bucles
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          
-          // Navegación automática a EndOfRound cuando timer llegue a 0
-          if (!hasNavigatedRef.current && safeNavigate) {
-            hasNavigatedRef.current = true;
-            safeNavigate('EndOfRound');
-          }
-        } else if (!hasNavigatedRef.current && safeNavigate) {
-          // Si endRoundCalledRef ya es true pero no se navegó, intentar navegar ahora
-          hasNavigatedRef.current = true;
-          safeNavigate('EndOfRound');
-          
-          // Limpiar el timer
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        } else if (currentScreenRef.current !== 'EndOfRound') {
-          // Si los flags están en true pero no estamos en EndOfRound, navegar de todas formas
-          setIsCalculatingRewards(true);
-          
-          if (safeNavigate) {
-            hasNavigatedRef.current = true;
-            safeNavigate('EndOfRound');
-          }
-          
-          // Limpiar el timer
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-        } else {
-          // Si ya estamos en EndOfRound, solo limpiar el timer
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
         }
+        
+        // CRÍTICO: Navegación - intentar múltiples veces si es necesario
+        // Usar setTimeout para asegurar que la navegación se ejecute después de limpiar el timer
+        // CRÍTICO: Resetear isWaitingNextRoundLocal para permitir navegación
+        setIsWaitingNextRoundLocal(false);
+        isWaitingNextRoundLocalRef.current = false;
+        
+        setTimeout(() => {
+          if (!hasNavigatedRef.current && safeNavigate) {
+            console.log(`🧭 [TIMER] Navegando a EndOfRound desde timer (intento 1)`);
+            hasNavigatedRef.current = true;
+            safeNavigate('EndOfRound');
+          } else if (currentScreenRef.current !== 'EndOfRound' && safeNavigate) {
+            console.log(`🧭 [TIMER] Navegando a EndOfRound (intento 2, currentScreen=${currentScreenRef.current})`);
+          hasNavigatedRef.current = true;
+            setIsCalculatingRewards(true);
+          safeNavigate('EndOfRound');
+          } else {
+            console.log(`✅ [TIMER] Ya navegado a EndOfRound o navegación no disponible`);
+          }
+        }, 100); // Pequeño delay para asegurar que el timer se limpió
+        
+        // CRÍTICO: Intentar navegación adicional después de un delay más largo por si acaso
+        setTimeout(() => {
+          if (currentScreenRef.current !== 'EndOfRound' && safeNavigate) {
+            console.log(`🧭 [TIMER] Navegando a EndOfRound (intento 3, currentScreen=${currentScreenRef.current})`);
+            hasNavigatedRef.current = true;
+            setIsCalculatingRewards(true);
+            safeNavigate('EndOfRound');
+          }
+        }, 500);
       } else if (totalSecondsLeft <= 0 && shouldIgnoreRoundEnd) {
         // Si el roundTime es muy reciente y totalSecondsLeft <= 0, probablemente es un problema de sincronización
         // No hacer nada - esperar a que el roundTime se sincronice correctamente
         console.log(`⚠️ [TIMER] totalSecondsLeft <= 0 pero roundTime es muy reciente (${roundTimeSetAge}ms) o roundTime está en el futuro, ignorando detección de fin de ronda`);
       } else if (totalSecondsLeft <= 0 && currentGameStatus !== 'in_progress' && currentGameStatus !== 'calculating') {
-        // Si el contador llegó a 0 pero el estado no es in_progress ni calculating, limpiar el timer
-        console.log(`🧹 [TIMER] Contador a 0 pero estado es '${currentGameStatus}' (no in_progress ni calculating), limpiando timer`);
+        // Si el contador llegó a 0 pero el estado no es in_progress ni calculating
+        // CRÍTICO: Si el estado es 'roundEnd' pero aún no hemos procesado el fin, procesarlo ahora
+        if (currentGameStatus === 'roundEnd' && !endRoundCalledRef.current && !hasNavigatedRef.current) {
+          console.log(`🏁 [TIMER] Estado es 'roundEnd' pero aún no procesado - procesando fin de ronda ahora`);
+          // Procesar fin de ronda (similar al bloque anterior pero sin verificar isWaitingNextRoundLocal)
+          if (!roundEndedSentRef.current) {
+            const webSocketService = getWebSocket();
+            if (webSocketService && webSocketService.isConnected) {
+              console.log(`📡 [TIMER] Enviando round_ended al servidor: gameId=${gameId}, userId=${userId}, round=${round}`);
+              webSocketService.emit('round_ended', { gameId, userId, round });
+              roundEndedSentRef.current = true;
+            }
+          }
+          if (!endRoundCalledRef.current) {
+            endRoundCalledRef.current = true;
+            setIsCalculatingRewards(true);
+          }
+          setIsWaitingNextRoundLocal(false);
+          isWaitingNextRoundLocalRef.current = false;
+          setTimeout(() => {
+            if (!hasNavigatedRef.current && safeNavigate) {
+              console.log(`🧭 [TIMER] Navegando a EndOfRound desde timer (estado roundEnd, intento 1)`);
+          hasNavigatedRef.current = true;
+          safeNavigate('EndOfRound');
+            } else if (currentScreenRef.current !== 'EndOfRound' && safeNavigate) {
+              console.log(`🧭 [TIMER] Navegando a EndOfRound (estado roundEnd, intento 2)`);
+              hasNavigatedRef.current = true;
+              setIsCalculatingRewards(true);
+              safeNavigate('EndOfRound');
+            }
+          }, 100);
+        } else {
+          // Si ya procesamos el fin o el estado no es roundEnd, limpiar el timer
+          console.log(`🧹 [TIMER] Contador a 0 pero estado es '${currentGameStatus}' (no in_progress ni calculating), limpiando timer`);
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
+          }
         }
       }
 
-        if (gameStatus === 'in_progress') {
-          setCountdown(prevCountdown => {
-            if (prevCountdown !== totalSecondsLeft) {
-              // Solo log cada 10 segundos o en los últimos 10
-              if (totalSecondsLeft % 10 === 0 || totalSecondsLeft <= 10) {
-                console.log(`⏰ [TIMER] Countdown: ${totalSecondsLeft}s`);
-              }
-              return totalSecondsLeft;
-            }
-            return prevCountdown;
-          });
-      } else if (gameStatus === 'roundEnd') {
+        // CRÍTICO: Actualizar countdown según el estado del juego
+        if (currentGameStatus === 'in_progress') {
+          // En in_progress, SIEMPRE actualizar con el tiempo real calculado
+          // CRÍTICO: Actualizar SIEMPRE para que el timer se mueva correctamente
+          // Usar setCountdown directamente (sin callback) para evitar múltiples actualizaciones
+          setCountdown(totalSecondsLeft);
+      } else if (currentGameStatus === 'roundEnd') {
         // Cuando el estado es 'roundEnd', NO interrumpir el timer - dejar que continúe hasta que llegue a 0 naturalmente
         // Solo actualizar countdown si aún no ha llegado a 0
         if (totalSecondsLeft > 0) {
@@ -2479,7 +2885,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
           // En otros estados (starting, waiting, etc.), verificar si tenemos roundEndsAtMs válido
           // Si el roundEndsAtMs es del countdown (ya pasado), mantener en 120
           // Si el roundEndsAtMs es de la ronda real (120 segundos), mostrar el tiempo restante Y actualizar estado
-          if (roundEndsAtMs && gameStatus === 'starting') {
+          if (roundEndsAtMs && currentGameStatus === 'starting') {
             // Si estamos en starting pero tenemos un roundEndsAtMs válido, podría ser que el servidor
             // ya envió el start_round pero el estado no se actualizó aún
             const remainingFromRoundEndsAt = roundEndsAtMs - (currentTime + clockDrift);
@@ -2503,9 +2909,14 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
               // Si el roundTime es muy reciente, mantener countdown estable (no cambiar bruscamente)
               console.log(`⏸️ [TIMER] roundTime muy reciente (${roundTimeSetAgeCheck}ms), manteniendo countdown estable para evitar saltos`);
               // No cambiar countdown - mantener el valor actual
-            } else {
-              // Es del countdown o ya pasó, mantener en 120
+            } else if (secondsFromRoundEndsAt <= 0) {
+              // Si el roundEndsAtMs ya pasó, probablemente es del countdown - mantener en 120
+              console.log(`⏸️ [TIMER] roundEndsAtMs ya pasó (${secondsFromRoundEndsAt}s), probablemente es del countdown - manteniendo en 120`);
               setCountdown(120);
+            } else {
+              // Si el tiempo es válido pero menor a 100s, actualizar countdown (puede ser ronda real que está empezando)
+              console.log(`⏰ [TIMER] roundEndsAtMs válido (${secondsFromRoundEndsAt}s) - actualizando countdown`);
+              setCountdown(secondsFromRoundEndsAt);
             }
           } else {
             // En otros estados, mantener countdown en 120
