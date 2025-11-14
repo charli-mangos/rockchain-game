@@ -1,5 +1,7 @@
 import { StyleSheet, Dimensions } from 'react-native';
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
@@ -9,34 +11,35 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
     },
     questContainer: {
-        paddingHorizontal: 21,
-        flex:1,
+        paddingHorizontal: 16,
+        flex: 1,
+        justifyContent: 'flex-start',
     },
     questionText: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: 'bold',
-      marginBottom: 10,
+      marginBottom: 6,
       color: '#1d3d39',
     },
     text: {
-        marginTop: 5,
-        marginBottom: 10,
-        fontSize: 16,
-        lineHeight: 22,
+        marginTop: 2,
+        marginBottom: 6,
+        fontSize: 14,
+        lineHeight: 20,
         color: '#1d3d39',
     },
     subText: {
-        marginTop: 5,
-        marginBottom: 20,
-        fontSize: 14,
+        marginTop: 2,
+        marginBottom: 12,
+        fontSize: 12,
         color: '#1d3d39',
         fontStyle: 'italic',
     },
     optionButton: {
-      padding: 16,
+      padding: 12,
       borderWidth: 2,
-      borderRadius: 12,
-      marginVertical: 6,
+      borderRadius: 10,
+      marginVertical: 4,
       borderColor: '#e0e0e0',
       backgroundColor: '#fff',
       shadowColor: '#1d3d39',
@@ -57,66 +60,60 @@ const styles = StyleSheet.create({
       alignItems: 'center',
     },
     iconContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 16,
+      marginRight: 12,
     },
     textContainer: {
       flex: 1,
     },
     optionText: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: '600',
-      marginBottom: 4,
+      marginBottom: 2,
     },
     optionDescription: {
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 12,
+      lineHeight: 16,
     },
     checkIcon: {
-      marginLeft: 8,
+      marginLeft: 6,
     },
     efficiencyContainer: {
-      marginTop: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      marginTop: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 3,
       backgroundColor: '#e8f5e8',
-      borderRadius: 6,
+      borderRadius: 5,
       alignSelf: 'flex-start',
     },
     efficiencyText: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '600',
       color: '#2e7d32',
     },
     educationalInfo: {
-      marginTop: 12,
-      padding: 12,
+      marginTop: 8,
+      padding: 8,
       backgroundColor: '#f8f9fa',
-      borderRadius: 8,
+      borderRadius: 6,
       borderLeftWidth: 3,
       borderLeftColor: '#1d3d39',
     },
     educationalDescription: {
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: 12,
+      lineHeight: 16,
       color: '#1d3d39',
     },
     flatList: {
       flex: 1,
       width: '100%',
     },
-    navBar: {
-        flexDirection: 'row',
-        width: '100%',
-        justifyContent: 'space-around',
-        borderTopWidth: 1,
-        borderColor: '#1d3d39',
-        paddingVertical: 10,
-        paddingBottom: 20,  // Añadir padding inferior para evitar que la barra se superponga
+    flatListContent: {
+      paddingBottom: 8,
     },
   });
   

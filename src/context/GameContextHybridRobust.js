@@ -1129,9 +1129,15 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     // Listener para ROUND_END - reconciliación autoritativa
     getWebSocket().off('ROUND_END');
     getWebSocket().on('ROUND_END', (data) => {
-      console.log('🏁 [ROUND_END] payload:', data);
+      console.log('🏁 [ROUND_END] ===== EVENTO RECIBIDO =====');
+      console.log('🏁 [ROUND_END] payload completo:', JSON.stringify(data, null, 2));
       const eventRound = data.round;
       console.log('🏁 [ROUND_END] Ronda del evento:', eventRound, 'Ronda actual:', round);
+      console.log('🏁 [ROUND_END] userId actual:', userId);
+      console.log('🏁 [ROUND_END] data.waste:', data.waste);
+      console.log('🏁 [ROUND_END] data.waste?.winners:', data.waste?.winners);
+      console.log('🏁 [ROUND_END] data.mining:', data.mining);
+      console.log('🏁 [ROUND_END] data.mining?.winners:', data.mining?.winners);
 
       // 1) Estado base
       setGameStatus('roundEnd');
@@ -1145,33 +1151,81 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       }
 
       // 2) Actualizar roundMeta con datos autoritativos del servidor
-      if (data.winningIndustry && data.waste?.rewardAppliedPerUser) {
+      // NOTA: El servidor no envía rewardAppliedPerUser directamente, viene en waste.winners
+      if (data.winningIndustry) {
+        // Calcular rewardAppliedPerUser desde waste.winners si existe
+        let rewardAppliedPerUser = 0;
+        if (data.waste?.winners?.length) {
+          const currentUserWinner = data.waste.winners.find(w => (w.userId || w.winnerUserId) === userId);
+          rewardAppliedPerUser = currentUserWinner?.wasteReduction || 0;
+        }
+        
         setRoundMeta({
           round: eventRound || round,
           winningIndustry: data.winningIndustry,
-          wasteRewardApplied: data.waste.rewardAppliedPerUser,
+          wasteRewardApplied: rewardAppliedPerUser,
           roundSeed: `${gameId}:${eventRound || round}:${Date.now()}`
         });
+        console.log('🏁 [ROUND_END] roundMeta actualizado:', { winningIndustry: data.winningIndustry, wasteRewardApplied: rewardAppliedPerUser });
       }
 
       // 3) Cartelitos desde server (si vienen): mining[], waste{}
       // CRÍTICO: Actualizar roundRewards siempre - el evento ROUND_END es autoritativo
       // Si la ronda cambió, los nuevos rewards reemplazarán a los antiguos (comportamiento correcto)
       const rewards = {};
-      if (Array.isArray(data.mining)) {
+      
+      // Procesar mining rewards
+      if (Array.isArray(data.mining?.winners)) {
+        // Formato nuevo: data.mining.winners es un array de objetos
+        console.log('💰 [ROUND_END] Procesando mining.winners (formato nuevo):', data.mining.winners.length);
+        data.mining.winners.forEach(m => {
+          const userId = m.winnerUserId || m.userId;
+          if (!rewards[userId]) rewards[userId] = {};
+          rewards[userId].miningReward = m.rewardApplied ?? 50;
+          console.log(`💰 [ROUND_END] Mining reward para ${userId}: ${rewards[userId].miningReward}`);
+        });
+      } else if (Array.isArray(data.mining)) {
+        // Formato legacy: data.mining es un array directo
+        console.log('💰 [ROUND_END] Procesando mining (formato legacy):', data.mining.length);
         data.mining.forEach(m => {
-          // server: { userId, userName, rockCoins, blockId }
-          if (!rewards[m.userId]) rewards[m.userId] = {};
-          rewards[m.userId].miningReward = m.rockCoins ?? 50;
+          const userId = m.userId || m.winnerUserId;
+          if (!rewards[userId]) rewards[userId] = {};
+          rewards[userId].miningReward = m.rockCoins ?? m.rewardApplied ?? 50;
+          console.log(`💰 [ROUND_END] Mining reward para ${userId}: ${rewards[userId].miningReward}`);
         });
+      } else {
+        console.log('⚠️ [ROUND_END] No se encontró data.mining o data.mining.winners');
       }
+      
+      // Procesar waste rewards
+      // CRÍTICO: data.waste.winners es un array de objetos con { userId, userName, wasteReduction, ... }
       if (data.waste?.winners?.length) {
-        data.waste.winners.forEach(winnerId => {
-          if (!rewards[winnerId]) rewards[winnerId] = {};
-          rewards[winnerId].wasteRemoved = data.waste.rewardAppliedPerUser ?? 0;
+        console.log(`🗑️ [ROUND_END] Procesando ${data.waste.winners.length} waste winners`);
+        data.waste.winners.forEach((winner, index) => {
+          console.log(`🗑️ [ROUND_END] Waste winner ${index}:`, winner);
+          const winnerUserId = winner.userId || winner.winnerUserId;
+          const wasteReduction = winner.wasteReduction || 0;
+          console.log(`🗑️ [ROUND_END] winnerUserId: ${winnerUserId}, wasteReduction: ${wasteReduction}, userId actual: ${userId}`);
+          
+          if (winnerUserId && wasteReduction > 0) {
+            if (!rewards[winnerUserId]) rewards[winnerUserId] = {};
+            rewards[winnerUserId].wasteRemoved = wasteReduction;
+            console.log(`✅ [ROUND_END] Usuario ${winnerUserId} tiene wasteRemoved: ${wasteReduction}`);
+            if (winnerUserId === userId) {
+              console.log(`🎯 [ROUND_END] ¡Este es el usuario actual! wasteRemoved asignado: ${wasteReduction}`);
+            }
+          } else {
+            console.log(`⚠️ [ROUND_END] Saltando winner ${index}: winnerUserId=${winnerUserId}, wasteReduction=${wasteReduction}`);
+          }
         });
+      } else {
+        console.log('⚠️ [ROUND_END] No se encontró data.waste.winners o está vacío');
+        console.log('⚠️ [ROUND_END] data.waste:', data.waste);
       }
-      console.log('🏁 [ROUND_END] Actualizando roundRewards para ronda', eventRound || round, ':', rewards);
+      
+      console.log('🏁 [ROUND_END] roundRewards final:', rewards);
+      console.log(`🏁 [ROUND_END] roundRewards[${userId}]:`, rewards[userId]);
+      console.log('🏁 [ROUND_END] ===== FIN EVENTO =====');
       setRoundRewards(rewards);
 
       // 4) Balances finales → inventario y ranking global

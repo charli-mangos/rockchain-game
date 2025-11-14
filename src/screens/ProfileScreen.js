@@ -17,7 +17,7 @@ import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 const ProfileScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
-  const { userData, webSocketInventory, gameId, userId, refreshUserData, updateUserDataImmediately, allPlayersData } = useGameContextHybridRobust();
+  const { userData, webSocketInventory, gameId, userId, refreshUserData, updateUserDataImmediately, allPlayersData, marketData, round } = useGameContextHybridRobust();
   const userProducts = webSocketInventory?.products || []; 
   
   // Obtener el conteo de productos del ranking para comparar
@@ -143,6 +143,8 @@ const ProfileScreen = ({ navigation, route }) => {
         gameId={gameId}
         userId={userId}
         screenType="ProfileScreen"
+        marketData={marketData}
+        round={round}
       />
     );
   };

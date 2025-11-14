@@ -9,7 +9,7 @@ import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
 
 const MarketScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
-  const { productList, gameId, userId, round } = useGameContextHybridRobust();
+  const { productList, gameId, userId, round, marketData } = useGameContextHybridRobust();
   
   // Logs eliminados para reducir ruido
   
@@ -98,6 +98,8 @@ const MarketScreen = ({ navigation, route }) => {
         screenType="MarketScreen"
         productList={validProducts}
         onBuy={() => handleBuy(item)}
+        marketData={marketData}
+        round={round}
       />
     );
   };

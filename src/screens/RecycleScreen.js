@@ -93,7 +93,7 @@ const RecycleScreen = ({ navigation, route }) => {
           <View style={[styles.iconContainer, { backgroundColor: isSelected ? '#1d3d39' : '#f0f0f0' }]}>
             <Ionicons 
               name={industry.icon} 
-              size={24} 
+              size={20} 
               color={isSelected ? '#fff' : industry.color} 
             />
           </View>
@@ -131,7 +131,7 @@ const RecycleScreen = ({ navigation, route }) => {
           {isSelected && (
             <Ionicons 
               name="checkmark-circle" 
-              size={24} 
+              size={20} 
               color="#1d3d39" 
               style={styles.checkIcon}
             />
@@ -165,6 +165,9 @@ const RecycleScreen = ({ navigation, route }) => {
                 renderItem={renderOption}
                 keyExtractor={(item) => item}
                 extraData={selectedIndustry}
+                style={styles.flatList}
+                contentContainerStyle={styles.flatListContent}
+                showsVerticalScrollIndicator={false}
             />
         </View>
         

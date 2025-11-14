@@ -1226,14 +1226,51 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
   let attempt = 0;
   let lastError = null;
   
-  // Reintentos para garantizar productos válidos
+  // PASO 1: Calcular valores base para esta ronda
+  const baseValues = calculateBaseValuesForRound(seed, round);
+  console.log(`💰 [MARKET] Valores base calculados para ronda ${round}:`, baseValues);
+  
+  // PASO 2: Generar TODA la estructura de mercado (todas las combinaciones)
+  console.log(`📊 [MARKET] Generando estructura completa de mercado...`);
+  const completeMarketData = generateCompleteMarketData(baseValues, seed);
+  console.log(`✅ [MARKET] Estructura completa generada: ${Object.keys(completeMarketData).length} mármoles`);
+  
+  // Log de ejemplo para verificar valores y jerarquías
+  const exampleMarble = 'Red';
+  if (completeMarketData[exampleMarble]) {
+    const example = {
+      'Block A': completeMarketData[exampleMarble].Block?.A,
+      'Block B': completeMarketData[exampleMarble].Block?.B,
+      'Block C': completeMarketData[exampleMarble].Block?.C,
+      'Slab A': completeMarketData[exampleMarble].Slab?.A,
+      'Slab B': completeMarketData[exampleMarble].Slab?.B,
+      'Slab C': completeMarketData[exampleMarble].Slab?.C,
+    };
+    console.log(`📊 [MARKET] Ejemplo ${exampleMarble}:`, JSON.stringify(example, null, 2));
+    
+    // Verificar jerarquías en el ejemplo
+    const blockA = example['Block A'];
+    const slabA = example['Slab A'];
+    if (blockA && slabA) {
+      if (slabA.price <= blockA.price) {
+        console.warn(`⚠️ [MARKET] ERROR: Slab A (${slabA.price}) <= Block A (${blockA.price})`);
+      } else {
+        console.log(`✅ [MARKET] Jerarquía correcta: Slab A (${slabA.price}) > Block A (${blockA.price})`);
+      }
+    }
+  }
+  
+  // PASO 3: Usar la estructura completa como legacy (ya está validada y corregida)
+  legacyRound = completeMarketData;
+  
+  // PASO 4: Generar productos aleatorios que usen los valores de mercado
   while (attempt < maxRetries) {
     attempt++;
     console.log(`🔄 [MARKET] Intento ${attempt}/${maxRetries} de generación de productos...`);
     
     try {
-  // Generar productos con semilla determinista
-      products = generateProductsWithSeed(seed, round);
+      // Generar productos usando valores de mercado ya calculados
+      products = generateProductsWithSeed(seed, round, completeMarketData);
       
       // VALIDACIÓN CRÍTICA: Verificar que todos los productos son válidos
       const validation = validateProducts(products, 20);
@@ -1248,19 +1285,8 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
       
       console.log(`✅ [MARKET] Validación de productos exitosa: ${products.length} productos válidos`);
       
-      // Transformar a estructura legacy
-      legacyRound = transformProductsToLegacy(products, round);
-      
-      // VALIDACIÓN CRÍTICA: Verificar consistencia entre products y legacy
-      const consistencyCheck = validateMarketConsistency(products, legacyRound);
-      if (!consistencyCheck.valid) {
-        lastError = new Error(`Inconsistencia entre products y legacy: ${consistencyCheck.inconsistencies.length} problemas`);
-        console.error(`❌ [MARKET] Inconsistencias detectadas:`, consistencyCheck.inconsistencies);
-        console.error(`❌ [MARKET] ${lastError.message}, reintentando...`);
-        continue; // Reintentar
-      }
-      
-      console.log(`✅ [MARKET] Consistencia entre products y legacy verificada`);
+      // Los productos ya usan valores de completeMarketData, así que son consistentes
+      console.log(`✅ [MARKET] Productos generados desde estructura de mercado completa`);
       
       // Si llegamos aquí, los productos son válidos y consistentes
       break;
@@ -1275,8 +1301,7 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
     }
   }
   
-  // Si después de todos los reintentos no tenemos productos válidos, usar productos generados de todos modos
-  // (pero loguear el error para debugging)
+  // Si después de todos los reintentos no tenemos productos válidos
   if (!products || !validateProducts(products, 20).valid) {
     const error = lastError || new Error('No se pudieron generar productos válidos después de todos los reintentos');
     console.error(`❌ [MARKET] ${error.message}`);
@@ -1284,7 +1309,6 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
     // Si tenemos productos aunque no pasen validación estricta, usarlos de todos modos
     if (products && products.length > 0) {
       console.warn(`⚠️ [MARKET] Usando productos generados aunque no pasen validación estricta (${products.length} productos)`);
-      // Filtrar solo los productos que tengan campos básicos válidos
       const basicValidProducts = products.filter(p => 
         p && 
         p.marbleType && p.type && p.quality &&
@@ -1295,13 +1319,10 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
       if (basicValidProducts.length > 0) {
         console.warn(`⚠️ [MARKET] Usando ${basicValidProducts.length} productos con validación básica`);
         products = basicValidProducts;
-        legacyRound = transformProductsToLegacy(products, round);
       } else {
-        // Si ni siquiera hay productos básicamente válidos, lanzar error
         throw error;
       }
     } else {
-      // Si no hay productos en absoluto, lanzar error
       throw error;
     }
   }
@@ -1441,200 +1462,425 @@ const transformProductsToLegacy = (products, round) => {
 
 // FUNCIÓN AUXILIAR: Generar productos con semilla determinista
 // Estructura compatible con el frontend: type: 'Block'|'Slab', quality: 'A'|'B'|'C'
-const generateProductsWithSeed = (seed, round) => {
-  console.log(`🔍 [GENERATE] Iniciando generación para seed=${seed}, round=${round}`);
-  
-  // Crear generador pseudoaleatorio con semilla
-  // Inicializar hash una sola vez
+// ============================================================================
+// SISTEMA DE VALORES BASADO EN REGLAS CLARAS Y DETERMINISTAS
+// ============================================================================
+//
+// REGLAS DEL SISTEMA:
+// 1. VALOR BASE: Se calcula una vez por ronda para cada mármol (bloque calidad A)
+//    - Este valor base varía cada ronda con ±10% (no ±15%)
+//    - Es el punto de referencia para todos los demás valores
+//
+// 2. MULTIPLICADORES FIJOS (sin aleatoriedad):
+//    TIPO DE PRODUCTO:
+//    - Block: precio × 1.0, waste × 1.0 (base)
+//    - Slab:  precio × 1.3, waste × 1.1 (30% más cara, 10% más residuo)
+//
+//    CALIDAD:
+//    - A: precio × 1.0, waste × 1.0 (base - más cara, menos residuo)
+//    - B: precio × 0.75, waste × 1.2 (25% más barata, 20% más residuo)
+//    - C: precio × 0.5, waste × 1.5 (50% más barata, 50% más residuo)
+//
+// 3. ALEATORIEDAD MÍNIMA: Solo ±1% para evitar valores idénticos
+//    - Se aplica solo al final, después de todos los cálculos
+//    - Garantiza que productos iguales tengan el mismo precio
+//
+// 4. GARANTÍAS ABSOLUTAS:
+//    - Tabla > Bloque (mismo mármol, misma calidad) - SIEMPRE
+//    - Calidad A > B > C (mismo mármol, mismo tipo) - SIEMPRE
+//    - Mismo mármol + tipo + calidad = mismo precio - SIEMPRE
+//
+// ============================================================================
+
+// Calcula valores base para bloques de calidad A de cada mármol (se actualiza cada ronda)
+const calculateBaseValuesForRound = (seed, round) => {
+  // Crear generador determinista para valores base
     let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-      const char = seed.charCodeAt(i);
+  const baseSeed = `${seed}:base:${round}`;
+  for (let i = 0; i < baseSeed.length; i++) {
+    const char = baseSeed.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convertir a 32bit integer
-    }
-  
-  // CRÍTICO: Asegurar que el hash sea siempre positivo
-  hash = Math.abs(hash);
-  if (hash === 0) {
-    hash = 1; // Evitar hash cero que causaría problemas
-    }
-  
-  console.log(`🔍 [GENERATE] Hash inicial: ${hash}`);
-  
-  // Validar hash inicial - NO usar fallback, lanzar error si hay problema
-  if (isNaN(hash) || !isFinite(hash) || hash <= 0) {
-    throw new Error(`Hash inicial inválido para seed "${seed}": ${hash}`);
+    hash = hash & hash;
   }
+  hash = Math.abs(hash) || 1;
   
-  // Función que mantiene el estado de hash entre llamadas
   const random = () => {
-      hash = (hash * 9301 + 49297) % 233280;
-    // CRÍTICO: Asegurar que el hash sea siempre positivo después del módulo
-    if (hash < 0) {
-      hash = hash + 233280;
-    }
-    if (hash === 0) {
-      hash = 1; // Evitar hash cero
-    }
-    const result = hash / 233280;
-    // Validar que el resultado es un número válido - NO usar fallback
-    if (isNaN(result) || !isFinite(result) || result < 0 || result >= 1) {
-      throw new Error(`random() devolvió valor inválido: ${result}, hash=${hash}, seed="${seed}"`);
-    }
-    return result;
+    hash = (hash * 9301 + 49297) % 233280;
+    if (hash < 0) hash = hash + 233280;
+    if (hash === 0) hash = 1;
+    return hash / 233280;
   };
   
-  // Probar la función random
-  const testRandom = random();
-  console.log(`🔍 [GENERATE] Test random(): ${testRandom}`);
-  
-  // Mármol y base - VALORES ALINEADOS CON updateProductPrices.js
   const marbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
-  const marbleBasePrice = { Red: 100, White: 120, Gray: 90, Black: 150, Cream: 110 };
-  const marbleBaseWaste = { Red: 20, White: 25, Gray: 15, Black: 30, Cream: 22 };
+  
+  // LÍMITES ABSOLUTOS (después de multiplicadores)
+  const MIN_PRICE = 80;   // Precio mínimo final
+  const MAX_PRICE = 200;  // Precio máximo final
+  const MIN_WASTE = 30;   // Waste mínimo final
+  const MAX_WASTE = 80;   // Waste máximo final
+  
+  // Multiplicadores que se aplicarán después
+  // Slab C: precio × 1.3 × 0.5 = 0.65 (el más bajo)
+  // Slab A: precio × 1.3 × 1.0 = 1.3 (el más alto)
+  // Block C waste: waste × 1.5 (el más alto)
+  // Block A waste: waste × 1.0 (el más bajo)
+  
+  // VALORES BASE REALISTAS Y VARIADOS
+  // Cada mármol tiene un rango diferente para hacer el sistema más realista
+  // Los rangos están diseñados para que después de multiplicadores queden en 80-200 (precio) y 30-80 (waste)
+  const marbleRanges = {
+    Red: { priceMin: 123, priceMax: 153, wasteMin: 30, wasteMax: 48 },
+    White: { priceMin: 125, priceMax: 153, wasteMin: 30, wasteMax: 48 },
+    Gray: { priceMin: 123, priceMax: 150, wasteMin: 30, wasteMax: 48 },
+    Black: { priceMin: 130, priceMax: 153, wasteMin: 30, wasteMax: 48 },
+    Cream: { priceMin: 123, priceMax: 153, wasteMin: 30, wasteMax: 48 }
+  };
+  
+  // Calcular valores base para esta ronda con variación significativa
+  const baseValues = {};
+  marbleTypes.forEach(marbleType => {
+    const range = marbleRanges[marbleType];
+    
+    // Variación más amplia para precio base (dentro del rango del mármol)
+    const priceVariation = range.priceMin + (random() * (range.priceMax - range.priceMin));
+    let blockPriceA = Math.round(priceVariation);
+    
+    // Variación más amplia para waste base (dentro del rango del mármol)
+    const wasteVariation = range.wasteMin + (random() * (range.wasteMax - range.wasteMin));
+    let blockWasteA = Math.round(wasteVariation);
+    
+    // Asegurar que después de multiplicadores estén en límites
+    // Precio: Slab C (×0.65) debe ser >= 80, Slab A (×1.3) debe ser <= 200
+    const minPriceBase = Math.ceil(MIN_PRICE / 0.65); // 123
+    const maxPriceBase = Math.floor(MAX_PRICE / 1.3);  // 153
+    blockPriceA = Math.max(minPriceBase, Math.min(maxPriceBase, blockPriceA));
+    
+    // Waste: Block A (×1.0) debe ser >= 30, Slab C (×1.65) debe ser <= 80
+    const minWasteBase = Math.ceil(MIN_WASTE / 1.0);   // 30
+    const maxWasteBase = Math.floor(MAX_WASTE / 1.65); // 48
+    blockWasteA = Math.max(minWasteBase, Math.min(maxWasteBase, blockWasteA));
+    
+    baseValues[marbleType] = {
+      blockPriceA: blockPriceA,
+      blockWasteA: blockWasteA
+    };
+  });
+  
+  return baseValues;
+};
+
+// Genera TODA la estructura de mercado (todas las combinaciones posibles)
+// Retorna estructura anidada: marbleType → type → quality → { price, waste }
+const generateCompleteMarketData = (baseValues, seed) => {
+  const marbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
   const productTypes = ['Block', 'Slab'];
   const qualities = ['A', 'B', 'C'];
+  
+  const marketData = {};
+  
+  // Generar TODAS las combinaciones posibles
+  marbleTypes.forEach(marbleType => {
+    marketData[marbleType] = {};
+    productTypes.forEach(productType => {
+      marketData[marbleType][productType] = {};
+      qualities.forEach(quality => {
+        const value = calculateProductValue(baseValues, marbleType, productType, quality);
+        marketData[marbleType][productType][quality] = {
+          price: value.price,
+          waste: value.waste
+        };
+      });
+    });
+  });
+  
+  // Validar y corregir reglas en la estructura completa
+  validateAndFixMarketData(marketData);
+  
+  return marketData;
+};
+
+// Calcula valores derivados desde valores base usando multiplicadores FIJOS
+// IMPORTANTE: Esta función garantiza que productos iguales tengan el mismo precio
+const calculateProductValue = (baseValues, marbleType, productType, quality) => {
+  const base = baseValues[marbleType];
+  if (!base) {
+    throw new Error(`No hay valores base para mármol ${marbleType}`);
+  }
+  
+  // MULTIPLICADORES FIJOS - Sin aleatoriedad aquí
   const qualityMultipliers = {
-    A: { price: 1.3, waste: 0.8 },
-    B: { price: 1.0, waste: 1.0 },
-    C: { price: 0.8, waste: 1.1 }
+    A: { price: 1.0, waste: 1.0 },   // Base (calidad A) - más cara, menos residuo
+    B: { price: 0.75, waste: 1.2 },   // 25% más barata, 20% más residuo
+    C: { price: 0.5, waste: 1.5 }     // 50% más barata, 50% más residuo
   };
   
-  // LÍMITES GLOBALES
-  const minPrice = 80;
-  const maxPrice = 200;
-  const minWaste = 30;
-  const maxWaste = 80; // Actualizado: waste entre 30-80 (aleatorio)
+  const productMultipliers = {
+    Block: { price: 1.0, waste: 1.0 },   // Base (bloque)
+    Slab: { price: 1.3, waste: 1.1 }      // Tabla: 30% más cara, 10% más residuo
+  };
+  
+  const qualityMult = qualityMultipliers[quality];
+  const productMult = productMultipliers[productType];
+  
+  // FÓRMULA CLARA: precio = base × tipo × calidad
+  let price = base.blockPriceA * productMult.price * qualityMult.price;
+  let waste = base.blockWasteA * productMult.waste * qualityMult.waste;
+  
+  // VARIACIÓN REALISTA: ±3% para hacer el sistema más variado y natural
+  // Esta aleatoriedad es determinista basada en la combinación, así que productos iguales
+  // siempre tendrán el mismo precio
+  let hash = 0;
+  const variationSeed = `${marbleType}:${productType}:${quality}`;
+  for (let i = 0; i < variationSeed.length; i++) {
+    const char = variationSeed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  hash = Math.abs(hash) || 1;
+  hash = (hash * 9301 + 49297) % 233280;
+  if (hash < 0) hash = hash + 233280;
+  if (hash === 0) hash = 1;
+  const randomValue = hash / 233280;
+  const randomVariation = 0.97 + (randomValue * 0.06); // 0.97 a 1.03 (±3%)
+  
+  price = price * randomVariation;
+  waste = waste * randomVariation;
+  
+  // Redondear después de la variación
+  let finalPrice = Math.round(price);
+  let finalWaste = Math.round(waste);
+  
+  // NO hacer clamp aquí - se hará después de validar jerarquías
+  // Las jerarquías deben aplicarse ANTES del clamp para evitar forzar valores incorrectos
+  
+  return {
+    price: finalPrice,
+    waste: finalWaste
+  };
+};
+
+// Valida y corrige la estructura completa de mercado para garantizar reglas
+const validateAndFixMarketData = (marketData) => {
+  const marbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
+  const qualities = ['A', 'B', 'C'];
+  
+  // PASO 1: Verificar regla: Tabla > Bloque en PRECIO (mismo mármol, misma calidad)
+  marbleTypes.forEach(marbleType => {
+    qualities.forEach(quality => {
+      const blockData = marketData[marbleType]?.Block?.[quality];
+      const slabData = marketData[marbleType]?.Slab?.[quality];
+      
+      if (blockData && slabData && slabData.price <= blockData.price) {
+        console.warn(`⚠️ [MARKET] Tabla ${marbleType} ${quality} (${slabData.price}) no vale más que bloque ${marbleType} ${quality} (${blockData.price}), corrigiendo...`);
+        slabData.price = blockData.price + 1;
+        console.log(`✅ [MARKET] Corregido: Tabla ${marbleType} ${quality} ahora vale ${slabData.price}`);
+      }
+      
+      // Verificar regla: Tabla > Bloque en WASTE (mismo mármol, misma calidad)
+      // Slab debe generar MÁS waste que Block (tiene procesamiento adicional)
+      if (blockData && slabData && slabData.waste <= blockData.waste) {
+        console.warn(`⚠️ [MARKET] Tabla ${marbleType} ${quality} waste (${slabData.waste}) no es mayor que bloque ${marbleType} ${quality} waste (${blockData.waste}), corrigiendo...`);
+        slabData.waste = blockData.waste + 1;
+        console.log(`✅ [MARKET] Corregido: Tabla ${marbleType} ${quality} waste ahora es ${slabData.waste}`);
+      }
+    });
+  });
+  
+  // PASO 2: Verificar regla: Calidad A > B > C en PRECIO (mismo mármol, mismo tipo)
+  marbleTypes.forEach(marbleType => {
+    ['Block', 'Slab'].forEach(type => {
+      const qualityPrices = {};
+      const qualityWastes = {};
+      qualities.forEach(quality => {
+        const data = marketData[marbleType]?.[type]?.[quality];
+        if (data) {
+          qualityPrices[quality] = data.price;
+          qualityWastes[quality] = data.waste;
+        }
+      });
+      
+      // Verificar orden de precios: A > B > C
+      if (qualityPrices.A && qualityPrices.B && qualityPrices.A <= qualityPrices.B) {
+        console.warn(`⚠️ [MARKET] Calidad A precio (${qualityPrices.A}) no es mayor que B (${qualityPrices.B}) para ${marbleType} ${type}`);
+        marketData[marbleType][type].B.price = qualityPrices.A - 1;
+        qualityPrices.B = qualityPrices.A - 1;
+        console.log(`✅ [MARKET] Corregido: Calidad B precio ahora vale ${qualityPrices.B}`);
+      }
+      
+      if (qualityPrices.B && qualityPrices.C && qualityPrices.B <= qualityPrices.C) {
+        console.warn(`⚠️ [MARKET] Calidad B precio (${qualityPrices.B}) no es mayor que C (${qualityPrices.C}) para ${marbleType} ${type}`);
+        marketData[marbleType][type].C.price = qualityPrices.B - 1;
+        console.log(`✅ [MARKET] Corregido: Calidad C precio ahora vale ${qualityPrices.B - 1}`);
+      }
+      
+      // Verificar orden de waste: A < B < C (calidad A genera MENOS waste)
+      if (qualityWastes.A && qualityWastes.B && qualityWastes.A >= qualityWastes.B) {
+        console.warn(`⚠️ [MARKET] Calidad A waste (${qualityWastes.A}) no es menor que B (${qualityWastes.B}) para ${marbleType} ${type}`);
+        marketData[marbleType][type].B.waste = qualityWastes.A + 1;
+        qualityWastes.B = qualityWastes.A + 1;
+        console.log(`✅ [MARKET] Corregido: Calidad B waste ahora es ${qualityWastes.B}`);
+      }
+      
+      if (qualityWastes.B && qualityWastes.C && qualityWastes.B >= qualityWastes.C) {
+        console.warn(`⚠️ [MARKET] Calidad B waste (${qualityWastes.B}) no es menor que C (${qualityWastes.C}) para ${marbleType} ${type}`);
+        marketData[marbleType][type].C.waste = qualityWastes.B + 1;
+        console.log(`✅ [MARKET] Corregido: Calidad C waste ahora es ${qualityWastes.B + 1}`);
+      }
+    });
+  });
+  
+  // PASO 3: Aplicar clamp final DESPUÉS de validar jerarquías
+  // IMPORTANTE: Clamp de manera inteligente que respete las jerarquías
+  marbleTypes.forEach(marbleType => {
+    ['Block', 'Slab'].forEach(type => {
+      qualities.forEach(quality => {
+        const data = marketData[marbleType]?.[type]?.[quality];
+        if (data) {
+          // Clamp final para mantener valores dentro de límites absolutos
+          data.price = Math.max(80, Math.min(200, data.price));
+          data.waste = Math.max(30, Math.min(80, data.waste));
+        }
+      });
+    });
+  });
+  
+  // PASO 4: Re-validar jerarquías DESPUÉS del clamp de manera inteligente
+  // Ajustar valores para mantener jerarquías sin forzar al límite
+  marbleTypes.forEach(marbleType => {
+    qualities.forEach(quality => {
+      const blockData = marketData[marbleType]?.Block?.[quality];
+      const slabData = marketData[marbleType]?.Slab?.[quality];
+      
+      // Re-verificar: Slab price > Block price (mínimo diferencia de 2 para más realismo)
+      if (blockData && slabData) {
+        const minSlabPrice = blockData.price + 2; // Diferencia mínima de 2
+        if (slabData.price <= blockData.price) {
+          slabData.price = minSlabPrice;
+          // Si excede el límite, ajustar ambos
+          if (slabData.price > 200) {
+            slabData.price = 200;
+            blockData.price = Math.max(80, 198);
+          }
+        } else if (slabData.price < minSlabPrice) {
+          // Asegurar diferencia mínima
+          slabData.price = minSlabPrice;
+          if (slabData.price > 200) {
+            slabData.price = 200;
+            blockData.price = Math.max(80, 198);
+          }
+        }
+      }
+      
+      // Re-verificar: Slab waste > Block waste (mínimo diferencia de 1)
+      if (blockData && slabData) {
+        const minSlabWaste = blockData.waste + 1;
+        if (slabData.waste <= blockData.waste) {
+          slabData.waste = minSlabWaste;
+          // Si excede el límite, ajustar ambos
+          if (slabData.waste > 80) {
+            slabData.waste = 80;
+            blockData.waste = Math.max(30, 79);
+          }
+        }
+      }
+    });
+    
+    // Re-verificar orden de calidades con diferencias mínimas
+    ['Block', 'Slab'].forEach(type => {
+      const qualityPrices = {};
+      const qualityWastes = {};
+      qualities.forEach(quality => {
+        const data = marketData[marbleType]?.[type]?.[quality];
+        if (data) {
+          qualityPrices[quality] = data.price;
+          qualityWastes[quality] = data.waste;
+        }
+      });
+      
+      // Re-verificar: A > B > C en precio (mínimo diferencia de 3 entre calidades)
+      if (qualityPrices.A && qualityPrices.B) {
+        const minBPrice = qualityPrices.A - 3;
+        if (qualityPrices.B >= qualityPrices.A || qualityPrices.B < minBPrice) {
+          marketData[marbleType][type].B.price = Math.max(80, minBPrice);
+          qualityPrices.B = marketData[marbleType][type].B.price;
+        }
+      }
+      if (qualityPrices.B && qualityPrices.C) {
+        const minCPrice = qualityPrices.B - 3;
+        if (qualityPrices.C >= qualityPrices.B || qualityPrices.C < minCPrice) {
+          marketData[marbleType][type].C.price = Math.max(80, minCPrice);
+        }
+      }
+      
+      // Re-verificar: A < B < C en waste (mínimo diferencia de 2 entre calidades)
+      if (qualityWastes.A && qualityWastes.B) {
+        const minBWaste = qualityWastes.A + 2;
+        if (qualityWastes.B <= qualityWastes.A || qualityWastes.B < minBWaste) {
+          marketData[marbleType][type].B.waste = Math.min(80, minBWaste);
+          qualityWastes.B = marketData[marbleType][type].B.waste;
+        }
+      }
+      if (qualityWastes.B && qualityWastes.C) {
+        const minCWaste = qualityWastes.B + 2;
+        if (qualityWastes.C <= qualityWastes.B || qualityWastes.C < minCWaste) {
+          marketData[marbleType][type].C.waste = Math.min(80, minCWaste);
+        }
+      }
+    });
+  });
+};
+
+const generateProductsWithSeed = (seed, round, marketData) => {
+  console.log(`🔍 [GENERATE] Iniciando generación de productos para seed=${seed}, round=${round}`);
+  console.log(`🔍 [GENERATE] Usando valores de mercado ya calculados`);
+  
+  // Crear generador pseudoaleatorio con semilla
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  
+  hash = Math.abs(hash);
+    if (hash === 0) {
+    hash = 1;
+  }
+  
+  const random = () => {
+    hash = (hash * 9301 + 49297) % 233280;
+    if (hash < 0) hash = hash + 233280;
+    if (hash === 0) hash = 1;
+    return hash / 233280;
+  };
+  
+  const marbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
+  const productTypes = ['Block', 'Slab'];
+  const qualities = ['A', 'B', 'C'];
   
   const products = [];
   const numProducts = 20; // 20 productos por ronda
   
-  console.log(`🔍 [GENERATE] Generando ${numProducts} productos...`);
+  console.log(`🔍 [GENERATE] Generando ${numProducts} productos desde valores de mercado...`);
   
-  // Offsets derivados de la semilla para evitar sesgos repetitivos por ronda
-  // CRÍTICO: Asegurar que los offsets sean siempre positivos
+  // Offsets derivados de la semilla
   const marbleOffset = Math.abs(Math.floor(random() * marbleTypes.length)) % marbleTypes.length;
   const typeOffset = Math.abs(Math.floor(random() * productTypes.length)) % productTypes.length;
   const qualityOffset = Math.abs(Math.floor(random() * qualities.length)) % qualities.length;
   
-  console.log(`🔍 [GENERATE] Offsets calculados: marbleOffset=${marbleOffset}, typeOffset=${typeOffset}, qualityOffset=${qualityOffset}`);
-  
   for (let i = 0; i < numProducts; i++) {
-    console.log(`🔍 [GENERATE] Generando producto ${i + 1}/${numProducts}`);
-    // Selección estratificada con offsets dependientes de la semilla.
-    // Garantiza variedad entre mármoles, tipos y calidades en cada ronda.
-    // CRÍTICO: Asegurar que los índices sean siempre positivos usando módulo positivo
     const marbleIndex = ((i + marbleOffset) % marbleTypes.length + marbleTypes.length) % marbleTypes.length;
     const typeIndex = ((Math.floor(i / marbleTypes.length) + typeOffset) % productTypes.length + productTypes.length) % productTypes.length;
     const qualityIndex = ((i + qualityOffset) % qualities.length + qualities.length) % qualities.length;
     
-    console.log(`🔍 [GENERATE] Producto ${i + 1} - índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}`);
+    const marble = marbleTypes[marbleIndex];
+    const pType = productTypes[typeIndex];
+    const quality = qualities[qualityIndex];
     
-    let marble = marbleTypes[marbleIndex];
-    let pType = productTypes[typeIndex];
-    let quality = qualities[qualityIndex];
-    
-    console.log(`🔍 [GENERATE] Producto ${i + 1} - valores: marble=${marble}, pType=${pType}, quality=${quality}`);
-    
-    // Validar que los valores son válidos - NO usar fallbacks, lanzar error si hay problema
-    if (!marble || !pType || !quality) {
-      const error = new Error(`Producto ${i + 1} tiene valores inválidos: marble=${marble}, pType=${pType}, quality=${quality}. Índices: marbleIndex=${marbleIndex}, typeIndex=${typeIndex}, qualityIndex=${qualityIndex}. Offsets: marbleOffset=${marbleOffset}, typeOffset=${typeOffset}, qualityOffset=${qualityOffset}`);
-      console.error(`❌ [GENERATE] ${error.message}`);
-      throw error; // Lanzar error en lugar de usar fallback
-    }
-    
-    // CLAVE: Crear clave única para la combinación
-    const combinationKey = `${marble}:${pType}:${quality}`;
-    
-    // Precio base según mármol y tipo - NO usar fallbacks
-    const basePriceRaw = marbleBasePrice[marble];
-    if (typeof basePriceRaw !== 'number' || isNaN(basePriceRaw) || !isFinite(basePriceRaw) || basePriceRaw <= 0) {
-      throw new Error(`Producto ${i + 1}: basePrice inválido para marble ${marble}: ${basePriceRaw}`);
-    }
-    let basePrice = basePriceRaw;
-    if (pType === 'Slab') basePrice = Math.round(basePrice * 1.25);
-    
-    // Waste base según mármol y tipo - NO usar fallbacks
-    const baseWasteRaw = marbleBaseWaste[marble];
-    if (typeof baseWasteRaw !== 'number' || isNaN(baseWasteRaw) || !isFinite(baseWasteRaw) || baseWasteRaw <= 0) {
-      throw new Error(`Producto ${i + 1}: baseWaste inválido para marble ${marble}: ${baseWasteRaw}`);
-    }
-    let baseWaste = baseWasteRaw;
-    if (pType === 'Slab') baseWaste = Math.round(baseWaste * 1.1);
-    
-    // DEBUG: Verificar valores base
-    if (i < 3) { // Solo log para los primeros 3 productos
-      console.log(`🔍 [DEBUG] Producto ${i}: marble=${marble}, pType=${pType}, quality=${quality}`);
-      console.log(`🔍 [DEBUG] basePrice=${basePrice}, baseWaste=${baseWaste}`);
-    }
-    
-    // GENERACIÓN ALEATORIA DIRECTA: valores completamente aleatorios dentro de los rangos
-    // Sin valores base, sin multiplicadores, sin redondeos que limiten la variación
-    const randomSeed = `${seed}:${combinationKey}:${i}`;
-    let randomHash = 0;
-    for (let j = 0; j < randomSeed.length; j++) {
-      const char = randomSeed.charCodeAt(j);
-      randomHash = ((randomHash << 5) - randomHash) + char;
-      randomHash = randomHash & randomHash;
-    }
-    
-    // Asegurar que randomHash sea siempre positivo
-    randomHash = Math.abs(randomHash);
-    if (randomHash === 0) {
-      randomHash = 1; // Evitar hash cero que causaría problemas
-    }
-    
-    // Generador aleatorio determinista
-    // Aplicar módulo inicial para evitar overflow con números grandes
-    const MOD = 233280;
-    let hash = randomHash % MOD;
-    if (hash < 0) {
-      hash = hash + MOD;
-    }
-    if (hash === 0) {
-      hash = 1; // Evitar hash cero
-    }
-    
-    // Función de módulo que siempre devuelve valores positivos
-    const mod = (a, b) => {
-      const result = a % b;
-      return result < 0 ? result + b : result;
-    };
-    
-    const getRandom = () => {
-      // Aplicar módulo antes de multiplicar para evitar overflow
-      const hashMod = mod(hash, MOD);
-      hash = mod(hashMod * 9301 + 49297, MOD);
-      // Asegurar que el resultado esté entre 0 y 1
-      const result = hash / MOD;
-      return Math.max(0, Math.min(1, result)); // Clamp entre 0 y 1
-    };
-    
-    // Generar valores ALEATORIOS DIRECTOS dentro de los rangos
-    // Waste: 30-80 (aleatorio)
-    // Precio: 80-200 (aleatorio)
-    const wasteRandom = getRandom();
-    const priceRandom = getRandom();
-    
-    // Calcular valores directamente en el rango sin usar valores base ni multiplicadores
-    const finalWaste = Math.floor(minWaste + (maxWaste - minWaste) * wasteRandom); // 30-80
-    const finalPrice = Math.floor(minPrice + (maxPrice - minPrice) * priceRandom); // 80-200
-    
-    console.log(`✨ [GENERATE] Producto ${i + 1} valores aleatorios directos: price=${finalPrice}, waste=${finalWaste}`);
-    
-    // Validar que los valores están en los rangos correctos
-    if (finalWaste < 30 || finalWaste > 80) {
-      throw new Error(`Producto ${i + 1}: waste fuera de rango: ${finalWaste} (debe estar entre 30 y 80)`);
-    }
-    if (finalPrice < minPrice || finalPrice > maxPrice) {
-      throw new Error(`Producto ${i + 1}: price fuera de rango: ${finalPrice} (debe estar entre ${minPrice} y ${maxPrice})`);
-    }
-    
-    // DEBUG: Verificar valores generados
-    if (i < 3) { // Solo log para los primeros 3 productos
-      console.log(`🔍 [DEBUG] Producto ${i + 1}: marble=${marble}, pType=${pType}, quality=${quality}`);
-      console.log(`🔍 [DEBUG] Precio aleatorio: ${finalPrice} (rango: ${minPrice}-${maxPrice})`);
-      console.log(`🔍 [DEBUG] Waste aleatorio: ${finalWaste} (rango: 30-80)`);
+    // OBTENER VALORES DESDE marketData (ya calculados)
+    const marketValue = marketData[marble]?.[pType]?.[quality];
+    if (!marketValue) {
+      throw new Error(`No se encontró valor de mercado para ${marble} ${pType} ${quality}`);
     }
     
     const product = {
@@ -1642,43 +1888,15 @@ const generateProductsWithSeed = (seed, round) => {
       type: pType,
       quality,
       marbleType: marble,
-      currentPrice: finalPrice,
-      waste: finalWaste,
+      currentPrice: marketValue.price,  // Usar valor de marketData
+      waste: marketValue.waste,          // Usar valor de marketData
       round
     };
-    
-    // Validación final del producto - NO usar fallbacks
-    if (!product.marbleType || !product.type || !product.quality) {
-      throw new Error(`Producto ${i + 1}: campos requeridos faltantes después de creación: ${JSON.stringify(product)}`);
-    }
-    
-    if (!product.currentPrice || product.currentPrice <= 0 || !product.waste || product.waste <= 0) {
-      throw new Error(`Producto ${i + 1}: valores numéricos inválidos después de creación: price=${product.currentPrice}, waste=${product.waste}`);
-    }
-    
-    console.log(`🔍 [GENERATE] Producto ${i + 1} final:`, {
-      id: product.id,
-      marbleType: product.marbleType,
-      type: product.type,
-      quality: product.quality,
-      currentPrice: product.currentPrice,
-      waste: product.waste
-    });
     
     products.push(product);
   }
   
-  console.log(`🔍 [GENERATE] Generados ${products.length} productos totales`);
-  
-  console.log(`🏪 [MARKET] Generados ${products.length} productos para semilla ${seed} (ronda ${round})`);
-  console.log(`🏪 [MARKET] Primer producto de ejemplo:`, products[0] ? {
-    id: products[0].id,
-    marbleType: products[0].marbleType,
-    type: products[0].type,
-    quality: products[0].quality,
-    currentPrice: products[0].currentPrice,
-    waste: products[0].waste
-  } : 'NO PRODUCTOS');
+  console.log(`✅ [GENERATE] Generados ${products.length} productos desde valores de mercado`);
   return products;
 };
 

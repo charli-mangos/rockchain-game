@@ -105,14 +105,22 @@ const EndOfRoundScreen = ({ route }) => {
   });
 
   // Debug: Log de datos recibidos
+  console.log('🎮 [EndOfRoundScreen] ===== RENDER =====');
   console.log('🎮 [EndOfRoundScreen] Datos recibidos del contexto:');
   console.log('🎮 [EndOfRoundScreen] allPlayersData:', allPlayersData);
   console.log('🎮 [EndOfRoundScreen] allPlayersData.length:', allPlayersData.length);
   console.log('🎮 [EndOfRoundScreen] displayPlayers (valores finales del servidor, rewards ya incluidos):', displayPlayers);
   console.log('🎮 [EndOfRoundScreen] roundRewards (solo para badges):', roundRewards);
+  console.log('🎮 [EndOfRoundScreen] roundRewards type:', typeof roundRewards);
+  console.log('🎮 [EndOfRoundScreen] roundRewards is null?', roundRewards === null);
+  console.log('🎮 [EndOfRoundScreen] roundRewards is undefined?', roundRewards === undefined);
+  console.log('🎮 [EndOfRoundScreen] roundRewards[userId]:', roundRewards?.[userId]);
+  console.log('🎮 [EndOfRoundScreen] roundRewards[userId]?.wasteRemoved:', roundRewards?.[userId]?.wasteRemoved);
+  console.log('🎮 [EndOfRoundScreen] userId:', userId);
   console.log('🎮 [EndOfRoundScreen] winningIndustry:', winningIndustry);
   console.log('🎮 [EndOfRoundScreen] round:', round);
   console.log('🎮 [EndOfRoundScreen] isWebSocketConnected:', isWebSocketConnected);
+  console.log('🎮 [EndOfRoundScreen] ===== FIN RENDER =====');
   const [userSelectedIndustry, setUserSelectedIndustry] = useState(null);
   const userSelectedIndustryRef = useRef(null); // Ref para mantener la selección de la ronda actual
   
@@ -574,12 +582,31 @@ const EndOfRoundScreen = ({ route }) => {
             
             {/* Señalización visual para acertar industria */}
             {/* CRÍTICO: Solo mostrar cuando realmente se acertó EN ESTA RONDA (roundRewards tiene wasteRemoved > 0) */}
-            {/* El cartelillo de waste solo aparece en el ranking, no aquí */}
+            {/* Mostrar tanto el banner como el badge de waste debajo */}
             {(() => {
               const wasteRemoved = roundRewards?.[userId]?.wasteRemoved || 0;
               const currentWaste = webSocketInventory?.waste || 0;
-              const wasteBeforeReward = currentWaste + wasteRemoved;
-              const shouldShowSuccess = wasteRemoved > 0 && wasteBeforeReward > 0;
+              const shouldShowSuccess = wasteRemoved > 0;
+              
+              // Debug logs - SIEMPRE mostrar para debugging
+              console.log('🎯 [BANNER_SUCCESS] Verificando banner de éxito:', {
+                wasteRemoved,
+                currentWaste,
+                roundRewards: roundRewards?.[userId],
+                shouldShowSuccess,
+                userId,
+                roundRewards,
+                'roundRewards type': typeof roundRewards,
+                'roundRewards is null': roundRewards === null,
+                'roundRewards is undefined': roundRewards === undefined,
+                'roundRewards keys': roundRewards ? Object.keys(roundRewards) : 'N/A'
+              });
+              
+              if (shouldShowSuccess) {
+                console.log('✅ [BANNER_SUCCESS] Mostrando banner de éxito - wasteRemoved:', wasteRemoved);
+              } else {
+                console.log('❌ [BANNER_SUCCESS] NO mostrando banner - wasteRemoved:', wasteRemoved);
+              }
               
               return shouldShowSuccess ? (
                 <View style={styles.successBannerContainer}>
@@ -591,6 +618,12 @@ const EndOfRoundScreen = ({ route }) => {
                         Your waste it's been reduced
                       </Text>
                     </View>
+                  </View>
+                  {/* Cartelito de recompensa de waste similar al de minado */}
+                  <View style={styles.wasteRewardBadge}>
+                    <Text style={styles.wasteRewardBadgeText}>
+                      -{wasteRemoved}
+                    </Text>
                   </View>
                 </View>
               ) : null;

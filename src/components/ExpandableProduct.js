@@ -12,7 +12,43 @@ import styles from '../styles/ExpandableProductStyle';
 import { getWebSocketService } from '../services/WebSocketServiceUniversal';
 
 
-const ExpandableProduct = ({ product, userId, gameId, screenType, productList = [] }) => {
+// Helper function to calculate price change
+const calculatePriceChange = (product, marketData, currentRound) => {
+  if (!marketData || !marketData.rounds || !currentRound || currentRound <= 1) {
+    return null; // No hay datos o es la primera ronda
+  }
+
+  const previousRound = currentRound - 1;
+  const currentRoundData = marketData.rounds[currentRound];
+  const previousRoundData = marketData.rounds[previousRound];
+
+  if (!currentRoundData || !previousRoundData) {
+    return null;
+  }
+
+  try {
+    // Obtener el precio actual del mercado para este producto (no el precio de compra)
+    const currentPrice = currentRoundData[product.marbleType]?.[product.type]?.[product.quality]?.price;
+    // Obtener el precio de la ronda anterior desde marketData
+    const previousPrice = previousRoundData[product.marbleType]?.[product.type]?.[product.quality]?.price;
+
+    if (currentPrice && previousPrice && currentPrice !== previousPrice) {
+      const change = currentPrice - previousPrice;
+      const percentage = ((change / previousPrice) * 100).toFixed(1);
+      return {
+        value: change,
+        percentage: Math.abs(percentage),
+        isPositive: change > 0
+      };
+    }
+  } catch (error) {
+    console.error('Error calculating price change:', error);
+  }
+
+  return null;
+};
+
+const ExpandableProduct = ({ product, userId, gameId, screenType, productList = [], marketData = null, round = 1 }) => {
   // Validación defensiva para evitar errores cuando product es undefined
   if (!product || !product.id) {
     console.log('⚠️ [ExpandableProduct] Product undefined o sin ID, renderizando placeholder');
@@ -27,6 +63,30 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
   const [showSummary, setShowSummary] = useState(false); // Controla si se muestra el resumen de compra
   const navigation = useNavigation();
   const { setCurrentBlockId, incrementMiningQueue, webSocketInventory } = useGameContextHybridRobust();
+  
+  // Obtener precio actual del mercado (o precio de compra como fallback)
+  const getCurrentPrice = () => {
+    if (marketData && marketData.rounds && marketData.rounds[round]) {
+      const marketPrice = marketData.rounds[round][product.marbleType]?.[product.type]?.[product.quality]?.price;
+      if (marketPrice) return marketPrice;
+    }
+    return product.currentPrice;
+  };
+  
+  // Obtener waste actual del mercado (o waste de compra como fallback)
+  const getCurrentWaste = () => {
+    if (marketData && marketData.rounds && marketData.rounds[round]) {
+      const marketWaste = marketData.rounds[round][product.marbleType]?.[product.type]?.[product.quality]?.waste;
+      if (marketWaste) return marketWaste;
+    }
+    return product.waste;
+  };
+  
+  const currentMarketPrice = getCurrentPrice();
+  const currentMarketWaste = getCurrentWaste();
+  
+  // Calcular cambio de precio
+  const priceChange = calculatePriceChange(product, marketData, round);
 
   const images = {
     'Red': {
@@ -406,7 +466,9 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
         <Image style={styles.productIcon} source={images[product.marbleType][product.type]} />
         <Text style={styles.productText}>{product.marbleType + ' ' + product.type}</Text>
         <View style={styles.priceRow}>
-          <Text style={styles.productPrice}>{product.currentPrice}</Text>
+          <Text style={styles.productPrice}>
+            {currentMarketPrice}
+          </Text>
           <Image 
             source={require('../assets/RockCoinBlack.png')} 
             style={[styles.rockCoinIcon, styles.rockCoinIconAlign]}
@@ -414,6 +476,24 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
             tintColor="#1d3d39"
           />
         </View>
+        {priceChange && (
+          <View style={[
+            styles.priceChangeIndicator,
+            priceChange.isPositive ? styles.priceChangePositive : styles.priceChangeNegative
+          ]}>
+            <Ionicons 
+              name={priceChange.isPositive ? "arrow-up" : "arrow-down"} 
+              size={12} 
+              color={priceChange.isPositive ? '#2e7d32' : '#c62828'} 
+            />
+            <Text style={[
+              styles.priceChangeText,
+              priceChange.isPositive ? styles.priceChangeTextPositive : styles.priceChangeTextNegative
+            ]}>
+              {priceChange.percentage}%
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Modal expandido */}   
@@ -430,50 +510,58 @@ const ExpandableProduct = ({ product, userId, gameId, screenType, productList = 
                 <View style={styles.header}>
                   <Text style={styles.title}>{product.marbleType + ' ' + product.type}</Text>
                   <TouchableOpacity onPress={toggleExpand} style={styles.closeButton}>
-                    <Ionicons name="close-outline" size={24} color="#1d3d39" />
+                    <Ionicons name="close-outline" size={20} color="#1d3d39" />
                   </TouchableOpacity>
                 </View>
                 <Image style={styles.expandedProductIcon} source={images[product.marbleType][product.type]} />
-                <View style={styles.qualityRow}>
-                  <Text style={styles.detailText}>Quality: </Text>
-                  <View style={[
-                    styles.qualityBadge,
-                    product.quality === 'A' && { backgroundColor: '#2d5a56' },
-                    product.quality === 'B' && { backgroundColor: '#feda8c' },
-                    product.quality === 'C' && { backgroundColor: '#ba5d17' }
-                  ]}>
-                    <Text style={styles.qualityText}>{product.quality}</Text>
+                <View style={styles.detailsSection}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Quality</Text>
+                    <View style={[
+                      styles.qualityBadge,
+                      product.quality === 'A' && { backgroundColor: '#2d5a56' },
+                      product.quality === 'B' && { backgroundColor: '#feda8c' },
+                      product.quality === 'C' && { backgroundColor: '#ba5d17' }
+                    ]}>
+                      <Text style={styles.qualityText}>{product.quality}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Price</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.detailValue}>
+                        {currentMarketPrice}
+                      </Text>
+                      <Image 
+                        source={require('../assets/RockCoinBlack.png')} 
+                        style={styles.rockCoinIconDetail} 
+                        resizeMode="contain"
+                        tintColor='#1d3d39'
+                      />
+                    </View>
+                  </View>
+                  <View style={[styles.detailRow, styles.lastDetailRow]}>
+                    <Text style={styles.detailLabel}>Waste</Text>
+                    <Text style={[styles.detailValue, styles.negativeText]}>{currentMarketWaste}</Text>
                   </View>
                 </View>
-                <View style={styles.priceRow}>
-                  <Text style={styles.detailText}>Price: <Text style={{fontWeight: 'bold'}}>{product.currentPrice}</Text></Text>
-                  <Image 
-                    source={require('../assets/RockCoinBlack.png')} 
-                    style={styles.rockCoinIconDetail} 
-                    resizeMode="contain"
-                    tintColor='#1d3d39'
-                  />
-                </View>
-                <Text style={styles.detailText}>
-                    Waste: <Text style={styles.negativeText}>{product.waste}</Text>
-                </Text>
                 <View style={styles.buttonsContainer}>
                   {screenType === 'MarketScreen' && (
                     showSummary ? (
                       <View style={styles.purchaseSummary}>
-                        <Text style={styles.summaryText}>Do you want to confirm this purchase?</Text>
+                        <Text style={styles.summaryHeader}>Confirm Purchase</Text>
                         <View style={styles.confirmationButtons}>
                           <TouchableOpacity
                             style={styles.cancelButton}
                             onPress={() => setShowSummary(false)}
                           >
-                            <Text style={styles.buttonText}>CANCEL</Text>
+                            <Text style={styles.buttonText}>Cancel</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.confirmButton}
                             onPress={() => handlePurchase(product)}
                           >
-                            <Text style={styles.buttonText}>CONFIRM</Text>
+                            <Text style={styles.buttonText}>Confirm</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
