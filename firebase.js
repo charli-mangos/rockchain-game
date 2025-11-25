@@ -16,7 +16,6 @@ import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Configuración de Firebase
 const firebaseConfig  = {
-  apiKey: "REDACTED_API_KEY",
   authDomain: "rockchain-83a7f.firebaseapp.com",
   projectId: "rockchain-83a7f", // Usar el proyecto real que está configurado
   storageBucket: "rockchain-83a7f.appspot.com",
