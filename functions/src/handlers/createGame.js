@@ -28,7 +28,7 @@ exports.createGame = onCall({
     gameCode: gameCode,
     players: [userId],
     playerCount: 1,
-    maxPlayers: 3,
+    maxPlayers: 5,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     status: 'waiting',
     version: '1.0.0',

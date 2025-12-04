@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, Text, TouchableOpacity, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { functions, db } from '../../firebase';
 import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { callAuthenticatedFunction } from '../utils/authHelper';
@@ -261,11 +262,10 @@ const GameScreen = ({ route }) => {
     }
 
     // Verificar que hay al menos 2 jugadores para iniciar
-    // COMENTADO PARA PRUEBAS - Permitir 1 jugador
-    // if (playerCount < 2) {
-    //   Alert.alert(t('common.error'), t('game.needAtLeastTwoPlayers'));
-    //   return;
-    // }
+    if (playerCount < 2) {
+      Alert.alert(t('common.error'), t('game.needAtLeastTwoPlayers'));
+      return;
+    }
 
     console.log('✅ Host verified, starting game...');
     setLoading(true);
@@ -297,7 +297,7 @@ const GameScreen = ({ route }) => {
           <View style={styles.inputContainer}>
             {/* Sección para el jugador para empezar su propia partida */}
             <Text style={styles.label}>{t('game.yourGameCode')}: <Text style={[styles.bold, { color: '#1d3d39' }]}>{gameCode}</Text></Text>
-            <Text style={styles.label}>{t('game.numberOfPlayers')}: {playerCount}/3</Text>
+            <Text style={styles.label}>{t('game.numberOfPlayers')}: {playerCount}/5</Text>
             
             {/* Mostrar botón START GAME solo si es el host y el juego está en waiting */}
             {isHost && gameStatus === 'waiting' ? (
@@ -330,7 +330,10 @@ const GameScreen = ({ route }) => {
               style={[styles.button, styles.tutorialButton]} 
               onPress={() => startTutorial()}
             >
-              <Text style={styles.tutorialButtonText}>📚 Learn About RockChain</Text>
+              <View style={styles.buttonContent}>
+                <Ionicons name="information-circle-outline" size={20} color="#fff" style={styles.buttonIcon} />
+                <Text style={styles.tutorialButtonText}>Learn About RockChain</Text>
+              </View>
             </TouchableOpacity>
             
             {/* Botón de progreso de aprendizaje */}
@@ -338,7 +341,10 @@ const GameScreen = ({ route }) => {
               style={[styles.button, styles.progressButton]} 
               onPress={() => setShowLearningProgress(true)}
             >
-              <Text style={styles.progressButtonText}>🏆 My Progress</Text>
+              <View style={styles.buttonContent}>
+                <Ionicons name="trophy-outline" size={20} color="#fff" style={styles.buttonIcon} />
+                <Text style={styles.progressButtonText}>My Progress</Text>
+              </View>
             </TouchableOpacity>
           </View>
         )}

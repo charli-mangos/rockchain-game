@@ -54,7 +54,7 @@ exports.joinGame = onCall({
 
     // 3. VERIFICAR SI HAY ESPACIO
     const currentPlayers = gameData.playerCount || 0;
-    const maxPlayers = gameData.maxPlayers || 4;
+    const maxPlayers = gameData.maxPlayers || 5;
     
     if (currentPlayers >= maxPlayers) {
       console.error(`❌ Juego lleno: ${currentPlayers}/${maxPlayers}`);

@@ -82,13 +82,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   progressButton: {
-    backgroundColor: '#9C27B0',
-    marginTop: 10,
+    backgroundColor: '#1d3d39',
+    marginTop: 5,
   },
   progressButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
 });
 

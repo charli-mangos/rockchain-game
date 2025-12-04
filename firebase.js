@@ -5,20 +5,14 @@ import { initializeAuth, getReactNativePersistence, connectAuthEmulator } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
-// const firebaseConfig = {
-//   apiKey: "REDACTED_API_KEY",
-//   authDomain: "another-project.firebaseapp.com",
-//   projectId: "another-project",
-//   storageBucket: "another-project.appspot.com",
-//   messagingSenderId: "537323071895",
-//   appId: "1:537323071895:web:1dfe02262e7066abf4fcd2"
-// };
-
 // Configuración de Firebase
 const firebaseConfig  = {
-  apiKey: "REDACTED_API_KEY",
+  apiKey: Platform.select({
+    android: "REDACTED_API_KEY",
+    ios: "REDACTED_API_KEY"
+  }),
   authDomain: "rockchain-83a7f.firebaseapp.com",
-  projectId: "rockchain-83a7f", // Usar el proyecto real que está configurado
+  projectId: "rockchain-83a7f",
   storageBucket: "rockchain-83a7f.appspot.com",
   messagingSenderId: "96971331973",
   appId: Platform.select({

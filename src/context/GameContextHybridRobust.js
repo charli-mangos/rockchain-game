@@ -1889,7 +1889,59 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       }
     });
 
-    // Actualización de respuestas de minado
+    // Listener para mining:block-update del servidor
+    getWebSocket().on('mining:block-update', (data) => {
+      console.log('⛏️ [BLOCK-UPDATE] Actualización de bloque recibida:', data);
+      
+      if (data.standings && data.blockId) {
+        // Solo actualizar si hay resultados activos (el usuario está viendo resultados)
+        // Verificar que el blockId coincida con el bloque actual si hay uno
+        if (results && results.length > 0) {
+          // Verificar si el blockId coincide con algún problema local pendiente
+          const isCurrentBlock = localPendingProblems.some(p => p.id === data.blockId);
+          if (!isCurrentBlock && localPendingProblems.length > 0) {
+            console.log(`⚠️ [BLOCK-UPDATE] Ignorando actualización de bloque ${data.blockId} - no es el bloque actual`);
+            return;
+          }
+          // Convertir standings a formato de responses, filtrando solo los que han respondido
+          const responses = data.standings
+            .filter(standing => standing.elapsed !== null && standing.response !== null)
+            .map((standing) => ({
+              userName: standing.userName || "Unknown",
+              isCorrect: standing.isCorrect || false,
+              response: standing.response,
+              responseTime: standing.elapsed || 0,
+              userId: standing.userId,
+              timestamp: Date.now(),
+              isWinner: data.winner && standing.userId === data.winner.userId,
+              hasNotResponded: false
+            }));
+          
+          // Actualizar resultados si hay respuestas válidas
+          if (responses.length > 0) {
+            console.log('📊 [BLOCK-UPDATE] Actualizando resultados con standings:', responses);
+            setResults(prevResults => {
+              // Preservar resultado local del usuario si existe
+              if (prevResults && prevResults.length > 0) {
+                const currentUserResult = prevResults.find(r => r.userId === userId);
+                if (currentUserResult && currentUserResult.responseTime > 0) {
+                  const serverUserResult = responses.find(r => r.userId === userId);
+                  if (!serverUserResult || serverUserResult.responseTime === 0 || 
+                      (serverUserResult.responseTime !== currentUserResult.responseTime && currentUserResult.timestamp > serverUserResult.timestamp)) {
+                    // Combinar: mantener el resultado local del usuario y añadir/actualizar los demás
+                    const otherResponses = responses.filter(r => r.userId !== userId);
+                    return [currentUserResult, ...otherResponses];
+                  }
+                }
+              }
+              return responses;
+            });
+          }
+        }
+      }
+    });
+
+    // Actualización de respuestas de minado (legacy)
     getWebSocket().on('mining_response_update', (data) => {
       console.log('⛏️ Actualización de respuestas de minado (WebSocket):', data);
       console.log('🔍 Estado actual de results:', results);
@@ -1900,11 +1952,12 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         console.log('🏆 Ganador:', data.winner);
         
         // Enriquecer las respuestas con información de usuario
+        // El servidor puede enviar 'elapsed' o 'responseTime', usar el que esté disponible
         const enrichedResponses = data.responses.map((res) => ({
           userName: res.userName || "Unknown",
           isCorrect: res.isCorrect,
           response: res.response,
-          responseTime: res.responseTime,
+          responseTime: res.responseTime || res.elapsed || 0, // Usar responseTime si existe, sino elapsed
           userId: res.userId,
           timestamp: res.timestamp,
           isWinner: data.winner && res.userId === data.winner.userId,
@@ -1938,8 +1991,29 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
         
         console.log('📊 Respuestas ordenadas:', sortedResponses);
         
-        // Actualizar los resultados en el contexto
-        setResults(sortedResponses);
+        // Preservar el resultado local del usuario actual si existe y tiene un tiempo válido
+        // Esto evita que se sobrescriba con datos incorrectos del servidor
+        setResults(prevResults => {
+          // Si hay resultados previos y uno de ellos es del usuario actual
+          if (prevResults && prevResults.length > 0) {
+            const currentUserResult = prevResults.find(r => r.userId === userId);
+            if (currentUserResult && currentUserResult.responseTime > 0) {
+              // Buscar el resultado del usuario actual en las respuestas del servidor
+              const serverUserResult = sortedResponses.find(r => r.userId === userId);
+              // Si el resultado del servidor tiene un tiempo diferente o es 0, usar el local
+              if (!serverUserResult || serverUserResult.responseTime === 0 || 
+                  (serverUserResult.responseTime !== currentUserResult.responseTime && currentUserResult.timestamp > serverUserResult.timestamp)) {
+                // Reemplazar el resultado del servidor con el local del usuario actual
+                const updatedResponses = sortedResponses.map(res => 
+                  res.userId === userId ? currentUserResult : res
+                );
+                return updatedResponses;
+              }
+            }
+          }
+          // Si no hay resultado local o el del servidor es válido, usar los del servidor
+          return sortedResponses;
+        });
         
         // Actualizar miningProblems solo si el bloque está completado
         if (data.isCompleted) {
@@ -1992,6 +2066,7 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       getWebSocket().off('round_ended');
       getWebSocket().off('game_completed');
       getWebSocket().off('new_mining_problem');
+      getWebSocket().off('mining:block-update');
       getWebSocket().off('mining_response_update');
       getWebSocket().off('transaction_success');
       getWebSocket().off('transaction_failed');
@@ -3146,7 +3221,6 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
 
   const hasMoreProblems = () => {
     const hasMore = getNextAvailableProblem() !== null;
-    console.log(`⛏️ ¿Hay más problemas? ${hasMore} (miningQueue: ${miningQueue})`);
     return hasMore;
   };
 

@@ -101,7 +101,14 @@
     "loadingProblem": "Se încarcă problema...",
     "preparingMining": "Se pregătește mineritul...",
     "unknown": "Necunoscut",
-    "couldNotSendResponse": "Nu s-a putut trimite răspunsul"
+    "couldNotSendResponse": "Nu s-a putut trimite răspunsul",
+    "queueLabel": "Blocuri în coadă",
+    "playersMining": "Jucători care minează",
+    "transactionBy": "Tranzacție de {{name}}",
+    "timeElapsed": "Timp scurs",
+    "purchasing": "Cumpărând...",
+    "selling": "Vânzând...",
+    "processing": "Procesând..."
   },
   "stats": {
     "title": "RockStats",
@@ -142,6 +149,7 @@
     "enterGameCode": "Introdu codul jocului",
     "failedToCreateGame": "Nu s-a putut crea jocul. Te rog încearcă din nou.",
     "needAtLeastTwoPlayers": "Sunt necesari cel puțin 2 jucători pentru a începe jocul.",
+    "needAtLeastFivePlayers": "Sunt necesari cel puțin 5 jucători pentru a începe jocul.",
     "gameIsFull": "Nu mai pot intra jucători în această cameră. Camera este plină.",
     "gameAlreadyStarted": "Jocul a început deja. Nu mai pot intra jucători.",
     "authenticationRequired": "Autentificare necesară.",

@@ -1,320 +1,370 @@
 import { StyleSheet } from 'react-native';
 
 const styles = StyleSheet.create({
-  container: {
+  screenContainer: {
     flex: 1,
     paddingBottom: 25,
     paddingTop: 30,
     width: '100%',
     backgroundColor: '#fff',
   },
-  mainContent: {
-    flex: 1,
-    width: '100%',
+  headerContainer: {
+    zIndex: 10,
   },
-  problemContainer: {
+  body: {
     flex: 1,
-    padding: 20,
-    paddingTop: 20, // Reducido de 50 a 20
-    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+  problemWrapper: {
+    flex: 1,
     justifyContent: 'flex-start',
+    gap: 8,
   },
-  blockInfoContainer: {
+  problemWrapperKeyboard: {
+    transform: [{ translateY: -120 }],
+  },
+  infoSection: {
+    gap: 6,
+    marginBottom: 0,
+  },
+  blockCard: {
     width: '100%',
-    marginBottom: 10, // Reducido de 20 a 10
-    alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#e3e7e5',
   },
-  blockInfoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 6, // Reducido de 8 a 6
+  blockHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  blockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#edf1f0',
+    borderRadius: 20,
+    gap: 8,
+  },
+  blockBadgeText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1d3d39',
+  },
+  timerSection: {
+    alignItems: 'flex-end',
+  },
+  timerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4a5c58',
+    marginBottom: 4,
+    textTransform: 'uppercase',
   },
   transactionInfoText: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#1d3d39',
+    marginBottom: 4,
+  },
+  productInfoText: {
+    fontSize: 14,
+    color: '#4f6662',
+    textTransform: 'capitalize',
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#e3e7e5',
+    gap: 2,
+  },
+  metricLabel: {
+    fontSize: 13,
+    color: '#55706b',
+    fontWeight: '600',
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '800',
     color: '#1d3d39',
   },
-  timerContainer: {
-    marginTop: 10,
-    alignItems: 'center',
-    backgroundColor: '#fdf4e8',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#ba5d17',
-  },
-  timerText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ba5d17',
-    fontFamily: 'monospace', // Fuente monoespaciada para mejor legibilidad del tiempo
-  },
-  mathContainer: {
+  problemCard: {
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10, // Reducido de 20 a 10
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e3e7e5',
+    gap: 12,
+    marginTop: 4,
+  },
+  problemCardKeyboard: {
+    transform: [{ translateY: 0 }],
   },
   problemText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 12, // Reducido de 16 a 12
+    fontSize: 26,
+    fontWeight: '800',
     textAlign: 'center',
-    color: '#1d3d39',
+    color: '#102d2a',
+    marginBottom: 6,
   },
-  input: {
+  answerContainer: {
     width: '100%',
-    height: 50,
-    borderWidth: 1,
+    alignItems: 'center',
+    gap: 8,
+  },
+  answerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#597470',
+  },
+  answerDisplay: {
+    width: '100%',
+    minHeight: 60,
+    borderWidth: 2,
     borderColor: '#1d3d39',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-    fontSize: 18,
-    textAlign: 'center',
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  answerDisplayActive: {
+    borderColor: '#ba5d17',
+  },
+  answerText: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#1d3d39',
   },
   submitButton: {
-    backgroundColor: '#ba5d17',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 8,
-    width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16, // Aumentado de 8 a 16 para mejor espaciado
+    justifyContent: 'center',
+    backgroundColor: '#1d3d39',
+    paddingVertical: 14,
+    borderRadius: 18,
+    gap: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#c7d0ce',
+  },
+  buttonIcon: {
+    marginRight: 4,
   },
   submitButtonText: {
-    color: 'white',
+    color: '#fff',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
-  waitingContainer: {
+  stateContainer: {
     flex: 1,
     alignItems: 'center',
-    marginTop: 120,
+    justifyContent: 'center',
+    gap: 12,
   },
-  waitingText: {
-    fontSize: 20,
-    marginTop: 20,
+  waitingTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: '#1d3d39',
     textAlign: 'center',
   },
-  resultsContainer: {
-    flex: 1,
-    alignItems: 'center',
-    paddingTop: 50,
-    width: '100%',
+  waitingSubtitle: {
+    fontSize: 14,
+    color: '#6c827d',
+    textAlign: 'center',
   },
-  resultsHeader: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 30,
-    color: '#1d3d39',
+  resultsCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#e3e7e5',
+    gap: 18,
+    minHeight: 400,
+    marginTop: -20,
   },
   messageContainer: {
     width: '100%',
-    marginBottom: 50,
-    alignItems: 'flex-start',
-    paddingHorizontal: 20,
   },
   congratsText: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1d3d39',
+  },
+  congratsSubText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#2d5a56',
+    marginTop: 4,
   },
   errorText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#ba5d17',
+  },
+  errorSubText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#b0421f',
+    marginTop: 4,
+  },
+  resultsHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1d3d39',
+    marginTop: 8,
+  },
+  resultsList: {
+    gap: 12,
+    paddingBottom: 4,
   },
   resultItem: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
-  },
-  resultText: {
-    fontSize: 18,
-    color: '#1d3d39',
-  },
-  wrongText: {
-    color: '#ba5d17',
-    fontWeight: 'bold',
-  },
-  blockContainer: {
-    marginTop: 10,
-    padding: 15,
-    width: '90%',
-    backgroundColor: '#ecf0f1',
-    borderRadius: 10,
     alignItems: 'center',
-    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(16,45,42,0.08)',
+    backgroundColor: '#fff',
+    gap: 14,
   },
-  blockTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1d3d39',
-    marginBottom: 5,
+  resultItemSelf: {
+    borderColor: '#ba5d17',
+    backgroundColor: 'rgba(186,93,23,0.08)',
   },
-  blockText: {
+  resultItemWrong: {
+    opacity: 0.85,
+  },
+  resultIndexBubble: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(29,61,57,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultIndexText: {
     fontSize: 16,
+    fontWeight: '700',
     color: '#1d3d39',
-    textAlign: 'center',
+  },
+  resultInfo: {
+    flex: 1,
+  },
+  resultName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1d3d39',
+  },
+  resultTime: {
+    fontSize: 14,
+    color: '#2f4f4a',
+    marginTop: 2,
+  },
+  resultTimeDanger: {
+    color: '#ba5d17',
+    fontWeight: '700',
+  },
+  nextBlockButton: {
+    backgroundColor: '#1d3d39',
+    paddingVertical: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  exitButton: {
+    backgroundColor: '#ba5d17',
+  },
+  nextBlockButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
   },
   navigationButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 8,
   },
   navButton: {
-    padding: 10,
+    padding: 6,
   },
   navButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   miningButtonContainer: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   miningButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 18,
     width: 120,
     height: 50,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#1d3d39',
-  },
-  miningButtonText: {
-    color: '#1d3d39',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  navBar: {
-    flexDirection: 'row',
-    width: '100%',
-    justifyContent: 'center', // Centrar los botones
-    alignItems: 'center', // Centrar verticalmente
-    borderTopWidth: 1,
-    borderColor: '#1d3d39',
-    paddingVertical: 10, // Reducido de 15 a 10 para barra más compacta
-    paddingBottom: 0, // Eliminar padding inferior para pegar al bottom
-    backgroundColor: '#fff', // Asegurar fondo blanco
-  },
-  icon: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center', // Centrar verticalmente
-    paddingVertical: 5, // Reducido de 8 a 5 para barra más compacta
-  },
-  nextBlockButton: {
-    backgroundColor: '#ba5d17',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 8,
-    marginTop: 20,
-    width: '80%',
-    alignSelf: 'center',
-    position: 'absolute',
-    bottom: 100,
-  },
-  nextBlockButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  // Estilos para el campo de respuesta personalizado
-  answerContainer: {
-    width: '100%',
-    marginBottom: 8, // Reducido de 16 a 8
-    alignItems: 'center',
-  },
-  answerLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1d3d39',
-    marginBottom: 4, // Reducido de 8 a 4
-    textAlign: 'center',
-  },
-  answerDisplay: {
-    width: '100%',
-    height: 55, // Reducido de 70 a 55
-    borderWidth: 3,
-    borderColor: '#1d3d39',
-    borderRadius: 8, // Mismo borderRadius que el botón Submit
-    backgroundColor: '#fdf4e8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 30, // Mismo padding que el botón Submit
-    shadowColor: '#ba5d17',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderWidth: 2,
+    borderColor: '#19443c',
+    shadowColor: 'rgba(0,0,0,0.1)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
     elevation: 3,
   },
-  answerDisplayActive: {
-    borderColor: '#1d3d39',
-    backgroundColor: '#fdf4e8',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  answerText: {
-    fontSize: 28,
+  miningButtonText: {
+    color: '#19443c',
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#1d3d39',
-    textAlign: 'center',
   },
-  // Estilos para el teclado personalizado
-  customKeyboard: {
-    marginBottom: 0,
-    marginTop: 0,
-    marginHorizontal: 16, // Márgenes laterales para mejor apariencia
-    borderRadius: 0, // Sin bordes redondeados para que se adapte al modal
-    shadowOpacity: 0, // Sin sombra para mejor integración
-    elevation: 0,
-  },
-  // Estilos para el Modal del teclado
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'transparent', // Sin fondo para ver el problema
+    backgroundColor: 'transparent',
     justifyContent: 'flex-end',
   },
   keyboardModal: {
-    backgroundColor: 'rgba(248, 249, 250, 0.95)', // Fondo semi-transparente
-    paddingBottom: 0, // Sin padding inferior para pegar al suelo
-    paddingTop: 16, // Solo padding superior
-    width: '100%', // Ocupar todo el ancho
-    borderTopLeftRadius: 16, // Bordes redondeados solo arriba
-    borderTopRightRadius: 16,
-    // Asegurar que esté pegado al suelo
+    backgroundColor: 'rgba(248,249,250,0.98)',
+    paddingBottom: 0,
+    paddingTop: 16,
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     position: 'absolute',
     bottom: 0,
-    // Añadir sombra sutil para separación visual
-    shadowColor: '#1d3d39',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowColor: 'rgba(0,0,0,0.25)',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  customKeyboard: {
+    marginHorizontal: 0,
+    borderRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
 

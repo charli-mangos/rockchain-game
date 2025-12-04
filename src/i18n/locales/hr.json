@@ -94,7 +94,14 @@
     "loadingProblem": "Učitavanje problema...",
     "preparingMining": "Priprema rudarstva...",
     "unknown": "Nepoznato",
-    "couldNotSendResponse": "Odgovor se nije mogao poslati. Molimo pokušajte ponovo."
+    "couldNotSendResponse": "Odgovor se nije mogao poslati. Molimo pokušajte ponovo.",
+    "queueLabel": "Blokovi u redu",
+    "playersMining": "Igrači koji kopaju",
+    "transactionBy": "Transakcija od {{name}}",
+    "timeElapsed": "Protečeno vrijeme",
+    "purchasing": "Kupuje se...",
+    "selling": "Prodaje se...",
+    "processing": "Obrađuje se..."
   },
   "stats": {
     "title": "RockStats",
@@ -132,6 +139,7 @@
     "enterGameCode": "Unesite 6-znamenkasti kod igre",
     "failedToCreateGame": "Neuspješno stvaranje igre. Molimo pokušajte ponovo.",
     "needAtLeastTwoPlayers": "Potrebno je najmanje 2 igrača za pokretanje igre.",
+    "needAtLeastFivePlayers": "Potrebno je najmanje 5 igrača za pokretanje igre.",
     "gameIsFull": "Više igrača ne može se pridružiti ovoj sobi. Soba je puna.",
     "gameAlreadyStarted": "Igra je već počela. Više igrača se ne može pridružiti.",
     "authenticationRequired": "Potrebna je autentifikacija.",

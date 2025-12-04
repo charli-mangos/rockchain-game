@@ -2419,9 +2419,9 @@ io.on('connection', (socket) => {
     // Obtener o crear sala
     const room = getGameRoom(gameId);
     
-    // Verificar si el juego ya está lleno (máximo 3 jugadores)
-    if (room.players.length >= 3) {
-      console.log(`❌ Juego ${gameId} lleno: ${room.players.length}/3 jugadores`);
+    // Verificar si el juego ya está lleno (máximo 5 jugadores)
+    if (room.players.length >= 5) {
+      console.log(`❌ Juego ${gameId} lleno: ${room.players.length}/5 jugadores`);
       socket.emit('error', { message: 'No caben más jugadores en esta sala. La sala está llena.' });
       return;
     }
@@ -2518,12 +2518,11 @@ io.on('connection', (socket) => {
     }
     
     // Verificar que hay al menos 2 jugadores para iniciar
-    // COMENTADO PARA PRUEBAS - Permitir 1 jugador
-    // if (room.players.length < 2) {
-    //   console.log(`❌ No se puede iniciar el juego con menos de 2 jugadores. Jugadores actuales: ${room.players.length}`);
-    //   socket.emit('error', { message: 'Se necesitan al menos 2 jugadores para iniciar el juego.' });
-    //   return;
-    // }
+    if (room.players.length < 2) {
+      console.log(`❌ No se puede iniciar el juego con menos de 2 jugadores. Jugadores actuales: ${room.players.length}`);
+      socket.emit('error', { message: 'Se necesitan al menos 2 jugadores para iniciar el juego.' });
+      return;
+    }
     
     // Cambiar estado a 'starting'
     room.status = 'starting';

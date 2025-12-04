@@ -1,9 +1,208 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Reglas temporales para debugging - permitir todo acceso autenticado
+    
+    // ============================================
+    // FUNCIONES AUXILIARES
+    // ============================================
+    
+    // Verificar que el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Verificar que el usuario es el propietario del documento
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Verificar que el usuario es el host del juego
+    function isGameHost(gameId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/games/$(gameId)) &&
+             get(/databases/$(database)/documents/games/$(gameId)).data.hostId == request.auth.uid;
+    }
+    
+    // Verificar que el usuario es un jugador del juego (está en el array players)
+    function isGamePlayer(gameId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/games/$(gameId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/games/$(gameId)).data.players;
+    }
+    
+    // Verificar que el usuario participa en el juego (host o player)
+    function participatesInGame(gameId) {
+      return isGameHost(gameId) || isGamePlayer(gameId);
+    }
+    
+    // Validar que rockCoins es un número no negativo
+    function isValidRockCoins(value) {
+      return value is number && value >= 0;
+    }
+    
+    // Validar que waste es un número no negativo
+    function isValidWaste(value) {
+      return value is number && value >= 0;
+    }
+    
+    // Validar estructura de datos de juego dentro de users
+    function isValidGameData(gameData) {
+      return gameData is map &&
+             (!gameData.keys().hasAny(['rockCoins']) || isValidRockCoins(gameData.rockCoins)) &&
+             (!gameData.keys().hasAny(['waste']) || isValidWaste(gameData.waste)) &&
+             (!gameData.keys().hasAny(['products']) || gameData.products is list);
+    }
+    
+    // ============================================
+    // COLECCIÓN: users
+    // ============================================
+    
+    match /users/{userId} {
+      // Lectura: El usuario puede leer su propio documento completo
+      // Otros usuarios solo pueden leer datos públicos básicos (userName, email, image)
+      // para rankings/estadísticas. Los datos de games son privados.
+      allow read: if isAuthenticated() && (
+        isOwner(userId) ||
+        // Permitir lectura de datos públicos básicos para rankings
+        (resource.data.keys().hasAll(['userName']) &&
+         resource.data.userName is string)
+      );
+      
+      // Creación: Solo el propio usuario puede crear su documento
+      allow create: if isOwner(userId) && 
+                       request.resource.data.keys().hasAll(['userId', 'email', 'userName', 'games']) &&
+                       request.resource.data.userId == userId &&
+                       request.resource.data.games is map;
+      
+      // Actualización: Solo el propio usuario puede actualizar su documento
+      // Y solo puede actualizar campos permitidos dentro de games.{gameId}
+      allow update: if isOwner(userId) && (
+        // Validar que solo actualiza campos permitidos
+        // Permitir actualizar: games, userName, image, email, lastUpdated
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['games', 'userName', 'image', 'email', 'lastUpdated']) &&
+        // Si actualiza games, validar que es un map
+        (!request.resource.data.keys().hasAny(['games']) || 
+         request.resource.data.games is map)
+      );
+      
+      // Eliminación: Solo el propio usuario puede eliminar su cuenta
+      allow delete: if isOwner(userId);
+    }
+    
+    // ============================================
+    // COLECCIÓN: games
+    // ============================================
+    
+    match /games/{gameId} {
+      // Lectura de documentos individuales: 
+      // - Jugadores del juego (host o players) pueden leer todo
+      // - Usuarios autenticados pueden leer juegos en estado "waiting" para buscar por código
+      allow get: if participatesInGame(gameId) || 
+                    (isAuthenticated() && 
+                     resource.data.status == 'waiting');
+      
+      // Consultas (list): Permitir a usuarios autenticados buscar juegos por código
+      // Las consultas solo devolverán documentos que el usuario pueda leer
+      allow list: if isAuthenticated();
+      
+      // Creación: Cualquier usuario autenticado puede crear un juego
+      // El hostId debe ser el usuario actual y debe estar en players
+      allow create: if isAuthenticated() && 
+                       request.resource.data.hostId == request.auth.uid &&
+                       request.resource.data.players is list &&
+                       request.auth.uid in request.resource.data.players;
+      
+      // Actualización: Solo el host puede modificar ciertos campos del juego
+      // Los jugadores NO pueden modificar el juego directamente
+      allow update: if isGameHost(gameId) && (
+        // Validar que no se puede cambiar el hostId
+        request.resource.data.hostId == resource.data.hostId &&
+        // Validar que players es un array
+        (!request.resource.data.keys().hasAny(['players']) || 
+         request.resource.data.players is list)
+      );
+      
+      // Eliminación: Solo el host puede eliminar el juego
+      allow delete: if isGameHost(gameId);
+      
+      // ============================================
+      // SUBCOLECCIÓN: games/{gameId}/rounds
+      // ============================================
+      
+      match /rounds/{roundId} {
+        // Lectura: Solo jugadores del juego
+        allow read: if participatesInGame(gameId);
+        
+        // Escritura: Solo desde Cloud Functions (servidor)
+        // Los clientes NO pueden escribir directamente
+        allow write: if false;
+      }
+      
+      // ============================================
+      // SUBCOLECCIÓN: games/{gameId}/market
+      // ============================================
+      
+      match /market/{roundId} {
+        // Lectura: Solo jugadores del juego
+        allow read: if participatesInGame(gameId);
+        
+        // Escritura: Solo desde Cloud Functions (servidor)
+        allow write: if false;
+      }
+    }
+    
+    // ============================================
+    // COLECCIÓN: market (legacy - estructura antigua)
+    // ============================================
+    
+    match /market/{gameId} {
+      // Lectura: Solo jugadores del juego
+      allow read: if participatesInGame(gameId);
+      
+      // Escritura: Solo desde Cloud Functions (servidor)
+      allow write: if false;
+    }
+    
+    // ============================================
+    // COLECCIÓN: blockchain
+    // ============================================
+    
+    match /blockchain/{gameId} {
+      // Lectura: Solo jugadores del juego
+      allow read: if participatesInGame(gameId);
+      
+      // Escritura: Solo desde Cloud Functions (servidor)
+      allow write: if false;
+      
+      // Subcolección de bloques
+      match /blocks/{blockId} {
+        // Lectura: Solo jugadores del juego
+        allow read: if participatesInGame(gameId);
+        
+        // Escritura: Solo desde Cloud Functions (servidor)
+        allow write: if false;
+      }
+    }
+    
+    // ============================================
+    // COLECCIÓN: products
+    // ============================================
+    
+    match /products/{productId} {
+      // Lectura: Cualquier usuario autenticado puede leer productos
+      allow read: if isAuthenticated();
+      
+      // Escritura: Solo desde Cloud Functions (servidor)
+      allow write: if false;
+    }
+    
+    // ============================================
+    // DENEGAR TODO LO DEMÁS POR DEFECTO
+    // ============================================
+    
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 } 

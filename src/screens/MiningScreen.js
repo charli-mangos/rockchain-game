@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, Modal, FlatList, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Modal, FlatList, TouchableWithoutFeedback } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { db, functions, auth } from '../../firebase';
@@ -48,7 +48,8 @@ const MiningScreen = ({ route, navigation }) => {
     setCurrentTransactionType
   } = useGameContextHybridRobust();
   
-  const { openProblem, currentViewStart } = useSimpleMiningContext();  
+  const { openProblem, currentViewStart, requestPendingCount } = useSimpleMiningContext();  
+  const blockId = localPendingProblems[currentProblemIndex]?.id || null;
   const { responses, updateResponses } = useResponses(gameId, blockId);
   const [response, setResponse] = useState('');
   const [currentProblem, setCurrentProblem] = useState(null);
@@ -59,8 +60,6 @@ const MiningScreen = ({ route, navigation }) => {
   const totalPlayers = usePlayerCount(gameId);
   const userName = useUserName(userId);
   const activeProblem = localPendingProblems[currentProblemIndex]?.activeProblem || null;
-  
-  const blockId = localPendingProblems[currentProblemIndex]?.id || null;
   
   // Logs para debugging
   useEffect(() => {
@@ -74,16 +73,10 @@ const MiningScreen = ({ route, navigation }) => {
     console.log(`🔍 MiningScreen Debug - miningProblems.length: ${miningProblems.length}, currentProblemIndex: ${currentProblemIndex}`);
   }, [blockId, currentProblem, activeProblem, miningProblems.length, currentProblemIndex, isExiting]);
   
-  // Función segura para obtener el número de bloque
+  // Función segura para obtener el número de bloque (usando índice como en BlockchainComponent)
   const getBlockNumber = () => {
-    if (!blockId || typeof blockId !== 'string') {
-      // console.log(`⚠️ getBlockNumber: blockId inválido - ${blockId}`);
-      return '...';
-    }
-    const parts = blockId.split('-');
-    const blockNumber = parts.length > 1 ? parts[1] : '...';
-    // console.log(`✅ getBlockNumber: ${blockNumber} (de ${blockId})`);
-    return blockNumber;
+    // Usar el índice actual + 1, igual que en BlockchainComponent
+    return currentProblemIndex + 1;
   };
 
   // Función para actualizar el tiempo del cronómetro unificado
@@ -120,6 +113,31 @@ const MiningScreen = ({ route, navigation }) => {
   const transactionUserName = useUserName(activeProblem?.transactionDetails?.userId);
   // Obtener los detalles del producto
   const productDetails = useProductDetails(activeProblem?.transactionDetails?.productId, gameId);
+  const safeTransactionName = transactionUserName || t('mining.unknown');
+  
+  // Determinar qué mostrar: siempre incluir tipo de transacción y tipo de bloque
+  const transactionType = activeProblem?.transactionDetails?.type || '';
+  const transactionTypeLower = transactionType.toLowerCase();
+  
+  // Obtener el tipo de bloque (productType o marbleType)
+  let blockType = '';
+  if (activeProblem?.transactionDetails?.productType) {
+    blockType = activeProblem.transactionDetails.productType.toLowerCase();
+  } else if (activeProblem?.transactionDetails?.marbleType) {
+    blockType = activeProblem.transactionDetails.marbleType.toLowerCase();
+  } else if (productDetails?.description) {
+    // Si no hay productType, usar la descripción del producto
+    blockType = productDetails.description.toLowerCase();
+  } else {
+    blockType = 'block';
+  }
+  
+  // Combinar tipo de transacción con el tipo de bloque
+  const formattedProductDescription = transactionType 
+    ? `${transactionTypeLower} ${blockType}`
+    : blockType;
+  const queueLabel = t('mining.queueLabel');
+  const playersLabel = t('mining.playersMining');
 
   // EFECTO UNIFICADO: Manejar inicialización y limpieza de problemas
   useEffect(() => {
@@ -298,7 +316,7 @@ const MiningScreen = ({ route, navigation }) => {
       gameId,
       blockId 
     });
-    setIsWaiting(true);
+    // NO poner isWaiting a true aquí - queremos ver el problema mientras se procesa
     const submitMiningSolution = httpsCallable(functions, 'submitMiningSolution');
   
     try {
@@ -316,9 +334,6 @@ const MiningScreen = ({ route, navigation }) => {
         responseTime
       });
 
-      // ESTABLECER RESULTADOS PRIMERO para evitar navegación momentánea
-      setResponse("");
-      
       // Guardar la respuesta correcta
       setCorrectAnswer(currentProblem.solution);
       setCurrentBlockId(blockId);
@@ -338,18 +353,24 @@ const MiningScreen = ({ route, navigation }) => {
 
       console.log('✅ Respuesta procesada localmente:', localResult);
 
-      // Mostrar resultado inmediato PRIMERO (solo la respuesta del jugador actual)
-      setResults([localResult]);
-      setIsWaiting(false);
+      // NO limpiar la respuesta ni establecer results inmediatamente
+      // Mantener el problema y la respuesta visibles mientras se procesa
 
       // AHORA procesar la respuesta (esto puede cambiar localPendingProblems)
       await markProblemAsResponded(blockId);
+
+      // Solicitar problemas pendientes actualizados para actualizar la notificación
+      const webSocketService = getWebSocketService();
+      if (webSocketService.isConnected && requestPendingCount) {
+        setTimeout(() => {
+          requestPendingCount();
+        }, 500);
+      }
 
       // NO actualizar currentProblemIndex aquí - se hará cuando el usuario haga clic en "Next Block"
       // Solo verificar si hay más problemas para mostrar el botón correcto
       const hasMore = getNextAvailableProblem() !== null;
       if (!hasMore) {
-        console.log(`🏁 No hay más problemas disponibles después de responder`);
         setIsLastBlock(true);
         
         // Si no hay más problemas, limpiar miningQueue en el servidor y resetear timestamp
@@ -365,6 +386,10 @@ const MiningScreen = ({ route, navigation }) => {
         // console.log(`⏭️ Hay más problemas disponibles, se mostrará botón "Next Block"`);
         setIsLastBlock(false);
       }
+
+      // Ahora mostrar los resultados y limpiar la respuesta
+      setResults([localResult]);
+      setResponse("");
 
       // Enviar respuesta vía WebSocket (tiempo real, sin interferir con otros)
       console.log('📞 Enviando respuesta vía WebSocket...', {
@@ -406,7 +431,6 @@ const MiningScreen = ({ route, navigation }) => {
       // Verificar si este era el último problema (se actualizará automáticamente en el useEffect)
       // setIsLastBlock se actualiza automáticamente cuando cambia localPendingProblems
       
-      setIsWaiting(false);
       console.log('✅ Proceso de envío de respuesta completado');
       
     } catch (error) {
@@ -417,7 +441,6 @@ const MiningScreen = ({ route, navigation }) => {
         errorDetails: error.details,
         stack: error.stack
       });
-      setIsWaiting(false);
       
       // Mostrar alerta al usuario
       Alert.alert(
@@ -445,7 +468,6 @@ const MiningScreen = ({ route, navigation }) => {
       console.log(`⛏️ Navegando al siguiente problema: índice ${nextIndex}`);
       setCurrentProblemIndex(nextIndex);
     } else {
-      console.log(`⛏️ No hay más problemas disponibles, marcando como último bloque`);
       setIsLastBlock(true);
     }
   };
@@ -517,8 +539,34 @@ const MiningScreen = ({ route, navigation }) => {
     }
   };
 
+  const renderResultItem = ({ item, index }) => {
+    const isSelf = item.userId === userId;
+    const isCorrect = item.isCorrect;
+
+    return (
+      <View
+        style={[
+          styles.resultItem,
+          isSelf && styles.resultItemSelf,
+          !isCorrect && styles.resultItemWrong
+        ]}
+      >
+        <View style={styles.resultIndexBubble}>
+          <Text style={styles.resultIndexText}>{index + 1}</Text>
+        </View>
+        <View style={styles.resultInfo}>
+          <Text style={styles.resultName}>{item.userName}</Text>
+          <Text style={[styles.resultTime, !isCorrect && styles.resultTimeDanger]}>
+            {isCorrect ? `${(item.responseTime / 1000).toFixed(2)}s` : t('mining.wrong')}
+          </Text>
+        </View>
+        {isSelf && <Ionicons name="sparkles-outline" size={20} color="#ba5d17" />}
+      </View>
+    );
+  };
+
   return (
-    <View style={styles.container}>
+    <>
       <TouchableWithoutFeedback onPress={handleHideKeyboard} accessible={false}>
         <PanGestureHandler
           onGestureEvent={handleGestureEvent}
@@ -529,121 +577,143 @@ const MiningScreen = ({ route, navigation }) => {
           shouldActivateOnStart={true}
           hitSlop={{ left: -10, right: -10 }}
         >
-          <View style={styles.mainContent}>
-            <GameHeader title={t('mining.title')} gameId={gameId} userId={userId} currentScreen="RockMining" />
+          <View style={styles.screenContainer}>
+            <View style={styles.headerContainer}>
+              <GameHeader title={t('mining.title')} gameId={gameId} userId={userId} currentScreen="RockMining" />
+            </View>
 
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-              {isWaiting ? (
-                <View style={styles.waitingContainer}>
-                  <RotatingCube size={80} color="#ba5d17" /> 
-                   <Text style={styles.waitingText}>{t('mining.loadingResults')}</Text>
-                </View>
-              ) : results && results.length > 0 && currentProblem ? (
-                <View style={styles.resultsContainer}>
-                  <View style={styles.messageContainer}>
-                    {results.find(r => r.userId === userId)?.isCorrect ? (
-                      <View>
-                         <Text style={styles.congratsText}>{t('mining.congratulations', { name: userName })}</Text>
-                         <Text style={styles.congratsText}>{t('mining.solvedCorrectly')}</Text>
-                      </View>
-                    ) : (
-                      <View>
-                        <Text style={styles.errorText}>{t('mining.notCorrect')}</Text>
-                        <Text style={styles.errorText}>{t('mining.correctAnswer', { answer: currentProblem?.solution })}</Text>
-                      </View>
-                    )}
+            <KeyboardAvoidingView
+              style={styles.body}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+              <View style={styles.content}>
+                {isWaiting ? (
+                  <View style={styles.stateContainer}>
+                    <RotatingCube size={80} color="#ba5d17" />
+                    <Text style={styles.waitingTitle}>{t('mining.loadingResults')}</Text>
+                    <Text style={styles.waitingSubtitle}>{t('common.loading')}</Text>
                   </View>
-                  <Text style={styles.resultsHeader}>{t('mining.results')}</Text>
-                  <FlatList
-                    data={results}
-                    keyExtractor={(item) => item.userId}
-                    renderItem={({ item, index }) => (
-                      <View style={styles.resultItem}>
-                        <Text style={styles.resultText}>
-                          {index + 1}. {item.userName} - {
-                            item.isCorrect 
-                              ? `${(item.responseTime / 1000).toFixed(2)}s`
-                               : <Text style={styles.wrongText}>{t('mining.wrong')}</Text>
-                          }
-                        </Text>
+                ) : results && results.length > 0 && currentProblem ? (
+                  <View style={styles.stateContainer}>
+                    <View style={styles.resultsCard}>
+                      <View style={styles.messageContainer}>
+                        {results.find(r => r.userId === userId)?.isCorrect ? (
+                          <>
+                            <Text style={styles.congratsText}>{t('mining.congratulations', { name: userName })}</Text>
+                            <Text style={styles.congratsSubText}>{t('mining.solvedCorrectly')}</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={styles.errorText}>{t('mining.notCorrect')}</Text>
+                            <Text style={styles.errorSubText}>{t('mining.correctAnswer', { answer: currentProblem?.solution })}</Text>
+                          </>
+                        )}
                       </View>
-                    )}
-                    style={{ maxHeight: '50%', width: '100%' }}
-                  />
-                  {!isLastBlock && hasMoreProblems() ? (
-                    <TouchableOpacity 
-                      style={styles.nextBlockButton}
-                      onPress={handleNextProblem}
-                    >
-                       <Text style={styles.nextBlockButtonText}>{t('mining.nextBlock')}</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity 
-                      style={[styles.nextBlockButton, { backgroundColor: '#ba5d17' }]}
-                      onPress={handleExitMining}
-                    >
-                       <Text style={styles.nextBlockButtonText}>{t('mining.exitMining')}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : hasValidData ? (
-                (() => {
-                  return (
-                    <View style={styles.problemContainer}>
-                      <View style={styles.blockInfoContainer}>
-                         <Text style={styles.blockInfoText}>{t('mining.blockNumber', { number: getBlockNumber() })}</Text>
+                      <Text style={styles.resultsHeader}>{t('mining.results')}</Text>
+                      <FlatList
+                        data={results}
+                        keyExtractor={(item) => item.userId}
+                        renderItem={renderResultItem}
+                        scrollEnabled={false}
+                        contentContainerStyle={styles.resultsList}
+                      />
+                      {!isLastBlock && hasMoreProblems() ? (
+                        <TouchableOpacity 
+                          style={styles.nextBlockButton}
+                          onPress={handleNextProblem}
+                        >
+                          <Text style={styles.nextBlockButtonText}>{t('mining.nextBlock')}</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity 
+                          style={[styles.nextBlockButton, styles.exitButton]}
+                          onPress={handleExitMining}
+                        >
+                          <Text style={styles.nextBlockButtonText}>{t('mining.exitMining')}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ) : hasValidData ? (
+                  <View style={[styles.problemWrapper, showKeyboard && styles.problemWrapperKeyboard]}>
+                    <View style={styles.infoSection}>
+                      <View style={styles.blockCard}>
+                        <View style={styles.blockHeaderRow}>
+                          <View style={styles.blockBadge}>
+                            <Ionicons name="cube-outline" size={18} color="#1d3d39" />
+                            <Text style={styles.blockBadgeText}>{t('mining.blockNumber', { number: getBlockNumber() })}</Text>
+                          </View>
+                          <View style={styles.timerSection}>
+                            <Text style={styles.timerLabel}>{t('mining.timeElapsed')}</Text>
+                            <SimpleUnifiedTimer 
+                              blockId={blockId || 'loading'}
+                              isActive={!results && !isExiting}
+                              onTimeUpdate={updateTimerTime}
+                            />
+                          </View>
+                        </View>
                         <Text style={styles.transactionInfoText}>
-                          {transactionUserName} {currentProblem.transactionDetails?.type} {(productDetails?.description || 'Loading...').toLowerCase()}
+                          {t('mining.transactionBy', { name: safeTransactionName })}
                         </Text>
-                        {/* Cronómetro unificado con comunicación de tiempo */}
-                        <SimpleUnifiedTimer 
-                          blockId={blockId || 'loading'}
-                          isActive={!results && !isExiting}
-                          onTimeUpdate={updateTimerTime}
-                        />
+                        <Text style={styles.productInfoText}>
+                          {formattedProductDescription}
+                        </Text>
                       </View>
-                  
-                  <View style={styles.mathContainer}>
-                    <Text style={styles.problemText}>{currentProblem.mathProblem}</Text>
-                    
-                    {/* Campo de respuesta clickeable */}
-                    <View style={styles.answerContainer}>
-                       <Text style={styles.answerLabel}>{t('mining.yourAnswer')}:</Text>
+
+                      <View style={styles.metricsRow}>
+                        <View style={styles.metricCard}>
+                          <Ionicons name="people-outline" size={18} color="#1d3d39" />
+                          <Text style={styles.metricLabel}>{playersLabel}</Text>
+                          <Text style={styles.metricValue}>{totalPlayers || 0}</Text>
+                        </View>
+                        <View style={styles.metricCard}>
+                          <Ionicons name="hammer-outline" size={18} color="#1d3d39" />
+                          <Text style={styles.metricLabel}>{queueLabel}</Text>
+                          <Text style={styles.metricValue}>{miningQueue}</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={[styles.problemCard, showKeyboard && styles.problemCardKeyboard]}>
+                      <Text style={styles.problemText}>{currentProblem.mathProblem}</Text>
+                      
+                      <View style={styles.answerContainer}>
+                        <Text style={styles.answerLabel}>{t('mining.yourAnswer')}</Text>
+                        <TouchableOpacity 
+                          style={[styles.answerDisplay, showKeyboard && styles.answerDisplayActive]}
+                          onPress={handleShowKeyboard}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.answerText}>
+                            {response || '—'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      
                       <TouchableOpacity 
-                        style={[styles.answerDisplay, showKeyboard && styles.answerDisplayActive]}
-                        onPress={handleShowKeyboard}
-                        activeOpacity={0.8}
+                        style={[styles.submitButton, isWaiting && styles.submitButtonDisabled]} 
+                        onPress={handleSubmit} 
+                        disabled={isWaiting}
                       >
-                        <Text style={styles.answerText}>
-                          {response || ''}
-                        </Text>
+                        <Ionicons name="flash-outline" size={20} color="#fff" style={styles.buttonIcon} />
+                        <Text style={styles.submitButtonText}>{t('mining.submit')}</Text>
                       </TouchableOpacity>
                     </View>
-                    
-                    <TouchableOpacity 
-                      style={[styles.submitButton, isWaiting && styles.submitButtonDisabled]} 
-                      onPress={handleSubmit} 
-                      disabled={isWaiting}
-                    >
-                       <Text style={styles.submitButtonText}>{t('mining.submit')}</Text>
-                    </TouchableOpacity>
                   </View>
-                </View>
-                  );
-                })()
-              ) : (
-                <View style={styles.waitingContainer}>
-                  <RotatingCube size={80} color="#ba5d17" />
-                  <Text style={styles.waitingText}>
-                    {!blockId ? t('mining.loadingBlock') : !currentProblem ? t('mining.loadingProblem') : t('mining.preparingMining')}
-                  </Text>
-                </View>
-              )}
+                ) : (
+                  <View style={styles.stateContainer}>
+                    <RotatingCube size={80} color="#ba5d17" />
+                    <Text style={styles.waitingTitle}>
+                      {!blockId ? t('mining.loadingBlock') : !currentProblem ? t('mining.loadingProblem') : t('mining.preparingMining')}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </KeyboardAvoidingView>
 
             {!results && !isWaiting && miningQueue > 0 && hasValidData && (
               <View style={styles.navigationButtons}>
-                {/* {console.log(`🔨 [MINING-BUTTON] Mostrando botón con miningQueue=${miningQueue}, miningProblems.length=${miningProblems.length}`)} */}
                 <TouchableOpacity 
                   onPress={() => {
                     const prevIndex = currentProblemIndex - 1;
@@ -654,13 +724,13 @@ const MiningScreen = ({ route, navigation }) => {
                   disabled={currentProblemIndex === 0}
                   style={[styles.navButton, currentProblemIndex === 0 && styles.navButtonDisabled]}
                 >
-                  <Ionicons name="chevron-back-circle-outline" size={50} color={currentProblemIndex === 0 ? '#ccc' : '#1d3d39'} />
+                  <Ionicons name="chevron-back-circle-outline" size={48} color={currentProblemIndex === 0 ? '#cfd6d5' : '#19443c'} />
                 </TouchableOpacity>
 
                 <View style={styles.miningButtonContainer}>
                   <View style={styles.miningButton}>
-                     <Text style={styles.miningButtonText}>{miningQueue}</Text>
-                    <Ionicons name="hammer-outline" size={24} color="#1d3d39" />
+                    <Text style={styles.miningButtonText}>{miningQueue}</Text>
+                    <Ionicons name="hammer-outline" size={24} color="#19443c" />
                   </View>
                 </View>
 
@@ -669,7 +739,7 @@ const MiningScreen = ({ route, navigation }) => {
                   disabled={!hasMoreProblems()}
                   style={[styles.navButton, !hasMoreProblems() && styles.navButtonDisabled]}
                 >
-                  <Ionicons name="chevron-forward-circle-outline" size={50} color={!hasMoreProblems() ? '#ccc' : '#1d3d39'} />
+                  <Ionicons name="chevron-forward-circle-outline" size={48} color={!hasMoreProblems() ? '#cfd6d5' : '#19443c'} />
                 </TouchableOpacity>
               </View>
             )}
@@ -679,7 +749,6 @@ const MiningScreen = ({ route, navigation }) => {
         </PanGestureHandler>
       </TouchableWithoutFeedback>
 
-      {/* Teclado personalizado usando Modal */}
       <Modal
         visible={showKeyboard}
         transparent={true}
@@ -700,7 +769,7 @@ const MiningScreen = ({ route, navigation }) => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+    </>
   );
 };
 

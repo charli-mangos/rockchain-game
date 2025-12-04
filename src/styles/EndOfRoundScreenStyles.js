@@ -33,23 +33,23 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   industryContainer: {
-    marginTop: 24,
-    marginBottom: 24,
+    marginTop: 16,
+    marginBottom: 16,
   },
   industryTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#1d3d39',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   industryInfo: {
-    gap: 12,
+    gap: 8,
   },
   industryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     backgroundColor: '#fff',
     borderRadius: 6,
@@ -110,11 +110,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   rewardContainer: {
-    padding: 15,
+    padding: 12,
     backgroundColor: '#2d5a56',
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 6,
   },
   rewardText: {
     fontSize: 16,
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   // Contenedor para el banner de éxito con cartelito de recompensa
   successBannerContainer: {
     position: 'relative',
-    marginTop: 10,
+    marginTop: 6,
   },
   // Banner de éxito para acertar industria
   successBanner: {
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fdf4e8',
     padding: 12,
     borderRadius: 10,
-    marginTop: 10,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: '#1d3d39',
     shadowColor: '#fdf4e8',

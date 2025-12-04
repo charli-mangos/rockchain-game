@@ -29,7 +29,7 @@ export const fetchResponses = async (gameId, blockId) => {
       console.log("Fetched responses:", responses);
       return responses;
     } else {
-      console.error("Block not found");
+      console.warn("Block not found yet, responses will be fetched once it exists.");
       return [];
     }
   } catch (error) {

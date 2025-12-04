@@ -101,7 +101,14 @@
     "loadingProblem": "Loading problem...",
     "preparingMining": "Preparing mining...",
     "unknown": "Unknown",
-    "couldNotSendResponse": "Could not send response. Please try again."
+    "couldNotSendResponse": "Could not send response. Please try again.",
+    "queueLabel": "Blocks queued",
+    "playersMining": "Players mining",
+    "transactionBy": "Transaction by {{name}}",
+    "timeElapsed": "Elapsed time",
+    "purchasing": "Purchasing...",
+    "selling": "Selling...",
+    "processing": "Processing..."
   },
   "stats": {
     "title": "RockStats",
@@ -142,6 +149,7 @@
     "enterGameCode": "Enter 6-digit game code",
     "failedToCreateGame": "Failed to create the game. Please try again.",
     "needAtLeastTwoPlayers": "At least 2 players are needed to start the game.",
+    "needAtLeastFivePlayers": "At least 5 players are needed to start the game.",
     "gameIsFull": "No more players can join this room. The room is full.",
     "gameAlreadyStarted": "The game has already started. No more players can join.",
     "authenticationRequired": "Authentication required.",
