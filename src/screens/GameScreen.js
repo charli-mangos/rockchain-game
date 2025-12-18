@@ -325,27 +325,22 @@ const GameScreen = ({ route }) => {
                 <Text style={styles.buttonText}>{t('game.joinGame')}</Text>
             </TouchableOpacity>
             
-            {/* Botón de tutoriales */}
-            <TouchableOpacity 
-              style={[styles.button, styles.tutorialButton]} 
-              onPress={() => startTutorial()}
-            >
-              <View style={styles.buttonContent}>
-                <Ionicons name="information-circle-outline" size={20} color="#fff" style={styles.buttonIcon} />
-                <Text style={styles.tutorialButtonText}>Learn About RockChain</Text>
-              </View>
-            </TouchableOpacity>
-            
-            {/* Botón de progreso de aprendizaje */}
-            <TouchableOpacity 
-              style={[styles.button, styles.progressButton]} 
-              onPress={() => setShowLearningProgress(true)}
-            >
-              <View style={styles.buttonContent}>
-                <Ionicons name="trophy-outline" size={20} color="#fff" style={styles.buttonIcon} />
-                <Text style={styles.progressButtonText}>My Progress</Text>
-              </View>
-            </TouchableOpacity>
+            {/* Botones redondos de About y Progress */}
+            <View style={styles.roundButtonsContainer}>
+              <TouchableOpacity 
+                style={styles.roundButton} 
+                onPress={() => startTutorial()}
+              >
+                <Ionicons name="help-circle" size={24} color="#fff" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.roundButton} 
+                onPress={() => setShowLearningProgress(true)}
+              >
+                <Ionicons name="trophy" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         

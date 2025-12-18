@@ -11,6 +11,7 @@ import WelcomeHeader from '../components/WelcomeHeader';
 import RotatingCube from '../components/RotatingCube';
 import DismissKeyboardView from '../components/DismissKeyboardView';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import AuthErrorPanel from '../components/AuthErrorPanel';
 
 const LoginScreen = ({ navigation, route }) => {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ const LoginScreen = ({ navigation, route }) => {
   const [userName, setUserName] = useState('');
   const [showUserName, setShowUserName] = useState(false); // Controla la visibilidad del input de userName
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const validateEmail = (email) => {
@@ -45,16 +47,19 @@ const LoginScreen = ({ navigation, route }) => {
       return { gameId, gameCode };
     } catch (e) {
       console.error('Error creating game:', e);
-      Alert.alert(t('common.error'), t('game.failedToCreateGame'));
+      // No mostrar Alert, el error se manejará en el componente padre
       throw e;
     }
   };
 
   const handleLogin = async () => {
     if (!validateEmail(email)) {
-      setError(t('auth.invalidEmail'));
+      setError('invalid-email');
+      setErrorCode('auth/invalid-email');
       return;
     }
+    setError('');
+    setErrorCode(null);
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -74,17 +79,9 @@ const LoginScreen = ({ navigation, route }) => {
         navigation.navigate('Game', { gameId: gameData.gameId, gameCode: gameData.gameCode, userId: userId });
       }
     } catch (error) {
-      switch (error.code) {
-        case 'auth/wrong-password':
-          setError(t('auth.incorrectPassword'));
-          break;
-        case 'auth/user-not-found':
-          setError(t('auth.userNotFound'));
-          break;
-        default:
-          setError(error.message);
-          break;
-      }
+      setErrorCode(error.code || null);
+      // Usar mensajes naturales en lugar de los técnicos de Firebase
+      setError(''); // El AuthErrorPanel mostrará el mensaje apropiado basado en errorCode
     } finally {
       setLoading(false);
     }
@@ -92,21 +89,23 @@ const LoginScreen = ({ navigation, route }) => {
 
   const handleRegister = async () => {
     if (!validateEmail(email)) {
-      setError(t('auth.invalidEmail'));
+      setError('invalid-email');
+      setErrorCode('auth/invalid-email');
       return;
     }
     if (showUserName && !userName.trim()) {
-      setError(t('auth.usernameRequired'));
+      setError('username-required');
+      setErrorCode(null);
       return;
     }
+    setError('');
+    setErrorCode(null);
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const userId = userCredential.user.uid;
 
       await saveUserToFirestore(userId, email, userName); // Guarda userName en Firestore
-
-      Alert.alert(t('auth.registrationSuccess'), t('auth.registrationSuccess'));
       
       const gameData = await createGame(userId);
       console.log('LoginScreen - Game created successfully (register):', gameData);
@@ -123,7 +122,9 @@ const LoginScreen = ({ navigation, route }) => {
         navigation.navigate('Game', { gameId: gameData.gameId, gameCode: gameData.gameCode, userId: userId });
       }
     } catch (error) {
-      setError(error.message);
+      setErrorCode(error.code || null);
+      // Usar mensajes naturales en lugar de los técnicos de Firebase
+      setError(''); // El AuthErrorPanel mostrará el mensaje apropiado basado en errorCode
     } finally {
       setLoading(false);
     }
@@ -146,7 +147,8 @@ const LoginScreen = ({ navigation, route }) => {
       console.log('User saved to Firestore with new structure');
     } catch (error) {
       console.error('Error saving user to Firestore:', error);
-      Alert.alert(t('common.error'), t('auth.couldNotSaveUser'));
+      // El error se manejará en el componente que llama a esta función
+      throw error;
     }
   };
 
@@ -168,7 +170,15 @@ const LoginScreen = ({ navigation, route }) => {
               style={styles.input}
             />
           )}
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <AuthErrorPanel
+            error={error}
+            errorCode={errorCode}
+            onDismiss={() => {
+              setError('');
+              setErrorCode(null);
+            }}
+            visible={!!(error || errorCode)}
+          />
           <TextInput
             placeholder={t('auth.email')}
             value={email}

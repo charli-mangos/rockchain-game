@@ -6,19 +6,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Configuración de Firebase
-const firebaseConfig  = {
-  apiKey: Platform.select({
-    android: "REDACTED_API_KEY",
-    ios: "REDACTED_API_KEY"
-  }),
+const firebaseConfig = {
+  apiKey: Platform.OS === 'android' 
+    ? "REDACTED_API_KEY"
+    : "REDACTED_API_KEY",
   authDomain: "rockchain-83a7f.firebaseapp.com",
   projectId: "rockchain-83a7f",
   storageBucket: "rockchain-83a7f.appspot.com",
   messagingSenderId: "96971331973",
-  appId: Platform.select({
-    android: "1:96971331973:android:1da409eab4005d4502ccec",
-    ios: "1:96971331973:ios:50f8effb741b8c9f02ccec"
-  }),
+  appId: Platform.OS === 'android'
+    ? "1:96971331973:android:1da409eab4005d4502ccec"
+    : "1:96971331973:ios:50f8effb741b8c9f02ccec",
 };  
 
 // const app = initializeApp(firebaseConfig);

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "RockChainJS",
-    "slug": "RockChainJS",
+    "name": "Rockchain",
+    "slug": "Rockchain",
     "platforms": [
       "ios",
       "android"
@@ -39,7 +39,9 @@
       }
     },
     "plugins": [
-      "expo-localization"
+      "expo-localization",
+      "expo-asset",
+      "expo-font"
     ]
   }
 }

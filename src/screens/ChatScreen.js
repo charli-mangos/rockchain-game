@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, FlatList, Dimensions, Image, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity } from 'react-native';
 import { db } from '../../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { LineChart } from 'react-native-chart-kit';
@@ -9,6 +9,7 @@ import NavigationBar from '../components/NavigationBar';
 import styles from '../styles/ChatScreenStyles';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useGameContextHybridRobust } from '../context/GameContextHybridRobust';
+import { getScreenDimensions, scaleSpacing } from '../utils/responsive';
 
 const ChatScreen = ({ navigation, route }) => {
   const { gameId, userId, marketData, productList, round: currentRound } = useGameContextHybridRobust();
@@ -649,7 +650,7 @@ const ChatScreen = ({ navigation, route }) => {
             <View style={styles.chartContainer}>
               <LineChart
                 data={chartData}
-                width={Dimensions.get('window').width - 42}
+                width={getScreenDimensions().width - scaleSpacing(42)}
                 height={220}
                 fromZero={true}
                 chartConfig={chartConfig}

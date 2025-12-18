@@ -31,7 +31,7 @@ export const LEARNING_ACHIEVEMENTS = {
     description: 'Completed all blockchain tutorials',
     category: 'blockchain',
     points: 30,
-    icon: 'compass',
+    icon: 'globe',
     color: '#2196F3'
   },
   
@@ -51,7 +51,7 @@ export const LEARNING_ACHIEVEMENTS = {
     description: 'Reduced 100 units of waste',
     category: 'circular_economy',
     points: 40,
-    icon: 'shield',
+    icon: 'leaf',
     color: '#4CAF50',
     requirement: { type: 'waste_reduced', count: 100 }
   },
@@ -73,7 +73,7 @@ export const LEARNING_ACHIEVEMENTS = {
     description: 'Completed your first transaction',
     category: 'gameplay',
     points: 5,
-    icon: 'swap-horizontal',
+    icon: 'repeat',
     color: '#2196F3'
   },
   rockcoin_collector: {

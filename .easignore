@@ -1,0 +1,46 @@
+# Excluir directorio del servidor (no necesario para la app móvil)
+server/
+
+# Excluir funciones de Firebase (se despliegan por separado)
+functions/
+
+# Excluir archivos de configuración de desarrollo
+*.sh
+*.md
+env.development
+env.production
+
+# Excluir archivos de Firebase que no son necesarios en el build
+firebase.json
+firestore.indexes.json
+firestore.rules
+firestore.rules.example
+
+# Excluir archivos de configuración de EAS (pero NO eas.json, se necesita)
+# eas.json se necesita para el build
+
+# Excluir archivos de Docker
+Dockerfile
+*.dockerignore
+
+# Excluir archivos de credenciales
+*.json
+!package.json
+!package-lock.json
+!app.json
+!eas.json
+!google-services.json
+!GoogleService-Info.plist
+!tsconfig.json
+!metro.config.js
+
+# Excluir logs
+*.log
+npm-debug.log*
+
+# Excluir archivos temporales
+.DS_Store
+*.swp
+*.swo
+*~
+

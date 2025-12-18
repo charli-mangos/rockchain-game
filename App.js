@@ -18,9 +18,6 @@ import NetworkStatusBanner from './src/components/NetworkStatusBanner';
 import { bootstrapI18n } from './src/i18n';
 import i18n from './src/i18n';
 
-import { HermesInternal } from 'react-native';
-
-
 const Stack = createStackNavigator();
 
 const App = () => {

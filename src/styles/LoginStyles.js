@@ -1,52 +1,56 @@
 import { StyleSheet } from 'react-native';
+import { scaleSize, scaleFont, scaleSpacing, widthPercentage, adaptiveFontSize } from '../utils/responsive';
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
     backgroundColor: '#fff',
-    paddingTop: 50,
+    paddingTop: scaleSpacing(50),
   },
   input: {
-    width: '80%',
-    height: 45,
+    width: widthPercentage(80),
+    height: scaleSize(45),
     borderColor: '#1d3d39',
     borderWidth: 1,
-    marginBottom: 20,
-    paddingLeft: 10,
-    borderRadius: 5,
+    marginBottom: scaleSpacing(20),
+    paddingLeft: scaleSpacing(10),
+    borderRadius: scaleSize(5),
   },
   button: {
-    width: '80%',
+    width: widthPercentage(80),
     backgroundColor: '#ba5d17',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 5,
-    marginBottom: 20,
+    paddingVertical: scaleSpacing(12),
+    paddingHorizontal: scaleSpacing(12),
+    borderRadius: scaleSize(5),
+    marginBottom: scaleSpacing(20),
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: adaptiveFontSize(14, 16, 17, 18),
     fontWeight: 'bold',
   },
   link: {
     color: '#ba5d17',
-    marginTop: 10,
+    marginTop: scaleSpacing(10),
+    fontSize: adaptiveFontSize(13, 14, 15, 16),
   },
   linkRegister: {
     color: '#ba5d17',
-    marginBottom: 15,
+    marginBottom: scaleSpacing(15),
+    fontSize: adaptiveFontSize(13, 14, 15, 16),
   },
   errorText: {
     color: '#ba5d17',
-    marginBottom: 20,
+    marginBottom: scaleSpacing(20),
+    fontSize: adaptiveFontSize(13, 14, 15, 16),
   },
   languageSwitcherContainer: {
-    marginBottom: 20,
-    marginTop: 5,
-    width: '80%',
+    marginBottom: scaleSpacing(20),
+    marginTop: scaleSpacing(5),
+    width: widthPercentage(80),
   },
 });
 
