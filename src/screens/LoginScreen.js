@@ -135,9 +135,9 @@ const LoginScreen = ({ navigation, route }) => {
       const userDocRef = doc(db, 'users', userId);
   
       // Estructura inicial del usuario
+      // El email no se guarda en Firestore (ya está en Firebase Auth y otros jugadores pueden leer este documento)
       const userData = {
         userId: userId,
-        email: email,
         userName: userName,
         image: '',
         games: {},  // Objeto para almacenar datos de cada partida

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { functions, db } from '../../firebase';
-import { doc, getDoc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { callAuthenticatedFunction } from '../utils/authHelper';
 import { httpsCallable } from 'firebase/functions';
 import styles from '../styles/GameScreenStyles';
@@ -142,7 +142,12 @@ const GameScreen = ({ route }) => {
       // Buscar el juego por gameCode
       console.log('🔍 Buscando juego en Firestore con gameCode:', joinGameCode.toUpperCase());
       const gamesRef = collection(db, 'games');
-      const q = query(gamesRef, where('gameCode', '==', joinGameCode.toUpperCase()));
+      const q = query(
+        gamesRef,
+        where('gameCode', '==', joinGameCode.toUpperCase()),
+        where('status', '==', 'waiting'),
+        limit(1)
+      );
       
       console.log('🔍 Query creada, ejecutando getDocs...');
       const querySnapshot = await getDocs(q);

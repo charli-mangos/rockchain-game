@@ -70,6 +70,7 @@ const RecycleScreen = ({ navigation, route }) => {
       const gameRef = doc(db, 'users', userId);
       await updateDoc(gameRef, {
         [`games.${gameId}.selectedIndustry`]: industry,
+        lastGameId: gameId,
       });
       console.log(`Industry selected and saved for player ${userId}: ${industry}`);
     } catch (error) {

@@ -2394,7 +2394,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
       console.log('⏭️ Marcando como listo vía Firestore (fallback)...');
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
-        [`games.${gameId}.readyForNextRound`]: true
+        [`games.${gameId}.readyForNextRound`]: true,
+        lastGameId: gameId
       });
       setIsReadyForNextRound(true);
       safeNavigate('WaitingRoom');
@@ -3174,7 +3175,8 @@ export const GameProviderHybridRobust = ({ children, gameId, userId }) => {
     try {
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
-        [`games.${gameId}.respondedProblems.${blockId}`]: true
+        [`games.${gameId}.respondedProblems.${blockId}`]: true,
+        lastGameId: gameId
       });
       console.log(`✅ Problema ${blockId} marcado como respondido en Firestore`);
     } catch (error) {

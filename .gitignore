@@ -49,3 +49,6 @@ GoogleService-Info.plist
 android/app/google-services.json
 android/app/debug.keystore
 .firebaserc
+
+# Firebase emulator logs
+*-debug.log

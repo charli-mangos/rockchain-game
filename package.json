@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-rockchain \"node --test tests/firestore.rules.test.mjs\""
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -38,7 +39,8 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "@firebase/rules-unit-testing": "^4.0.1"
   },
   "private": true
 }
