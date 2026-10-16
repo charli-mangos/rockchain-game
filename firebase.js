@@ -5,39 +5,41 @@ import { initializeAuth, getReactNativePersistence, connectAuthEmulator } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
-// Configuración de Firebase
+// Configuración de Firebase: se lee de variables EXPO_PUBLIC_* (ver .env.example)
+const env = process.env;
+
 const firebaseConfig = {
-  apiKey: Platform.OS === 'android' 
-    ? "REDACTED_API_KEY"
-    : "REDACTED_API_KEY",
-  authDomain: "rockchain-83a7f.firebaseapp.com",
-  projectId: "rockchain-83a7f",
-  storageBucket: "rockchain-83a7f.appspot.com",
-  messagingSenderId: "96971331973",
+  apiKey: Platform.OS === 'android'
+    ? env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID || env.EXPO_PUBLIC_FIREBASE_API_KEY
+    : env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS || env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: Platform.OS === 'android'
-    ? "1:96971331973:android:1da409eab4005d4502ccec"
-    : "1:96971331973:ios:50f8effb741b8c9f02ccec",
-};  
+    ? env.EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID
+    : env.EXPO_PUBLIC_FIREBASE_APP_ID_IOS,
+};
 
-// const app = initializeApp(firebaseConfig);
-// const db = getFirestore(app);
-
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.warn('[firebase] Missing EXPO_PUBLIC_FIREBASE_* variables. Copy .env.example to .env');
+}
 
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inicializar Firestore y conectarse al emulador
 const db = getFirestore(app);
-// connectFirestoreEmulator(db, 'localhost', 8080);
-
-// Inicializar Functions y conectarse al emulador
-const functions = getFunctions(app);
-// connectFunctionsEmulator(functions, 'localhost', 5001);
-
-// Inicializar Auth y conectarse al emulador
+const functions = getFunctions(app, env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION || 'us-central1');
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage)
 });
-//connectAuthEmulator(auth, 'http://localhost:9099');
+
+// Emuladores locales (EXPO_PUBLIC_USE_FIREBASE_EMULATORS=true)
+if (env.EXPO_PUBLIC_USE_FIREBASE_EMULATORS === 'true') {
+  const host = env.EXPO_PUBLIC_EMULATOR_HOST || 'localhost';
+  connectFirestoreEmulator(db, host, 8080);
+  connectFunctionsEmulator(functions, host, 5001);
+  connectAuthEmulator(auth, `http://${host}:9099`);
+}
 
 export { db, functions, auth };

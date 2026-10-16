@@ -1,15 +1,10 @@
 // SocketAdapter - Mapea Cloud Run a interfaz legacy
 import { io } from 'socket.io-client';
 
-// Función para determinar si usar autodiscovery
-const shouldUseAutodiscovery = () => {
-  // Si EXPO_PUBLIC_WEBSOCKET_URL está definido, usar Cloud Run
-  if (process.env.EXPO_PUBLIC_WEBSOCKET_URL) {
-    return false;
-  }
-  // Si no, usar autodiscovery local
-  return true;
-};
+// URL del servidor Socket.IO: EXPO_PUBLIC_WEBSOCKET_URL (ver .env.example).
+// Sin ella se usa el servidor local por defecto.
+const DEFAULT_LOCAL_SOCKET_URL = 'ws://localhost:3001';
+const getSocketUrl = () => process.env.EXPO_PUBLIC_WEBSOCKET_URL || DEFAULT_LOCAL_SOCKET_URL;
 
 class SocketAdapter {
   constructor() {
@@ -55,11 +50,9 @@ class SocketAdapter {
   async _doConnect() {
     try {
       // Determinar si usar Cloud Run o servidor local
-      const wsUrl = shouldUseAutodiscovery() 
-        ? 'ws://localhost:3001' 
-        : process.env.EXPO_PUBLIC_WEBSOCKET_URL || 'wss://your-socket-server.example.com';
+      const wsUrl = getSocketUrl();
       
-      const serverType = wsUrl.includes('localhost') ? 'Servidor Local' : 'Cloud Run';
+      const serverType = wsUrl.includes('localhost') ? 'Servidor Local' : 'Remoto';
       console.log(`🔌 [ADAPTER] connecting to <${wsUrl}>`);
       console.log(`🔌 [ADAPTER] server type: ${serverType}`);
       

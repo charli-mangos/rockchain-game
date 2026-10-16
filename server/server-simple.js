@@ -4,16 +4,15 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const admin = require('firebase-admin');
 
-// Configuración para llamadas HTTP a Firebase Functions
-const FIREBASE_FUNCTIONS_URL = 'https://your-region-your-project.cloudfunctions.net';
+// Configuración (ver server/.env.example)
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
+const FIREBASE_FUNCTIONS_URL = process.env.FIREBASE_FUNCTIONS_URL ||
+  (FIREBASE_PROJECT_ID ? `https://us-central1-${FIREBASE_PROJECT_ID}.cloudfunctions.net` : '');
 
-// Inicializar Firebase Admin
+// Inicializar Firebase Admin (credenciales por defecto de la aplicación / ADC)
 if (!admin.apps.length) {
   try {
-    // Para desarrollo local, usar credenciales por defecto del sistema
-  admin.initializeApp({
-    projectId: 'rockchain-83a7f'
-  });
+    admin.initializeApp(FIREBASE_PROJECT_ID ? { projectId: FIREBASE_PROJECT_ID } : undefined);
     console.log('✅ Firebase Admin inicializado correctamente');
   } catch (error) {
     console.error('❌ Error inicializando Firebase Admin:', error.message);
@@ -5038,7 +5037,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor WebSocket RockChain ejecutándose en puerto ${PORT}`);
   console.log(`📡 Socket.IO disponible en ws://0.0.0.0:${PORT}`);
   console.log(`🌐 Status endpoint: http://0.0.0.0:${PORT}/status`);
-  console.log(`🔌 Accesible desde: http://localhost:${PORT}`);
 });
 
 // Manejo de errores del servidor

@@ -2,10 +2,11 @@
 set -euo pipefail
 
 # Configuración
-SERVICE_NAME="rockchain-socket"
-REGION="europe-west1"
-PROJECT_ID="rockchain-83a7f"
-CORS_ORIGINS="https://app.tudominio.com,https://staging.tudominio.com"
+# Configuración (se puede sobrescribir con variables de entorno)
+SERVICE_NAME="${SERVICE_NAME:-rockchain-socket}"
+REGION="${REGION:-europe-west1}"
+PROJECT_ID="${FIREBASE_PROJECT_ID:?Define FIREBASE_PROJECT_ID con el id de tu proyecto Firebase}"
+CORS_ORIGINS="${CORS_ORIGINS:-}"
 
 echo "🚀 Desplegando RockChain Socket Server..."
 
@@ -51,15 +52,20 @@ fi
 echo "☁️  Desplegando en Cloud Run..."
 
 # Desplegar
-gcloud run deploy $SERVICE_NAME \
+# Nota: el servicio es público a nivel de Cloud Run porque lo usa una app móvil,
+# pero cada conexión Socket.IO exige un ID token de Firebase válido (verifyIdToken).
+# El estado de las partidas está en memoria: se limita a una instancia.
+gcloud run deploy "$SERVICE_NAME" \
   --source . \
-  --region $REGION \
+  --project "$PROJECT_ID" \
+  --region "$REGION" \
   --allow-unauthenticated \
+  --set-env-vars "FIREBASE_PROJECT_ID=$PROJECT_ID,CORS_ORIGINS=$CORS_ORIGINS" \
   --port 8080 \
   --memory 512Mi \
   --cpu 1 \
   --min-instances 0 \
-  --max-instances 10 \
+  --max-instances 1 \
   --timeout 300s \
   --concurrency 1000 \
   --platform managed
@@ -92,8 +98,7 @@ echo ""
 echo "📝 Próximos pasos:"
 echo "1. Configurar cliente RN con URL: $SERVICE_URL"
 echo "2. (Opcional) Mapear dominio personalizado:"
-echo "   gcloud run domain-mappings create --service $SERVICE_NAME --domain socket.tudominio.com --region $REGION"
-echo "3. (Opcional) Configurar Redis para escalado (ver README_DEPLOY.md)"
+echo "   gcloud run domain-mappings create --service $SERVICE_NAME --domain <tu-dominio> --region $REGION"
 echo ""
 echo "🔧 Comandos útiles:"
 echo "• Ver logs: gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE_NAME' --limit 100"
