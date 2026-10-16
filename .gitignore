@@ -42,3 +42,9 @@ service-account*.json
 .env
 .env.*
 !.env.example
+
+# Firebase client config (copy from the *.example templates)
+google-services.json
+GoogleService-Info.plist
+android/app/google-services.json
+android/app/debug.keystore
