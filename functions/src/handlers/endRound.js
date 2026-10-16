@@ -1,5 +1,7 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { HttpsError } = require('firebase-functions/v2/https');
+const { requireAuth, requireId, assertParticipant } = require('../utils/auth');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -9,7 +11,9 @@ exports.endRound = onCall({
   maxInstances: 10,
   memory: '256MiB',
 }, async (request) => {
-  const { gameId } = request.data;
+  const userId = requireAuth(request);
+  const { gameId } = request.data || {};
+  requireId(gameId, 'gameId');
   console.log(`🔄 endRound llamado con gameId: ${gameId}`);
 
   if (!gameId) {
@@ -27,6 +31,7 @@ exports.endRound = onCall({
     }
 
     const gameData = gameDoc.data();
+    assertParticipant(gameData, userId);
     const { status, round } = gameData;
 
     // Solo terminar la ronda si está en progreso
@@ -94,6 +99,7 @@ exports.endRound = onCall({
 
   } catch (error) {
     console.error('❌ Error al terminar la ronda:', error);
+    if (error instanceof HttpsError) throw error;
     throw new Error('Failed to end round');
   }
 }); 

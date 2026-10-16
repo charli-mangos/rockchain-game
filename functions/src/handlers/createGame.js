@@ -1,5 +1,6 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { requireAuth } = require('../utils/auth');
 const { assignProductsToGame } = require('./assignProductsToGame');
 
 if (!admin.apps.length) {
@@ -16,13 +17,8 @@ exports.createGame = onCall({
   retry: false,
   ingressSettings: 'ALLOW_ALL'
 }, async (request) => {
-  const userId = request.auth?.uid;
+  const userId = requireAuth(request);
   const gameCode = generateGameCode();
-
-  if (!userId) {
-    console.error('❌ User ID is missing');
-    throw new Error('User ID is required.');
-  }
 
   const gameData = {
     gameCode: gameCode,

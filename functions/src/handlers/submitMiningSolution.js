@@ -1,6 +1,8 @@
 const { onCall } = require("firebase-functions/v2/https");
 const admin = require('firebase-admin');
-const { httpsCallable } = require('firebase-functions/v2/https');
+const { HttpsError } = require('firebase-functions/v2/https');
+const { requireAuth, requireId, assertParticipant } = require('../utils/auth');
+const { evaluateRound } = require('./evaluateRound');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -12,12 +14,14 @@ exports.submitMiningSolution = onCall({
 }, async (request) => {
   // Log para depuración
   console.log('🔄 Request data recibida:', request.data);
-  console.log('🔑 Auth data:', request.auth);
   
-  const { gameId, blockId, response, responseTime, isCorrect, timestamp } = request.data || {};
-  const userId = request.auth?.uid;
+  // isCorrect ya no se acepta del cliente: el resultado se calcula en el servidor
+  const { gameId, blockId, response, responseTime, timestamp } = request.data || {};
+  const userId = requireAuth(request);
+  requireId(gameId, 'gameId');
+  requireId(blockId, 'blockId');
 
-  console.log('📊 Datos extraídos:', { gameId, blockId, response, responseTime, userId, isCorrect, timestamp });
+  console.log('📊 Datos extraídos:', { gameId, blockId, response, responseTime, userId, timestamp });
 
   // Validación de parámetros
   if (!userId) {
@@ -97,8 +101,7 @@ exports.submitMiningSolution = onCall({
       throw new Error('Invalid response format');
     }
 
-    // Usar isCorrect del cliente si está disponible, sino calcularlo
-    const isWinner = isCorrect !== undefined ? isCorrect : (userResponse === correctAnswer);
+    const isWinner = userResponse === correctAnswer;
     console.log('✅ Verificación de respuesta:', {
       userResponse,
       correctAnswer,
@@ -180,9 +183,8 @@ exports.submitMiningSolution = onCall({
           
           // Llamar a evaluateRound para finalizar la ronda de manera más robusta
           try {
-            const evaluateRoundFunction = httpsCallable(functions, 'evaluateRound');
-            const evaluateResult = await evaluateRoundFunction({ gameId });
-            console.log('✅ evaluateRound resultado:', evaluateResult.data);
+            const evaluateResult = await evaluateRound({ gameId });
+            console.log('✅ evaluateRound resultado:', evaluateResult);
           } catch (error) {
             console.error('❌ Error llamando a evaluateRound:', error);
             // Si falla evaluateRound, usar la lógica anterior como respaldo
@@ -250,6 +252,7 @@ exports.submitMiningSolution = onCall({
       totalPlayers
     };
   } catch (error) {
+    if (error instanceof HttpsError) throw error;
     console.error('❌ Error procesando respuesta:', {
       error,
       errorMessage: error.message,

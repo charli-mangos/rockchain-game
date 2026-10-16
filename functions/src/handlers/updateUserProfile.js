@@ -1,5 +1,6 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { requireAuth, sanitizeUserName, sanitizeImageUrl } = require('../utils/auth');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -14,20 +15,13 @@ exports.updateUserProfile = onCall({
   
   // Extraer datos de la petición
   const { userName, imageUrl } = request.data || {};
-  const userId = request.auth?.uid;
+  const userId = requireAuth(request);
 
   console.log(`🎯 Actualizando perfil del usuario ${userId}`);
 
   // Validaciones básicas
-  if (!userId) {
-    console.error('❌ Usuario no autenticado');
-    throw new Error('Authentication required');
-  }
-
-  if (!userName || userName.trim() === '') {
-    console.error('❌ Nombre de usuario requerido');
-    throw new Error('User name is required');
-  }
+  const cleanUserName = sanitizeUserName(userName);
+  const cleanImageUrl = sanitizeImageUrl(imageUrl);
 
   try {
     // 1. VERIFICAR QUE EL USUARIO EXISTE
@@ -44,13 +38,13 @@ exports.updateUserProfile = onCall({
     console.log(`🔄 Actualizando perfil del usuario ${userId}`);
     
     const updateData = {
-      userName: userName.trim(),
+      userName: cleanUserName,
       lastUpdated: admin.firestore.FieldValue.serverTimestamp()
     };
 
     // Solo agregar imageUrl si se proporciona
-    if (imageUrl && imageUrl.trim() !== '') {
-      updateData.imageUrl = imageUrl.trim();
+    if (cleanImageUrl) {
+      updateData.imageUrl = cleanImageUrl;
     }
 
     await userRef.update(updateData);
@@ -95,8 +89,8 @@ exports.updateUserProfile = onCall({
           .doc(gameId);
         
         batch.set(userGameRef, {
-          userName: userName.trim(),
-          imageUrl: imageUrl || null,
+          userName: cleanUserName,
+          imageUrl: cleanImageUrl,
           lastUpdated: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
 
@@ -116,8 +110,8 @@ exports.updateUserProfile = onCall({
     const response = {
       success: true,
       message: 'User profile updated successfully',
-      userName: userName.trim(),
-      imageUrl: imageUrl || null
+      userName: cleanUserName,
+      imageUrl: cleanImageUrl
     };
 
     console.log(`✅ Perfil del usuario ${userId} actualizado exitosamente`);

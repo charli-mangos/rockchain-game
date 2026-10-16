@@ -1,5 +1,6 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { requireAuth, requireId } = require('../utils/auth');
 const { updateProductPrices } = require('./updateProductPrices');
 const { selectWinningIndustry } = require('./selectWinningIndustry');
 const { assignProductsToGame } = require('./assignProductsToGame');
@@ -23,15 +24,12 @@ exports.startNextRound = onCall({
   
   // Extraer datos de la petición
   const { gameId } = request.data || {};
-  const userId = request.auth?.uid;
+  requireId(gameId, 'gameId');
+  const userId = requireAuth(request);
 
   console.log(`🎯 Iniciando siguiente ronda para juego ${gameId} por usuario ${userId}`);
 
   // Validaciones básicas
-  if (!userId) {
-    console.error('❌ Usuario no autenticado');
-    throw new Error('Authentication required');
-  }
 
   if (!gameId || gameId.trim() === '') {
     console.error('❌ Game ID requerido');

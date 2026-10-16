@@ -1,5 +1,6 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { requireAuth, requireId } = require('../utils/auth');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -14,15 +15,12 @@ exports.leaveGame = onCall({
   
   // Extraer datos de la petición
   const { gameId } = request.data || {};
-  const userId = request.auth?.uid;
+  requireId(gameId, 'gameId');
+  const userId = requireAuth(request);
 
   console.log(`🎯 Jugador ${userId} saliendo del juego ${gameId}`);
 
   // Validaciones básicas
-  if (!userId) {
-    console.error('❌ Usuario no autenticado');
-    throw new Error('Authentication required');
-  }
 
   if (!gameId || gameId.trim() === '') {
     console.error('❌ Game ID requerido');

@@ -1,5 +1,6 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { requireAuth, requireId } = require('../utils/auth');
 const { selectWinningIndustry } = require('./selectWinningIndustry');
 
 if (!admin.apps.length) {
@@ -16,14 +17,9 @@ exports.startGame = onCall({
   retry: false,
   ingressSettings: 'ALLOW_ALL'
 }, async (request) => {
-  // Verificar autenticación
-  if (!request.auth) {
-    console.error('❌ No se proporcionó autenticación');
-    throw new Error('Authentication required');
-  }
-
-  const userId = request.auth.uid;
-  const { gameId } = request.data;
+  const userId = requireAuth(request);
+  const { gameId } = request.data || {};
+  requireId(gameId, 'gameId');
   console.log(`🔄 startGame llamado con gameId: ${gameId} por usuario: ${userId}`);
 
   if (!gameId) {

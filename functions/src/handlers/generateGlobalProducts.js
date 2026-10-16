@@ -1,4 +1,3 @@
-const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const { MarbleTypes, ProductTemplates } = require('../utils/marbleUtils');
 
@@ -47,13 +46,4 @@ const generateProductsInternal = async () => {
   }
 };
 
-// Función HTTP callable (mantener para compatibilidad)
-exports.generateGlobalProducts = onCall({
-  maxInstances: 10,
-  memory: '256MiB',
-}, async (request) => {
-  return await generateProductsInternal();
-});
-
-// Exportar la función interna para uso en otros handlers
-exports.generateProductsInternal = generateProductsInternal;
+module.exports = { generateProductsInternal };

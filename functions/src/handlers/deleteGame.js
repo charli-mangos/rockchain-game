@@ -1,5 +1,6 @@
 const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const { requireAuth, requireId } = require('../utils/auth');
 
 // Inicializa Firebase Admin si no está inicializado
 if (!admin.apps.length) {
@@ -11,14 +12,10 @@ exports.deleteGame = onCall({
   memory: '256MiB',
 }, async (request) => {
   const { gameId } = request.data || {};
-  const userId = request.auth?.uid;
+  requireId(gameId, 'gameId');
+  const userId = requireAuth(request);
 
   console.log(`🗑️ deleteGame llamado con gameId: ${gameId} por usuario: ${userId}`);
-
-  if (!userId) {
-    console.error('❌ No se proporcionó userId');
-    throw new Error('Authentication required');
-  }
 
   if (!gameId) {
     console.error('❌ No se proporcionó gameId');

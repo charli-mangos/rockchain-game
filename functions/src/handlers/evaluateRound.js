@@ -1,15 +1,12 @@
-const { onCall } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-exports.evaluateRound = onCall({
-  maxInstances: 10,
-  memory: '256MiB',
-}, async (request) => {
-  const { gameId } = request.data || {};
+// Evalúa y cierra la ronda cuando todos los bloques están completados.
+// Función interna (no expuesta como endpoint): la llama submitMiningSolution.
+const evaluateRound = async ({ gameId }) => {
   console.log(`🔄 evaluateRound llamado con gameId: ${gameId}`);
 
   if (!gameId) {
@@ -141,4 +138,6 @@ exports.evaluateRound = onCall({
     console.error('❌ Error en evaluateRound:', error);
     throw new Error('Failed to evaluate round');
   }
-}); 
+};
+
+module.exports = { evaluateRound };

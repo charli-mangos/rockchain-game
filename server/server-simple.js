@@ -6,8 +6,6 @@ const admin = require('firebase-admin');
 
 // Configuración (ver server/.env.example)
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
-const FIREBASE_FUNCTIONS_URL = process.env.FIREBASE_FUNCTIONS_URL ||
-  (FIREBASE_PROJECT_ID ? `https://us-central1-${FIREBASE_PROJECT_ID}.cloudfunctions.net` : '');
 
 // Inicializar Firebase Admin (credenciales por defecto de la aplicación / ADC)
 if (!admin.apps.length) {
@@ -4811,54 +4809,7 @@ io.on('connection', (socket) => {
     
     console.log(`✅ [SERVER] Siguiente ronda ${room.round} iniciada para juego ${gameId}`);
     
-    // LLAMAR A FIREBASE FUNCTIONS PARA ACTUALIZAR DATOS DE LA NUEVA RONDA
-    console.log(`🔄 [FIREBASE] Actualizando datos para ronda ${room.round}...`);
-    try {
-      // 1. Seleccionar industria ganadora
-      console.log(`🏭 [FIREBASE] Seleccionando industria ganadora...`);
-      const selectIndustryResponse = await fetch(`${FIREBASE_FUNCTIONS_URL}/selectWinningIndustry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameId })
-      });
-      if (selectIndustryResponse.ok) {
-        console.log(`✅ [FIREBASE] Industria ganadora seleccionada`);
-      } else {
-        console.log(`⚠️ [FIREBASE] Error seleccionando industria ganadora`);
-      }
-      
-      // 2. Actualizar precios de productos
-      console.log(`💰 [FIREBASE] Actualizando precios para ronda ${room.round}...`);
-      const updatePricesResponse = await fetch(`${FIREBASE_FUNCTIONS_URL}/updateProductPrices`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameId, round: room.round })
-      });
-      if (updatePricesResponse.ok) {
-        console.log(`✅ [FIREBASE] Precios actualizados`);
-      } else {
-        console.log(`⚠️ [FIREBASE] Error actualizando precios`);
-      }
-      
-      // 3. Asignar productos al juego
-      console.log(`📦 [FIREBASE] Asignando productos para ronda ${room.round}...`);
-      const assignProductsResponse = await fetch(`${FIREBASE_FUNCTIONS_URL}/assignProductsToGame`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameId, round: room.round })
-      });
-      if (assignProductsResponse.ok) {
-        console.log(`✅ [FIREBASE] Productos asignados`);
-      } else {
-        console.log(`⚠️ [FIREBASE] Error asignando productos`);
-      }
-      
-      console.log(`✅ [FIREBASE] Datos de ronda ${room.round} actualizados exitosamente`);
-    } catch (error) {
-      console.error(`❌ [FIREBASE] Error actualizando datos para ronda ${room.round}:`, error);
-      // Continuar con la ronda aunque haya error en Firebase Functions
-      console.log(`⚠️ [FIREBASE] Continuando con la ronda a pesar del error`);
-    }
+    // Los datos de mercado de la nueva ronda los genera este servidor (ver round:ready).
     
     // Notificar a todos los jugadores sobre la nueva ronda
     emitToGame(gameId, 'new_round', {
