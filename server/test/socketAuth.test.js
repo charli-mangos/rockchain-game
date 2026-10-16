@@ -96,3 +96,19 @@ test('CORS allows native clients and listed origins only', () => {
   assert.equal(isOriginAllowed('https://evil.example', allowed), false);
   assert.equal(isOriginAllowed('https://evil.example', parseCorsOrigins('')), false);
 });
+
+test('production silences debug logs unless LOG_LEVEL=debug', () => {
+  const { configureConsole } = require('../lib/logger');
+  const fake = () => ({ log: 'L', info: 'I', debug: 'D', warn: 'W', error: 'E' });
+  const prod = fake();
+  assert.equal(configureConsole({ NODE_ENV: 'production' }, prod), 'warn');
+  assert.notEqual(prod.log, 'L');
+  assert.equal(prod.warn, 'W');
+  assert.equal(prod.error, 'E');
+  const dbg = fake();
+  configureConsole({ NODE_ENV: 'production', LOG_LEVEL: 'debug' }, dbg);
+  assert.equal(dbg.log, 'L');
+  const dev = fake();
+  configureConsole({}, dev);
+  assert.equal(dev.log, 'L');
+});
