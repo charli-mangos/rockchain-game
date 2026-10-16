@@ -1,0 +1,59 @@
+name: security
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1' # todos los lunes
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: npm audit (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [., functions, server]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit --audit-level=high
+        working-directory: ${{ matrix.dir }}
+        # La app (.) arrastra avisos de Expo SDK 53 / React Native 0.79 que solo
+        # se resuelven actualizando el SDK: se informa sin bloquear hasta entonces.
+        continue-on-error: ${{ matrix.dir == '.' }}
+        run: npm audit --audit-level=high
+
+  tests:
+    name: Unit tests (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [functions, server]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - working-directory: ${{ matrix.dir }}
+        run: |
+          npm ci --ignore-scripts
+          npm test
