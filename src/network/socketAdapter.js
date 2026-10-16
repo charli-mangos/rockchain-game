@@ -1,5 +1,6 @@
 // SocketAdapter - Mapea Cloud Run a interfaz legacy
 import { io } from 'socket.io-client';
+import { auth } from '../../firebase';
 
 // URL del servidor Socket.IO: EXPO_PUBLIC_WEBSOCKET_URL (ver .env.example).
 // Sin ella se usa el servidor local por defecto.
@@ -57,9 +58,20 @@ class SocketAdapter {
       console.log(`🔌 [ADAPTER] server type: ${serverType}`);
       
       // Crear socket
+      // El servidor exige un ID token de Firebase en cada conexión (y en cada reconexión)
       this.socket = io(wsUrl, {
         transports: ['websocket'],
         autoConnect: true,
+        auth: (cb) => {
+          const user = auth.currentUser;
+          if (!user) {
+            cb({});
+            return;
+          }
+          user.getIdToken()
+            .then((token) => cb({ token }))
+            .catch(() => cb({}));
+        },
       });
 
       // Configurar eventos

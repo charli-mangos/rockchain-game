@@ -3,6 +3,17 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
+const {
+  createSocketAuthMiddleware,
+  bindPayloadToUser,
+  canActOnGame,
+  canJoinGame,
+  EVENTS_WITHOUT_ROOM_CHECK,
+  parseCorsOrigins,
+  corsOriginCallback,
+} = require('./lib/socketAuth');
+const { rememberMarket, resolvePurchase, resolveSale, resolveTransform } = require('./lib/economy');
 
 // Configuración (ver server/.env.example)
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
@@ -20,13 +31,19 @@ if (!admin.apps.length) {
 
 const app = express();
 const server = http.createServer(app);
+// CORS: solo los orígenes de CORS_ORIGINS (los clientes nativos no envían Origin)
+const CORS_ORIGINS = parseCorsOrigins(process.env.CORS_ORIGINS);
 const io = socketIo(server, {
   cors: {
-    origin: "*",
+    origin: corsOriginCallback(CORS_ORIGINS),
     methods: ["GET", "POST"]
   },
-  transports: ['polling', 'websocket']
+  transports: ['polling', 'websocket'],
+  maxHttpBufferSize: 100 * 1024 // 100 KB por mensaje
 });
+
+// Toda conexión debe presentar un ID token de Firebase válido
+io.use(createSocketAuthMiddleware((token) => admin.auth().verifyIdToken(token)));
 
 // Log de conexiones
 io.on('connection', (socket) => {
@@ -39,8 +56,8 @@ io.on('connection', (socket) => {
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: corsOriginCallback(CORS_ORIGINS) }));
+app.use(express.json({ limit: '100kb' }));
 
 // Health check endpoint para Cloud Run
 app.get('/healthz', (req, res) => {
@@ -67,6 +84,7 @@ const playerInventories = new Map(); // gameId -> { userId -> { products: [], ro
 const minedBlocks = new Map(); // gameId -> [block1, block2, ...]
 const playerRankings = new Map(); // gameId -> { userId -> { blocksMined: 0, totalRewards: 0 } }
 const miningProblems = new Map(); // blockId -> problemData
+const gameMarkets = new Map(); // gameId -> Map(productId -> producto) del mercado de la ronda actual
 
 // SISTEMA AUTORITATIVO DE COORDINACIÓN EN TIEMPO REAL
 const gameAuthorities = new Map(); // gameId -> { roundId, version, roundStartAtMs, roundEndsAtMs, serverNowMs }
@@ -873,7 +891,9 @@ const generateMiningProblem = (gameId, transactionDetails) => {
   const num2 = Math.floor(Math.random() * 10) + 1;
   const operation = operations[Math.floor(Math.random() * operations.length)];
   const problem = `${num1} ${operation} ${num2}`;
-  const solution = eval(`${num1} ${operation} ${num2}`);
+  const solution = operation === '+' ? num1 + num2
+    : operation === '-' ? num1 - num2
+    : num1 * num2;
   
   const miningProblem = {
     id: blockId,
@@ -1367,6 +1387,9 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
   
   console.log(`✅ [MARKET] Mercado generado exitosamente para ronda ${round}: ${products.length} productos válidos y consistentes`);
   
+  // Precios de referencia para validar las transacciones de esta ronda
+  rememberMarket(gameMarkets, gameId, products);
+
   return {
     products: products,
     round: round,
@@ -2401,6 +2424,37 @@ const updatePlayerRanking = (gameId, userId, updates) => {
 // Manejo de conexiones
 io.on('connection', (socket) => {
   console.log(`🔌 Nuevo cliente conectado: ${socket.id}`);
+  const uid = socket.data.uid;
+
+  // Todos los eventos usan el uid verificado del token (se ignora el userId del cliente)
+  // y, salvo join_game, solo se aceptan de jugadores que están en la sala.
+  const rawOn = socket.on.bind(socket);
+  socket.on = (event, handler) => rawOn(event, async (payload, ...rest) => {
+    const data = bindPayloadToUser(payload, uid);
+    try {
+      if (event === 'join_game') {
+        if (!data || typeof data.gameId !== 'string' || !data.gameId) return;
+        const gameDoc = await admin.firestore().collection('games').doc(data.gameId).get();
+        const gameData = gameDoc.exists ? gameDoc.data() : null;
+        if (!canJoinGame(gameData, uid)) {
+          socket.emit('error', { message: 'No perteneces a esta partida.' });
+          return;
+        }
+        const room = getGameRoom(data.gameId);
+        if (!room.hostId) room.hostId = gameData.hostId;
+      } else if (!EVENTS_WITHOUT_ROOM_CHECK.has(event) && data && data.gameId !== undefined) {
+        if (!canActOnGame(gameRooms.get(data.gameId), uid)) {
+          socket.emit('error', { message: 'No perteneces a esta partida.' });
+          return;
+        }
+      }
+    } catch (error) {
+      console.error(`❌ [AUTH] Error comprobando acceso para ${event}:`, error.message);
+      socket.emit('error', { message: 'No se pudo comprobar el acceso a la partida.' });
+      return;
+    }
+    return handler(data, ...rest);
+  });
 
   // Manejo de errores del socket
   socket.on('error', (error) => {
@@ -2447,7 +2501,7 @@ io.on('connection', (socket) => {
       });
       
       // Si es el primer jugador, asignar como host
-      if (room.players.length === 1) {
+      if (room.players.length === 1 && !room.hostId) {
         room.hostId = userId;
       }
     }
@@ -4082,25 +4136,6 @@ io.on('connection', (socket) => {
   });
 
   // Nuevo problema de minado generado (legacy - mantener por compatibilidad)
-  socket.on('new_mining_problem', ({ gameId, blockId, problemData }) => {
-    console.log(`⛏️ Nuevo problema de minado generado (legacy) en juego ${gameId}, bloque ${blockId}`);
-    
-    const room = getGameRoom(gameId);
-    
-    // Notificar a todos los jugadores en el juego
-    emitToGame(gameId, 'new_mining_problem', {
-      blockId,
-      problemData: {
-        ...problemData,
-        round: room.round || 1
-      },
-      round: room.round || 1,
-      timestamp: Date.now()
-    });
-    
-    console.log(`✅ Problema de minado notificado a todos los jugadores del juego ${gameId}`);
-  });
-
   // Limpiar miningQueue al salir del minado
   socket.on('clear_mining_queue', ({ gameId, userId }) => {
     console.log(`🧹 Limpiando miningQueue para ${userId} en juego ${gameId}`);
@@ -4283,6 +4318,34 @@ io.on('connection', (socket) => {
     });
     
     const inventory = getPlayerInventory(gameId, userId);
+
+    // Validar la transacción con datos del servidor: precio, residuo y propiedad del producto
+    const market = gameMarkets.get(gameId);
+    let resolved;
+    if (transactionType === 'purchase') {
+      resolved = resolvePurchase({ inventory, market, requested: product });
+    } else if (transactionType === 'sell') {
+      resolved = resolveSale({ inventory, market, requested: product });
+    } else if (transactionType === 'transform') {
+      resolved = resolveTransform({
+        inventory,
+        requested: product,
+        proposedId: transformedProduct && transformedProduct.id,
+        generateId: () => `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
+      });
+    } else {
+      resolved = { ok: false, reason: 'invalid_data', message: 'Tipo de transacción no válido' };
+    }
+    if (!resolved.ok) {
+      socket.emit('transaction_failed', { reason: resolved.reason, message: resolved.message });
+      return;
+    }
+    if (transactionType === 'transform') {
+      transformedProduct = resolved.product;
+      wasteExtra = resolved.wasteExtra;
+    } else {
+      product = resolved.product;
+    }
     
     if (transactionType === 'purchase') {
       // Verificar si tiene suficientes RockCoins
