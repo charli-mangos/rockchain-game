@@ -5,7 +5,7 @@ RUN apk add --no-cache dumb-init
 
 # Crear usuario no-root
 RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
+RUN adduser -S rockchain -u 1001 -G nodejs
 
 # Establecer directorio de trabajo
 WORKDIR /app
@@ -20,8 +20,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY . .
 
 # Cambiar propietario de los archivos
-RUN chown -R nextjs:nodejs /app
-USER nextjs
+RUN chown -R rockchain:nodejs /app
+USER rockchain
 
 # Variables de entorno
 ENV PORT=8080
