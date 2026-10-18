@@ -95,14 +95,18 @@ The `security` GitHub Actions workflow runs gitleaks, `npm audit` and the unit t
 
 ## My role
 
-<!-- TODO(Charli): describe your role -->
+I was the sole developer of RockChain, working as an R&D developer at CTM. Between May 2025 and January 2026 I designed and built the whole stack:
+
+- the React Native / Expo mobile app (game flow, market, mining, rankings, tutorial and translations into five languages);
+- the Firestore data model and security rules;
+- the Cloud Functions that run game creation, rounds and mining;
+- the real-time Socket.IO game server and its deployment to Cloud Run.
 
 ## Credits and project context
 
-<!-- TODO(Charli): pending confirmation with CTM — project name, Erasmus+ reference,
-     partners, funding acknowledgement and logos, as required by the grant agreement. -->
+RockChain was developed at CTM (Centro Tecnológico del Mármol, Piedra y Materiales, Spain) within an Erasmus+ project carried out by a European consortium, and is published with CTM's permission.
 
-RockChain was developed at CTM (Centro Tecnológico del Mármol) within an Erasmus+ project. *Details pending confirmation.*
+> Co-funded by the European Union. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Education and Culture Executive Agency (EACEA). Neither the European Union nor EACEA can be held responsible for them.
 
 ## License
 
