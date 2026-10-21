@@ -1,10 +1,11 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth, requireId } = require('../utils/auth');
 
 // Inicializa Firebase Admin si no está inicializado
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.deleteGame = onCall({
@@ -23,7 +24,7 @@ exports.deleteGame = onCall({
   }
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
     const batch = db.batch();
 
     // Verificar que el juego existe y que el usuario es el host
@@ -67,7 +68,7 @@ exports.deleteGame = onCall({
     // Eliminar datos del usuario para este juego específico
     const userRef = db.collection('users').doc(userId);
     batch.update(userRef, {
-      [`games.${gameId}`]: admin.firestore.FieldValue.delete()
+      [`games.${gameId}`]: FieldValue.delete()
     });
 
     // Ejecutar el batch

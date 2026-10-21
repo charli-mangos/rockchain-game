@@ -1,10 +1,11 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth } = require('../utils/auth');
 const { assignProductsToGame } = require('./assignProductsToGame');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.createGame = onCall({
@@ -25,7 +26,7 @@ exports.createGame = onCall({
     players: [userId],
     playerCount: 1,
     maxPlayers: 5,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     status: 'waiting',
     version: '1.0.0',
     hostId: userId,
@@ -35,7 +36,7 @@ exports.createGame = onCall({
 
   try {
     // Eliminar juegos existentes solo para este usuario
-    const db = admin.firestore();
+    const db = getFirestore();
     const batch = db.batch();
 
     // Buscar juegos donde este usuario es el host
@@ -100,7 +101,7 @@ exports.createGame = onCall({
         products: [],
         gameCode: gameCode,
         status: 'waiting',
-        joinedAt: admin.firestore.FieldValue.serverTimestamp()
+        joinedAt: FieldValue.serverTimestamp()
       }
     });
 

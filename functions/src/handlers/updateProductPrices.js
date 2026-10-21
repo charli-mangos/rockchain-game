@@ -1,9 +1,10 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 const { assignProductsToGame } = require('./assignProductsToGame');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 const maxPrice = 200;
@@ -30,7 +31,7 @@ const updateProductPrices = async ({ gameId, round }) => {
     throw new Error('Game ID and round are required.');
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const gameRef = db.collection('games').doc(gameId);
   const marketRef = db.collection('market').doc(gameId);
 

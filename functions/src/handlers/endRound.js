@@ -1,10 +1,11 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { requireAuth, requireId, assertParticipant } = require('../utils/auth');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.endRound = onCall({
@@ -21,7 +22,7 @@ exports.endRound = onCall({
     throw new Error('Game ID is required.');
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const gameRef = db.collection('games').doc(gameId);
 
   try {

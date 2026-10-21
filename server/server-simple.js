@@ -5,7 +5,9 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const crypto = require('crypto');
 const {
   createSocketAuthMiddleware,
@@ -22,9 +24,9 @@ const { rememberMarket, resolvePurchase, resolveSale, resolveTransform } = requi
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 
 // Inicializar Firebase Admin (credenciales por defecto de la aplicación / ADC)
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
-    admin.initializeApp(FIREBASE_PROJECT_ID ? { projectId: FIREBASE_PROJECT_ID } : undefined);
+    initializeApp(FIREBASE_PROJECT_ID ? { projectId: FIREBASE_PROJECT_ID } : undefined);
     console.log('✅ Firebase Admin inicializado correctamente');
   } catch (error) {
     console.error('❌ Error inicializando Firebase Admin:', error.message);
@@ -46,7 +48,7 @@ const io = socketIo(server, {
 });
 
 // Toda conexión debe presentar un ID token de Firebase válido
-io.use(createSocketAuthMiddleware((token) => admin.auth().verifyIdToken(token)));
+io.use(createSocketAuthMiddleware((token) => getAuth().verifyIdToken(token)));
 
 // Log de conexiones
 io.on('connection', (socket) => {
@@ -379,16 +381,16 @@ const applyAtomicReward = async (gameId, userId, rewardAmount, operationId) => {
     playerInventories.set(gameId, gameInventory);
     
     // CRÍTICO: Persistir inmediatamente en Firestore
-    if (admin.apps.length) {
+    if (getApps().length) {
       try {
-        const userRef = admin.firestore().collection('users').doc(userId);
+        const userRef = getFirestore().collection('users').doc(userId);
         await userRef.update({
           [`games.${gameId}.rockCoins`]: newRockCoins,
           [`games.${gameId}.waste`]: typeof userInventory.waste === 'number' && !isNaN(userInventory.waste) 
             ? userInventory.waste 
             : 0,
           [`games.${gameId}.products`]: userInventory.products,
-          [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+          [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
         });
         console.log(`💾 [ATOMIC] Inventario persistido en Firestore para ${userId}: rockCoins=${newRockCoins}`);
       } catch (firestoreError) {
@@ -507,9 +509,9 @@ const calculateRoundRewards = async (gameId, round) => {
       let didPlayerGuessCorrectly = false;
       
       // Leer selectedIndustry desde Firestore
-      if (admin.apps.length) {
+      if (getApps().length) {
         try {
-          const userRef = admin.firestore().collection('users').doc(player.userId);
+          const userRef = getFirestore().collection('users').doc(player.userId);
           const userDoc = await userRef.get();
           
           if (userDoc.exists) {
@@ -591,16 +593,16 @@ const calculateRoundRewards = async (gameId, round) => {
         playerInventories.set(gameId, gameInventory);
         
         // CRÍTICO: Persistir inmediatamente en Firestore
-        if (admin.apps.length) {
+        if (getApps().length) {
           try {
-            const userRef = admin.firestore().collection('users').doc(winner.userId);
+            const userRef = getFirestore().collection('users').doc(winner.userId);
             await userRef.update({
               [`games.${gameId}.waste`]: newWaste,
               [`games.${gameId}.rockCoins`]: typeof inventory.rockCoins === 'number' && !isNaN(inventory.rockCoins) 
                 ? inventory.rockCoins 
                 : 600,
               [`games.${gameId}.products`]: Array.isArray(inventory.products) ? inventory.products : [],
-              [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+              [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
             });
             console.log(`💾 [ROUND][WASTE] Waste persistido en Firestore para ${winner.userId}: waste=${newWaste}`);
           } catch (firestoreError) {
@@ -672,9 +674,9 @@ const calculateRoundRewards = async (gameId, round) => {
     
     // 6.5.1. CRÍTICO: Persistir inventarios normalizados en Firestore en batch
     console.log(`💾 [ROUND][CALC] Persistiendo inventarios normalizados en Firestore en batch...`);
-    if (admin.apps.length) {
+    if (getApps().length) {
       try {
-        const db = admin.firestore();
+        const db = getFirestore();
         const batch = db.batch();
         
         for (const player of room.players) {
@@ -696,7 +698,7 @@ const calculateRoundRewards = async (gameId, round) => {
             [`games.${gameId}.rockCoins`]: normalized.rockCoins,
             [`games.${gameId}.waste`]: normalized.waste,
             [`games.${gameId}.products`]: normalized.products,
-            [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+            [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
           });
         }
         
@@ -731,7 +733,7 @@ const calculateRoundRewards = async (gameId, round) => {
                   [`games.${gameId}.rockCoins`]: normalized.rockCoins,
                   [`games.${gameId}.waste`]: normalized.waste,
                   [`games.${gameId}.products`]: normalized.products,
-                  [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+                  [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
                 });
                 console.log(`✅ [ROUND][CALC] Valores corregidos en Firestore para ${player.userId}`);
               }
@@ -749,12 +751,12 @@ const calculateRoundRewards = async (gameId, round) => {
             const normalized = normalizedInventories.get(player.userId);
             if (!normalized) continue;
             
-            const userRef = admin.firestore().collection('users').doc(player.userId);
+            const userRef = getFirestore().collection('users').doc(player.userId);
             await userRef.update({
               [`games.${gameId}.rockCoins`]: normalized.rockCoins,
               [`games.${gameId}.waste`]: normalized.waste,
               [`games.${gameId}.products`]: normalized.products,
-              [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+              [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
             });
             console.log(`✅ [ROUND][CALC] Inventario persistido individualmente para ${player.userId}`);
           } catch (individualError) {
@@ -931,7 +933,7 @@ const generateMiningProblem = (gameId, transactionDetails) => {
 const syncGameToFirestore = async (gameId, room) => {
   try {
     // Verificar si Firebase Admin está disponible
-    if (!admin.apps.length) {
+    if (!getApps().length) {
       console.log(`⚠️ Firebase Admin no disponible, saltando sincronización para juego ${gameId}`);
       return;
     }
@@ -939,15 +941,15 @@ const syncGameToFirestore = async (gameId, room) => {
     console.log(`📡 WebSocket: Sincronizando estado del juego ${gameId} con Firestore`);
   console.log(`📡 WebSocket: Estado actual - ${room.status}, Jugadores: ${room.players.length}`);
     
-    const gameRef = admin.firestore().collection('games').doc(gameId);
+    const gameRef = getFirestore().collection('games').doc(gameId);
     
     // Sincronizar estado del juego
     await gameRef.update({
       status: room.status,
       round: Math.max(1, room.round || 1),
-      roundTime: room.roundTime ? admin.firestore.Timestamp.fromMillis(room.roundTime) : null,
+      roundTime: room.roundTime ? Timestamp.fromMillis(room.roundTime) : null,
       winningIndustry: room.winningIndustry,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      lastUpdated: FieldValue.serverTimestamp()
     });
     
     // NOTA: Los inventarios ya fueron persistidos en calculateRoundRewards después de aplicar rewards
@@ -974,13 +976,13 @@ const emitToGame = (gameId, event, data) => {
 const persistRoundDataAtomic = async (gameId, room, round) => {
   console.log(`💾 [PERSIST] Persistiendo datos de ronda ${round} para juego ${gameId} (ATÓMICO)`);
   
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     console.log(`⚠️ [PERSIST] Firebase Admin no disponible, saltando persistencia`);
     return;
   }
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
     const batch = db.batch();
     
     // 1. Crear documento de ronda con snapshot completo
@@ -988,7 +990,7 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
     const roundData = {
       round: round,
       completed: true,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
       winningIndustry: room.winningIndustry,
       results: {
         mining: getMinedBlocks(gameId).filter(block => block.round === round),
@@ -1046,8 +1048,8 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
     batch.update(gameRef, {
       round: nextRound,
       status: 'starting',
-      roundTime: admin.firestore.Timestamp.fromMillis(Date.now() + 3000),
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      roundTime: Timestamp.fromMillis(Date.now() + 3000),
+      lastUpdated: FieldValue.serverTimestamp()
     });
     
     // 3. Resetear flags de ready para la nueva ronda
@@ -1056,7 +1058,7 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
       round: nextRound,
       allReady: false,
       readyPlayers: [],
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: FieldValue.serverTimestamp()
     });
     
     // 4. Actualizar inventarios de todos los jugadores
@@ -1084,7 +1086,7 @@ const persistRoundDataAtomic = async (gameId, room, round) => {
         [`games.${gameId}.rockCoins`]: finalRockCoins,
         [`games.${gameId}.waste`]: finalWaste,
         [`games.${gameId}.readyForNextRound`]: false,
-        [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+        [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
       });
     }
     
@@ -1348,18 +1350,18 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
   }
   
   // Persistir mercado en Firestore si está disponible
-  if (admin.apps.length) {
+  if (getApps().length) {
     try {
-      const db = admin.firestore();
+      const db = getFirestore();
       const marketRef = db.collection('games').doc(gameId).collection('market').doc(round.toString());
       
       await marketRef.set({
         round: round,
         products: products,
         seed: seed,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        timestamp: FieldValue.serverTimestamp(),
         validated: true, // Marcar como validado
-        validationTimestamp: admin.firestore.FieldValue.serverTimestamp()
+        validationTimestamp: FieldValue.serverTimestamp()
       });
       
       console.log(`✅ [MARKET] Mercado persistido en Firestore para ronda ${round}`);
@@ -1376,7 +1378,7 @@ const generateMarketForRound = async (gameId, round, maxRetries = 3) => {
       
       await legacyRef.set({
         rounds: existingRounds,
-        lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+        lastUpdated: FieldValue.serverTimestamp()
       }, { merge: true });
       console.log(`✅ [MARKET] Legacy market agregado/actualizado para ronda ${round}`);
     } catch (error) {
@@ -2437,7 +2439,7 @@ io.on('connection', (socket) => {
     try {
       if (event === 'join_game') {
         if (!data || typeof data.gameId !== 'string' || !data.gameId) return;
-        const gameDoc = await admin.firestore().collection('games').doc(data.gameId).get();
+        const gameDoc = await getFirestore().collection('games').doc(data.gameId).get();
         const gameData = gameDoc.exists ? gameDoc.data() : null;
         if (!canJoinGame(gameData, uid)) {
           socket.emit('error', { message: 'No perteneces a esta partida.' });
@@ -2729,8 +2731,8 @@ io.on('connection', (socket) => {
       // CRÍTICO: Verificar que hay productos antes de iniciar la ronda
       if (room.round === 1) {
         try {
-          if (admin.apps.length) {
-            const db = admin.firestore();
+          if (getApps().length) {
+            const db = getFirestore();
             const marketRef = db.collection('games').doc(gameId).collection('market').doc('1');
             const marketDoc = await marketRef.get();
             
@@ -2823,8 +2825,8 @@ io.on('connection', (socket) => {
         console.log(`📡 [READY_TO_PLAY] Re-emitiendo economy:state para Ronda 1 cuando todos están listos...`);
         try {
           // Obtener productos desde Firestore
-          if (admin.apps.length) {
-            const db = admin.firestore();
+          if (getApps().length) {
+            const db = getFirestore();
             const marketRef = db.collection('games').doc(gameId).collection('market').doc('1');
             const marketDoc = await marketRef.get();
             
@@ -2924,9 +2926,9 @@ io.on('connection', (socket) => {
       let productsFound = false;
       
       // PRIMERO: Intentar obtener productos desde Firestore
-      if (admin.apps.length) {
+      if (getApps().length) {
         try {
-          const db = admin.firestore();
+          const db = getFirestore();
           const marketRef = db.collection('games').doc(gameId).collection('market').doc(round.toString());
           const marketDoc = await marketRef.get();
           
@@ -3060,9 +3062,9 @@ io.on('connection', (socket) => {
         playerSockets.set(userId, socket.id);
         
         // Intentar obtener datos del jugador desde Firestore
-        if (admin.apps.length) {
+        if (getApps().length) {
           // Primero intentar obtener desde el documento del juego directamente
-          const gameRef = admin.firestore().collection('games').doc(gameId);
+          const gameRef = getFirestore().collection('games').doc(gameId);
           const gameDoc = await gameRef.get();
           
           let userName = 'Unknown';
@@ -3079,7 +3081,7 @@ io.on('connection', (socket) => {
           
           // Si no encontramos en el juego, buscar en el documento del usuario
           if (userName === 'Unknown') {
-            const userRef = admin.firestore().collection('users').doc(userId);
+            const userRef = getFirestore().collection('users').doc(userId);
             const userDoc = await userRef.get();
             
             if (userDoc.exists) {
@@ -3117,7 +3119,7 @@ io.on('connection', (socket) => {
           // Solo inicializar inventario si NO existe en memoria
           if (!gameInventory.has(userId)) {
             // Si no existe en memoria, intentar restaurar desde Firestore como último recurso
-          const userRef = admin.firestore().collection('users').doc(userId);
+          const userRef = getFirestore().collection('users').doc(userId);
           const userDoc = await userRef.get();
           if (userDoc.exists) {
             const userData = userDoc.data();
@@ -3247,12 +3249,12 @@ io.on('connection', (socket) => {
         // CRÍTICO: Resetear selectedIndustry en Firestore para todos los jugadores
         // Esto asegura que cada ronda requiere una nueva selección
         console.log(`🏭 [ROUND:READY] Reseteando selectedIndustry para todos los jugadores en Firestore...`);
-        if (admin.apps.length) {
-          const batch = admin.firestore().batch();
+        if (getApps().length) {
+          const batch = getFirestore().batch();
           for (const player of room.players) {
-            const userRef = admin.firestore().collection('users').doc(player.userId);
+            const userRef = getFirestore().collection('users').doc(player.userId);
             batch.update(userRef, {
-              [`games.${gameId}.selectedIndustry`]: admin.firestore.FieldValue.delete()
+              [`games.${gameId}.selectedIndustry`]: FieldValue.delete()
             });
           }
           try {
@@ -3297,8 +3299,8 @@ io.on('connection', (socket) => {
           if (rockCoins === 600 && currentRound > 1) {
             console.warn(`⚠️ [ROUND:READY] VALOR POR DEFECTO DETECTADO para ${player.userId} en ronda ${currentRound}! Verificando Firestore...`);
             try {
-              if (admin.apps.length) {
-                const userRef = admin.firestore().collection('users').doc(player.userId);
+              if (getApps().length) {
+                const userRef = getFirestore().collection('users').doc(player.userId);
                 const userDoc = await userRef.get();
                 if (userDoc.exists) {
                   const userData = userDoc.data();
@@ -3350,8 +3352,8 @@ io.on('connection', (socket) => {
           
           // Verificar Firestore para logging/debugging, pero NO sobrescribir memoria
           try {
-            if (admin.apps.length) {
-              const userRef = admin.firestore().collection('users').doc(player.userId);
+            if (getApps().length) {
+              const userRef = getFirestore().collection('users').doc(player.userId);
               const userDoc = await userRef.get();
               if (userDoc.exists) {
                 const userData = userDoc.data();
@@ -3374,7 +3376,7 @@ io.on('connection', (socket) => {
                       [`games.${gameId}.rockCoins`]: rockCoins,
                       [`games.${gameId}.waste`]: waste,
                       [`games.${gameId}.products`]: products,
-                      [`games.${gameId}.lastUpdated`]: admin.firestore.FieldValue.serverTimestamp()
+                      [`games.${gameId}.lastUpdated`]: FieldValue.serverTimestamp()
                     });
                     console.log(`✅ [ROUND:READY] Firestore actualizado con valores de memoria para ${player.userId}`);
                   }

@@ -1,10 +1,11 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth, requireId } = require('../utils/auth');
 const { selectWinningIndustry } = require('./selectWinningIndustry');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.startGame = onCall({
@@ -32,7 +33,7 @@ exports.startGame = onCall({
     throw new Error('Game ID must be a valid string.');
   }
 
-  const gameRef = admin.firestore().collection('games').doc(gameId);
+  const gameRef = getFirestore().collection('games').doc(gameId);
 
   try {
     const gameDoc = await gameRef.get();
@@ -63,9 +64,9 @@ exports.startGame = onCall({
     }
 
     // Inicializar blockchain/gameId con el número total de jugadores
-    await admin.firestore().collection('blockchain').doc(gameId).set({
+    await getFirestore().collection('blockchain').doc(gameId).set({
       totalPlayers: gameData.players.length,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
 
     // Seleccionar industria ganadora para la primera ronda

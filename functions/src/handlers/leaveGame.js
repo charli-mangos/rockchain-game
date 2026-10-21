@@ -1,9 +1,10 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth, requireId } = require('../utils/auth');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.leaveGame = onCall({
@@ -28,7 +29,7 @@ exports.leaveGame = onCall({
   }
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
     const batch = db.batch();
 
     // 1. VERIFICAR QUE EL JUEGO EXISTE
@@ -68,7 +69,7 @@ exports.leaveGame = onCall({
       players: updatedPlayers,
       playerCount: newPlayerCount,
       hostId: newHostId,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      lastUpdated: FieldValue.serverTimestamp()
     });
 
     // 4. ELIMINAR DATOS DEL JUGADOR EN EL JUEGO
@@ -91,7 +92,7 @@ exports.leaveGame = onCall({
         // Limpiar gameData del usuario
         batch.update(userRef, {
           gameData: null,
-          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          lastUpdated: FieldValue.serverTimestamp()
         });
         console.log(`✅ Datos del juego eliminados del perfil del usuario`);
       }

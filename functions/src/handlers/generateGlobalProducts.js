@@ -1,8 +1,9 @@
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 const { MarbleTypes, ProductTemplates } = require('../utils/marbleUtils');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 // Función para generar un precio aleatorio dentro de un rango
@@ -29,8 +30,8 @@ const generateProductsInternal = async () => {
     }
 
     // Guardar los productos en Firestore
-    const batch = admin.firestore().batch();
-    const productsRef = admin.firestore().collection('products');
+    const batch = getFirestore().batch();
+    const productsRef = getFirestore().collection('products');
 
     for (const product of products) {
       const productDoc = productsRef.doc(product.productId);

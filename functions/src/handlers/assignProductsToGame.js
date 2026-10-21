@@ -1,7 +1,8 @@
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 const maxPrice = 200;
@@ -21,9 +22,9 @@ const getRandomQuality = () => {
 };
 
 const assignProductsToGame = async ({ gameId, round }) => {
-  const productsRef = admin.firestore().collection('products');
-  const gameRef = admin.firestore().collection('games').doc(gameId);
-  const marketRef = admin.firestore().collection('market').doc(gameId);
+  const productsRef = getFirestore().collection('products');
+  const gameRef = getFirestore().collection('games').doc(gameId);
+  const marketRef = getFirestore().collection('market').doc(gameId);
 
   const marbleTypes = ['Red', 'White', 'Gray', 'Black', 'Cream'];
   const productTypes = ['Block', 'Slab'];

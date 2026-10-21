@@ -1,11 +1,12 @@
 const { onCall } = require("firebase-functions/v2/https");
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { HttpsError } = require('firebase-functions/v2/https');
 const { requireAuth, requireId, assertParticipant } = require('../utils/auth');
 const { evaluateRound } = require('./evaluateRound');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.submitMiningSolution = onCall({
@@ -44,7 +45,7 @@ exports.submitMiningSolution = onCall({
     throw new Error('Response is required');
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const batch = db.batch();
 
   try {
@@ -119,7 +120,7 @@ exports.submitMiningSolution = onCall({
     // Actualiza las respuestas en el bloque
     console.log('📝 Añadiendo respuesta al bloque');
     batch.update(blockRef, {
-      responses: admin.firestore.FieldValue.arrayUnion(responseData)
+      responses: FieldValue.arrayUnion(responseData)
     });
 
     // Obtener el número total de jugadores
@@ -141,10 +142,10 @@ exports.submitMiningSolution = onCall({
         winner: isWinner ? {
           userId,
           responseTime,
-          timestamp: admin.firestore.FieldValue.serverTimestamp()
+          timestamp: FieldValue.serverTimestamp()
         } : null,
         isActive: false,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: FieldValue.serverTimestamp(),
       });
 
       // NUEVO: Verificar si todos los bloques de la ronda están completados
@@ -220,7 +221,7 @@ exports.submitMiningSolution = onCall({
                   rewardsAssigned: false,
                   roundRewards: null,
                   winningIndustry: winningIndustry,
-                  roundEndTime: admin.firestore.FieldValue.serverTimestamp()
+                  roundEndTime: FieldValue.serverTimestamp()
                 });
                 
                 console.log(`✅ Ronda ${currentGameData.round} terminada automáticamente`);

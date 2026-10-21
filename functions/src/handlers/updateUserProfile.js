@@ -1,9 +1,10 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth, sanitizeUserName, sanitizeImageUrl } = require('../utils/auth');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.updateUserProfile = onCall({
@@ -26,7 +27,7 @@ exports.updateUserProfile = onCall({
   try {
     // 1. VERIFICAR QUE EL USUARIO EXISTE
     console.log(`🔍 Verificando usuario: ${userId}`);
-    const userRef = admin.firestore().collection('users').doc(userId);
+    const userRef = getFirestore().collection('users').doc(userId);
     const userSnapshot = await userRef.get();
     
     if (!userSnapshot || !userSnapshot.exists) {
@@ -39,7 +40,7 @@ exports.updateUserProfile = onCall({
     
     const updateData = {
       userName: cleanUserName,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      lastUpdated: FieldValue.serverTimestamp()
     };
 
     // Solo agregar imageUrl si se proporciona
@@ -55,12 +56,12 @@ exports.updateUserProfile = onCall({
     
     try {
       // Obtener todos los juegos donde participa el usuario
-      const gamesQuery = await admin.firestore()
+      const gamesQuery = await getFirestore()
         .collection('games')
         .where('players', 'array-contains', userId)
         .get();
 
-      const batch = admin.firestore().batch();
+      const batch = getFirestore().batch();
       let gamesUpdated = 0;
 
       for (const gameDoc of gamesQuery.docs) {
@@ -76,13 +77,13 @@ exports.updateUserProfile = onCall({
         });
 
         // Actualizar el documento del juego
-        const gameRef = admin.firestore().collection('games').doc(gameId);
+        const gameRef = getFirestore().collection('games').doc(gameId);
         batch.update(gameRef, {
-          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          lastUpdated: FieldValue.serverTimestamp()
         });
 
         // Actualizar datos del usuario en el juego específico
-        const userGameRef = admin.firestore()
+        const userGameRef = getFirestore()
           .collection('users')
           .doc(userId)
           .collection('games')
@@ -91,7 +92,7 @@ exports.updateUserProfile = onCall({
         batch.set(userGameRef, {
           userName: cleanUserName,
           imageUrl: cleanImageUrl,
-          lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+          lastUpdated: FieldValue.serverTimestamp()
         }, { merge: true });
 
         gamesUpdated++;

@@ -1,12 +1,13 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth, requireId } = require('../utils/auth');
 const { updateProductPrices } = require('./updateProductPrices');
 const { selectWinningIndustry } = require('./selectWinningIndustry');
 const { assignProductsToGame } = require('./assignProductsToGame');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.startNextRound = onCall({
@@ -37,7 +38,7 @@ exports.startNextRound = onCall({
   }
 
   try {
-    const db = admin.firestore();
+    const db = getFirestore();
     const gameRef = db.collection('games').doc(gameId);
 
     // 1. VERIFICAR QUE EL JUEGO EXISTE Y OBTENER DATOS ACTUALES
@@ -117,7 +118,7 @@ exports.startNextRound = onCall({
       round: nextRound,
       rewardsAssigned: false,
       roundRewards: null,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      lastUpdated: FieldValue.serverTimestamp()
     });
 
     console.log(`✅ Ronda ${nextRound} iniciada exitosamente`);

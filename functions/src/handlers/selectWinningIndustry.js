@@ -1,7 +1,8 @@
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 // Función auxiliar para esperar
@@ -41,7 +42,7 @@ const selectWinningIndustry = async ({ gameId }) => {
     throw new Error('Game ID is required.');
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const gameRef = db.collection('games').doc(gameId);
 
   try {

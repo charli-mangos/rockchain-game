@@ -1,7 +1,8 @@
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 // Evalúa y cierra la ronda cuando todos los bloques están completados.
@@ -14,7 +15,7 @@ const evaluateRound = async ({ gameId }) => {
     throw new Error('Game ID is required.');
   }
 
-  const db = admin.firestore();
+  const db = getFirestore();
   const gameRef = db.collection('games').doc(gameId);
   const blocksRef = db.collection('blockchain').doc(gameId).collection('blocks');
 
@@ -107,7 +108,7 @@ const evaluateRound = async ({ gameId }) => {
           rewardsAssigned: false,
           roundRewards: null,
           winningIndustry: finalWinningIndustry,
-          roundEndTime: admin.firestore.FieldValue.serverTimestamp()
+          roundEndTime: FieldValue.serverTimestamp()
         });
 
         console.log(`✅ Estado actualizado a waiting_for_players`);

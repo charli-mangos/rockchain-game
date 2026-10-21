@@ -3,10 +3,10 @@
 // comprueban el rol (host o jugador) cuando actúan sobre una partida.
 // La lógica de mercado, industria ganadora y evaluación de rondas es interna
 // (src/handlers/*) y no se expone como endpoint.
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 const { createGame } = require('./src/handlers/createGame');

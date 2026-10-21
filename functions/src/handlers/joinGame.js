@@ -1,9 +1,10 @@
 const { onCall } = require('firebase-functions/v2/https');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { requireAuth, requireId } = require('../utils/auth');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+if (!getApps().length) {
+  initializeApp();
 }
 
 exports.joinGame = onCall({
@@ -31,7 +32,7 @@ exports.joinGame = onCall({
     // 1. VERIFICAR QUE EL JUEGO EXISTE
     console.log(`🔍 Verificando existencia del juego: ${gameId}`);
     
-    const gameRef = admin.firestore().collection('games').doc(gameId);
+    const gameRef = getFirestore().collection('games').doc(gameId);
     const gameSnapshot = await gameRef.get();
     
     // Verificar existencia de forma segura
@@ -73,7 +74,7 @@ exports.joinGame = onCall({
 
     // 5. VERIFICAR QUE EL USUARIO EXISTE
     console.log(`🔍 Verificando usuario: ${userId}`);
-    const userRef = admin.firestore().collection('users').doc(userId);
+    const userRef = getFirestore().collection('users').doc(userId);
     const userSnapshot = await userRef.get();
     
     if (!userSnapshot || !userSnapshot.exists) {
@@ -85,9 +86,9 @@ exports.joinGame = onCall({
     console.log(`🔄 Añadiendo usuario ${userId} al juego ${gameId}`);
     
     const gameUpdate = {
-      players: admin.firestore.FieldValue.arrayUnion(userId),
-      playerCount: admin.firestore.FieldValue.increment(1),
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      players: FieldValue.arrayUnion(userId),
+      playerCount: FieldValue.increment(1),
+      lastUpdated: FieldValue.serverTimestamp()
     };
 
     await gameRef.update(gameUpdate);
@@ -102,13 +103,13 @@ exports.joinGame = onCall({
       selectedIndustry: null,
       gameCode: gameData.gameCode,
       status: 'waiting',
-      joinedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      joinedAt: FieldValue.serverTimestamp(),
+      lastUpdated: FieldValue.serverTimestamp()
     };
 
     const userUpdate = {
       [`games.${gameId}`]: userGameData,
-      lastUpdated: admin.firestore.FieldValue.serverTimestamp()
+      lastUpdated: FieldValue.serverTimestamp()
     };
 
     try {
