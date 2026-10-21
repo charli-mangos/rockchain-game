@@ -36,7 +36,7 @@ Players compete in short rounds. They trade marble blocks and slabs on a shared 
 
 | Part | Tech | Role |
 |---|---|---|
-| `src/`, `App.js` | Expo SDK 53, React Native 0.79, React Navigation, i18next | Mobile client (Android/iOS) |
+| `src/`, `App.js` | Expo SDK 57, React Native 0.86, React Navigation, i18next | Mobile client (Android/iOS) |
 | `server/` | Node.js 22, Express 5, Socket.IO 4 | Authoritative real-time game loop: rooms, round timers, market, transactions, mining. Deployed on Google Cloud Run |
 | `functions/` | Firebase Cloud Functions v2 | Callable functions for the game lifecycle: create, join, start, end rounds, leave, profile |
 | `firestore.rules` | Firestore Security Rules | Clients can only read their games and edit non-economic fields; all economic state is written server-side |

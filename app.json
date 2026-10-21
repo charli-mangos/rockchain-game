@@ -9,7 +9,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "jsEngine": "jsc",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.uerasmus.rockchain",
@@ -41,7 +40,8 @@
     "plugins": [
       "expo-localization",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "expo-status-bar"
     ]
   }
 }
