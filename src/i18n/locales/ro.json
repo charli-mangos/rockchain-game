@@ -24,7 +24,15 @@
     "privacy": "Confidențialitate",
     "register": "Înregistrare",
     "signIn": "Conectare",
-    "couldNotSaveUser": "Nu s-a putut salva utilizatorul"
+    "couldNotSaveUser": "Nu s-a putut salva utilizatorul",
+    "forgotPasswordDescription": "Îți vom trimite un link de recuperare pe email.",
+    "resetByEmailTitle": "Resetare prin email",
+    "sendResetEmail": "Trimite email de resetare",
+    "resetEmailSent": "Ți-am trimis un email cu linkul de recuperare. Verifică și spamul dacă nu îl vezi.",
+    "resetEmailError": "Nu am putut trimite emailul de recuperare. Încearcă din nou.",
+    "resetEmailTooManyRequests": "Prea multe încercări. Așteaptă câteva minute și încearcă din nou.",
+    "resetEmailOperationNotAllowed": "Recuperarea parolei este dezactivată. Contactează suportul.",
+    "emailRequired": "Te rugăm să introduci emailul."
   },
   "home": {
     "welcome": "Bun venit",
@@ -139,7 +147,7 @@
     "cannotJoinOwnGame": "Nu te poți alătura propriului joc",
     "failedToJoinGame": "Nu s-a putut alătura la joc",
     "onlyHostCanStart": "Doar gazda poate începe jocul",
-    "gameAlreadyStarted": "Jocul a început deja",
+    "gameAlreadyStarted": "Jocul a început deja. Nu mai pot intra jucători.",
     "failedToStartGame": "Nu s-a putut începe jocul",
     "yourGameCode": "Codul tău de joc",
     "numberOfPlayers": "Numărul de jucători",
@@ -151,7 +159,6 @@
     "needAtLeastTwoPlayers": "Sunt necesari cel puțin 2 jucători pentru a începe jocul.",
     "needAtLeastFivePlayers": "Sunt necesari cel puțin 5 jucători pentru a începe jocul.",
     "gameIsFull": "Nu mai pot intra jucători în această cameră. Camera este plină.",
-    "gameAlreadyStarted": "Jocul a început deja. Nu mai pot intra jucători.",
     "authenticationRequired": "Autentificare necesară.",
     "gameIdRequired": "ID-ul jocului este necesar.",
     "userNotFound": "Utilizatorul nu a fost găsit. Te rog conectează-te din nou.",

@@ -21,7 +21,15 @@
     "privacy": "Privatnost",
     "register": "Registriraj se",
     "signIn": "Prijavi se",
-    "couldNotSaveUser": "Korisnik se nije mogao spremiti u Firestore."
+    "couldNotSaveUser": "Korisnik se nije mogao spremiti u Firestore.",
+    "forgotPasswordDescription": "Poslat ćemo vam poveznicu za oporavak na e-poštu.",
+    "resetByEmailTitle": "Oporavak putem e-pošte",
+    "sendResetEmail": "Pošalji e-mail za oporavak",
+    "resetEmailSent": "Poslali smo vam e-mail s poveznicom za oporavak. Provjerite spam ako ga ne vidite.",
+    "resetEmailError": "Nismo mogli poslati e-mail za oporavak. Pokušajte ponovno.",
+    "resetEmailTooManyRequests": "Previše pokušaja. Pričekajte nekoliko minuta i pokušajte ponovno.",
+    "resetEmailOperationNotAllowed": "Oporavak lozinke je onemogućen. Kontaktirajte podršku.",
+    "emailRequired": "Molimo unesite svoju e-mail adresu."
   },
   "home": {
     "welcome": "Dobrodošli",
@@ -129,7 +137,7 @@
     "cannotJoinOwnGame": "Ne možete se pridružiti vlastitoj igri. Molimo unesite drugi kod.",
     "failedToJoinGame": "Neuspješno pridruživanje igri. Molimo pokušajte ponovo.",
     "onlyHostCanStart": "Samo domaćin može pokrenuti igru.",
-    "gameAlreadyStarted": "Igra je već pokrenuta ili završena.",
+    "gameAlreadyStarted": "Igra je već počela. Više igrača se ne može pridružiti.",
     "failedToStartGame": "Neuspješno pokretanje igre. Molimo pokušajte ponovo.",
     "yourGameCode": "Vaš Kod Igre",
     "numberOfPlayers": "Broj igrača",
@@ -141,7 +149,6 @@
     "needAtLeastTwoPlayers": "Potrebno je najmanje 2 igrača za pokretanje igre.",
     "needAtLeastFivePlayers": "Potrebno je najmanje 5 igrača za pokretanje igre.",
     "gameIsFull": "Više igrača ne može se pridružiti ovoj sobi. Soba je puna.",
-    "gameAlreadyStarted": "Igra je već počela. Više igrača se ne može pridružiti.",
     "authenticationRequired": "Potrebna je autentifikacija.",
     "gameIdRequired": "Potreban je ID igre.",
     "userNotFound": "Korisnik nije pronađen. Molimo prijavite se ponovo.",

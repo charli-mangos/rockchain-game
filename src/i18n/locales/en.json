@@ -56,7 +56,15 @@
       "genericErrorTitle": "Something Went Wrong",
       "genericErrorMessage": "A problem occurred while trying to sign in or register.",
       "genericErrorSuggestion": "Try again. If it keeps happening, check your internet connection or contact us."
-    }
+    },
+    "forgotPasswordDescription": "We'll send a recovery link to your email.",
+    "resetByEmailTitle": "Reset by email",
+    "sendResetEmail": "Send reset email",
+    "resetEmailSent": "We sent you an email with the recovery link. Check spam if you don't see it.",
+    "resetEmailError": "We couldn't send the recovery email. Try again in a moment.",
+    "resetEmailTooManyRequests": "Too many attempts. Please wait a few minutes and try again.",
+    "resetEmailOperationNotAllowed": "Password recovery is disabled. Contact support.",
+    "emailRequired": "Please enter your email."
   },
   "home": {
     "welcome": "Welcome",
@@ -171,7 +179,7 @@
     "cannotJoinOwnGame": "You cannot join your own game. Please enter a different game code.",
     "failedToJoinGame": "Failed to join the game. Please try again.",
     "onlyHostCanStart": "Only the host can start the game.",
-    "gameAlreadyStarted": "Game is already started or finished.",
+    "gameAlreadyStarted": "The game has already started. No more players can join.",
     "failedToStartGame": "Failed to start the game. Please try again.",
     "yourGameCode": "Your Game Code",
     "numberOfPlayers": "Number of players",
@@ -183,7 +191,6 @@
     "needAtLeastTwoPlayers": "At least 2 players are needed to start the game.",
     "needAtLeastFivePlayers": "At least 5 players are needed to start the game.",
     "gameIsFull": "No more players can join this room. The room is full.",
-    "gameAlreadyStarted": "The game has already started. No more players can join.",
     "authenticationRequired": "Authentication required.",
     "gameIdRequired": "Game ID is required.",
     "userNotFound": "User not found. Please log in again.",

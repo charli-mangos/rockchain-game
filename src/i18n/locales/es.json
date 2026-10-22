@@ -56,7 +56,15 @@
       "genericErrorTitle": "Algo salió mal",
       "genericErrorMessage": "Ocurrió un problema al intentar iniciar sesión o registrarte.",
       "genericErrorSuggestion": "Vuelve a intentar. Si sigue pasando, revisa tu conexión a internet o contáctanos."
-    }
+    },
+    "forgotPasswordDescription": "Te enviaremos un enlace de recuperación a tu correo.",
+    "resetByEmailTitle": "Recuperar por correo",
+    "sendResetEmail": "Enviar correo de recuperación",
+    "resetEmailSent": "Te enviamos un correo con el enlace de recuperación. Revisa spam si no lo ves.",
+    "resetEmailError": "No pudimos enviar el correo de recuperación. Inténtalo de nuevo.",
+    "resetEmailTooManyRequests": "Demasiados intentos. Espera unos minutos y vuelve a intentar.",
+    "resetEmailOperationNotAllowed": "La recuperación de contraseña está deshabilitada. Contacta soporte.",
+    "emailRequired": "Por favor ingresa tu correo."
   },
   "home": {
     "welcome": "Bienvenido",
@@ -171,7 +179,7 @@
     "cannotJoinOwnGame": "No puedes unirte a tu propio juego. Por favor ingresa un código diferente.",
     "failedToJoinGame": "Error al unirse al juego. Por favor intenta de nuevo.",
     "onlyHostCanStart": "Solo el anfitrión puede iniciar el juego.",
-    "gameAlreadyStarted": "El juego ya ha comenzado o terminado.",
+    "gameAlreadyStarted": "El juego ya ha comenzado. No se pueden unir más jugadores.",
     "failedToStartGame": "Error al iniciar el juego. Por favor intenta de nuevo.",
     "yourGameCode": "Tu Código de Juego",
     "numberOfPlayers": "Número de jugadores",
@@ -183,7 +191,6 @@
     "needAtLeastTwoPlayers": "Se necesitan al menos 2 jugadores para iniciar el juego.",
     "needAtLeastFivePlayers": "Se necesitan al menos 5 jugadores para iniciar el juego.",
     "gameIsFull": "No caben más jugadores en esta sala. La sala está llena.",
-    "gameAlreadyStarted": "El juego ya ha comenzado. No se pueden unir más jugadores.",
     "authenticationRequired": "Se requiere autenticación.",
     "gameIdRequired": "Se requiere ID del juego.",
     "userNotFound": "Usuario no encontrado. Por favor inicia sesión de nuevo.",

@@ -21,7 +21,15 @@
     "privacy": "Datenschutz",
     "register": "Registrieren",
     "signIn": "Anmelden",
-    "couldNotSaveUser": "Benutzer konnte nicht in Firestore gespeichert werden."
+    "couldNotSaveUser": "Benutzer konnte nicht in Firestore gespeichert werden.",
+    "forgotPasswordDescription": "Wir senden Ihnen einen Wiederherstellungslink per E-Mail.",
+    "resetByEmailTitle": "Per E-Mail zurücksetzen",
+    "sendResetEmail": "Zurücksetzungs-E-Mail senden",
+    "resetEmailSent": "Wir haben Ihnen eine E-Mail mit dem Wiederherstellungslink gesendet. Prüfen Sie auch den Spam-Ordner.",
+    "resetEmailError": "Wir konnten die Wiederherstellungs-E-Mail nicht senden. Bitte versuchen Sie es erneut.",
+    "resetEmailTooManyRequests": "Zu viele Versuche. Bitte warten Sie einige Minuten und versuchen Sie es erneut.",
+    "resetEmailOperationNotAllowed": "Die Passwortwiederherstellung ist deaktiviert. Bitte kontaktieren Sie den Support.",
+    "emailRequired": "Bitte geben Sie Ihre E-Mail ein."
   },
   "home": {
     "welcome": "Willkommen",
@@ -129,7 +137,7 @@
     "cannotJoinOwnGame": "Sie können Ihrem eigenen Spiel nicht beitreten. Bitte geben Sie einen anderen Code ein.",
     "failedToJoinGame": "Beitritt zum Spiel fehlgeschlagen. Bitte versuchen Sie es erneut.",
     "onlyHostCanStart": "Nur der Gastgeber kann das Spiel starten.",
-    "gameAlreadyStarted": "Spiel wurde bereits gestartet oder beendet.",
+    "gameAlreadyStarted": "Das Spiel hat bereits begonnen. Keine weiteren Spieler können beitreten.",
     "failedToStartGame": "Spielstart fehlgeschlagen. Bitte versuchen Sie es erneut.",
     "yourGameCode": "Ihr Spielcode",
     "numberOfPlayers": "Anzahl der Spieler",
@@ -141,7 +149,6 @@
     "needAtLeastTwoPlayers": "Mindestens 2 Spieler werden benötigt, um das Spiel zu starten.",
     "needAtLeastFivePlayers": "Mindestens 5 Spieler werden benötigt, um das Spiel zu starten.",
     "gameIsFull": "Keine weiteren Spieler können diesem Raum beitreten. Der Raum ist voll.",
-    "gameAlreadyStarted": "Das Spiel hat bereits begonnen. Keine weiteren Spieler können beitreten.",
     "authenticationRequired": "Authentifizierung erforderlich.",
     "gameIdRequired": "Spiel-ID ist erforderlich.",
     "userNotFound": "Benutzer nicht gefunden. Bitte melden Sie sich erneut an.",

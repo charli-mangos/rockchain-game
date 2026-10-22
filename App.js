@@ -6,6 +6,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { I18nextProvider } from 'react-i18next';
 import * as NavigationBar from 'expo-navigation-bar';
 import LoginScreen from './src/screens/LoginScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import GameScreen from './src/screens/GameScreen';
 import WaitingRoomScreen from './src/screens/WaitingRoomScreen';
 import GameTabs from './src/components/GameTabs';  // Importar el componente GameTabs que maneja el Tab Navigator
@@ -86,10 +87,11 @@ const App = () => {
           }}
         >
           <Stack.Screen
-            name="Login" 
+            name="Login"
             component={LoginScreen}
             initialParams={{ setGameParams }}
           />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         </Stack.Navigator>
       )}
       </NavigationContainer>
